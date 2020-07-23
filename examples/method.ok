@@ -1,0 +1,48 @@
+
+type Date(3) {
+    fn new(month: num, day: num, year: num) -> Date {
+        month; day; year;
+    }
+
+    fn birthday() -> Date {
+        Date::new(5, 14, 2002);
+    }
+
+    fn month(self: &Date) -> &num { self; }
+    fn day(self: &Date) -> &num { self + 1; }
+    fn year(self: &Date) -> &num { self + 2; }
+
+    fn tmrw(self: &Date) -> Date {
+        Date::new(self->month, self->day + 1, self->year);
+    }
+
+    fn print(self: &Date) -> void {
+        prn!(self->month); prc!('/');
+        prn!(self->day); prc!('/');
+        prn!(self->year);
+    }
+}
+
+type Test(1) {
+    fn new(n: num) -> Test { n; }
+    fn n(self: &Test) -> &num { self; }
+
+    fn print(self: &Test) -> void {
+        prs!("test: "); prn!(self->n); prend!();
+    }
+}
+
+fn test() -> void {
+    let bday: Date = Date::birthday();
+    bday.print(); prend!();
+    ((bday.tmrw()).tmrw()).print(); prend!();
+    let t: Test = Test::new(5);
+    t.print();
+}
+
+fn main() -> void {
+    for (let i: num = 0; i - 10; i=i+1;) {
+        test();
+        prn!(i); prend!();
+    }
+}

@@ -1,0 +1,35 @@
+fn putstrln(s: &char) -> void { prs!(s); prend!(); }
+
+fn eq(a: num, b: num) -> num {
+    let result: num = 1;
+    if a - b { result = 0; }
+    result;
+}
+
+fn compile(s: &char) -> void {
+    putstrln("#include <stdio.h>\nint main() {\nchar array[30000] = {0};\nchar *ptr=array;\n");
+    let plus: &char = "++*ptr;";
+    let minus: &char = "--*ptr;";
+    let left: &char = "--ptr;";
+    let right: &char = "++ptr;";
+    let out: &char = "putchar(*ptr);";
+    let in: &char = "*ptr=getchar();";
+    let loop: &char = "while (*ptr) {";
+    let end: &char = "}\n";
+    for (let i:num=0; s[i]; i=i+1;) {
+        if eq(s[i], '+') { putstrln(plus); }
+        if eq(s[i], '-') { putstrln(minus); }
+        if eq(s[i], '<') { putstrln(left); }
+        if eq(s[i], '>') { putstrln(right); }
+        if eq(s[i], '.') { putstrln(out); }
+        if eq(s[i], ',') { putstrln(in); }
+        if eq(s[i], '[') { putstrln(loop); }
+        if eq(s[i], ']') { putstrln(end); }
+    }
+    putstrln("}");
+}
+
+
+fn main() -> void {
+    compile("++++++++[>+>++++<<-]>++>>+<[-[>>+<<-]+>>]>+[-<<<[->[+[-]+>++>>>-<<]<[<]>>++++++[<<+++++>>-]+<<++.[-]<<]>.>+[>>]>+]");
+}

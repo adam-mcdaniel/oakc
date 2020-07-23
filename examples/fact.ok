@@ -1,0 +1,29 @@
+
+
+fn not(a: num) -> num {
+    let result: num = 1;
+    if a { result = 0; }
+    result;
+}
+
+fn eq(a: num, b: num) -> num {
+    let result: num = 1;
+    if a - b { result = 0; }
+    result;
+}
+
+fn neq(a: num, b: num) -> num { not(eq(a, b)); }
+
+fn fact(n: num) -> num {
+    if eq(n, 1) {
+        1;
+    }
+
+    if neq(n, 1) {
+        n * fact(n-1);
+    }
+}
+
+fn main() -> void {
+    prn!(fact(5));
+}
