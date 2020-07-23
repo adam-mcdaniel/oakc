@@ -83,7 +83,7 @@ Statement: HirStatement = {
     "for" "(" <pre:Statement> <cond:Expression> ";" <post:Statement> ")" <body:Body> => HirStatement::For(Box::new(pre), cond, Box::new(post), body),
     "while" <cond:Expression> <body:Body> => HirStatement::While(cond, body),
     "if" <cond:Expression> <body:Body> => HirStatement::If(cond, body),
-    "free" <addr:Expression> "with size" <size:Expression> ";" => HirStatement::Free(addr, size),
+    "free" <addr:Expression> ":" <size:Expression> ";" => HirStatement::Free(addr, size),
     "let" <name:Ident> ":" <t:Type> "=" <expr:Expression> ";" => HirStatement::Define(name, t, expr),
     <name:Ident> "=" <expr:Expression> ";" => HirStatement::AssignVariable(name, expr),
     "*" <lhs:Expression> "=" <rhs:Expression> ";" => HirStatement::AssignAddress(lhs, rhs),

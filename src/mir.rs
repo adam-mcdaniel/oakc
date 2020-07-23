@@ -398,8 +398,8 @@ impl MirStatement {
             /// Freeing an address does not return a value, so it is a statement.
             Self::Free(addr, size) => {
                 let mut result = Vec::new();
-                result.extend(addr.assemble(vars, funcs, structs)?);
                 result.extend(size.assemble(vars, funcs, structs)?);
+                result.extend(addr.assemble(vars, funcs, structs)?);
                 result.push(AsmStatement::Expression(vec![AsmExpression::Free]));
                 result
             }
