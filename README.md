@@ -20,7 +20,7 @@ The backend of oak functions very simply. Every instruction operates on a _memor
 
 When a variable is defined, it's given a static location on the memory tape. Then, the compiler just replaces the variable with its address in the rest of the code!
 
-Additionally, the memory tape also functions as a **_stack_** and a **_heap_**. After space for all of the program's variables is assigned, the memory used for the stack begins. The stack _grows_ and _shrinks_ with data throughout the program: when two numbers are summed, for example, they are popped off of the stack and replaced with the result. Similarly, the heap grows and shrinks throughout the program. The heap, however, is used for _dynamically allocated_ data: information with a memory footprint **unknown at compile time**.
+Additionally, the memory tape functions as a **_stack_** and a **_heap_**. After space for all of the program's variables is assigned, the memory used for the stack begins. The stack _grows_ and _shrinks_ with data throughout the program: when two numbers are summed, for example, they are popped off of the stack and replaced with the result. Similarly, the heap grows and shrinks throughout the program. The heap, however, is used for _dynamically allocated_ data: information with a memory footprint **unknown at compile time**.
 
 Now that you understand how oak's backend fundamentally operates, here's the complete instruction set!
 
@@ -54,13 +54,11 @@ So how exactly does the oak compiler work?
 
 ```rust
 // `3` is the size of the structure on the stack
-type Date(3) {
-    fn new(month: 1, day: 1, year: 1) -> 3 {
-        month; day; year
-    }
-    // self is a pointer to an item of size `3`
-    fn day(self: &3) -> &1 { self + 1 }
+fn Date::new(month: 1, day: 1, year: 1) -> 3 {
+    month; day; year
 }
+// self is a pointer to an item of size `3`
+fn Date::day(self: &3) -> &1 { self + 1 }
 
 fn main() -> 0 {
     let bday: 3 = Date::new(5, 14, 2002);
