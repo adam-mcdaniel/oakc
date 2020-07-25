@@ -1,0 +1,15 @@
+
+fn not_(x: num) -> num {
+    if x {
+        putstrln("x is true");
+        0
+    } else {
+        putstrln("x is false");
+        1
+    }
+}
+
+fn main() {
+    putnumln(not_(5));
+    putnumln(not_(0));
+}

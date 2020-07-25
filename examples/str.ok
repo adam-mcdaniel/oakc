@@ -1,25 +1,31 @@
+
 fn strlen(str: &char) -> num {
-    for (let i: num=0; str[i]; i=i+1;) {}
+    for (let i: num=0; str[i]; i=i+1) {}
     i;
 }
 
-fn strcpy(dst: &char, src: &char) -> void {
-    for (let i: num=0; src[i]; i=i+1;) {
+fn strcpy(dst: &char, src: &char) {
+    for (let i: num=0; src[i]; i=i+1) {
         dst[i] = src[i];
     }
     dst[i] = 0;
 }
 
-fn strcat(dst: &char, src: &char) -> void {
-    for (let i: num=strlen(dst)-1; src[i]; i=i+1;) {
-        dst[i] = src[i];
+fn strcat(dst: &char, src: &char) {
+    let offset: num = strlen(dst);
+    for (let i: num=0; src[i]; i=i+1) {
+        dst[offset+i] = src[i];
     }
-    dst[i] = 0;
+    dst[offset+i] = 0;
 }
 
-fn main() -> void {
-    let s: &char = "test";
-    prs!(s); prend!();
+
+fn main() {
+    let s: &char = alloc(32);
+    strcpy(s, "test");
+    putstrln(s);
     strcat(s, "ing");
-    prs!(s); prend!();
+    putstrln(s);
+
+    free s: 32;
 }

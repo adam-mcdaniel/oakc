@@ -1,93 +1,63 @@
-use oak::parse;
-use std::fs::write;
+use oakc::{compile, Go, C};
+use std::{fs::read_to_string, path::PathBuf, process::exit};
+
+use clap::{clap_app, crate_authors, crate_version, AppSettings::ArgRequiredElseHelp};
+
 fn main() {
-    write(
-        "output.c",
-        parse(
-//             r#"
-// fn not(x: num) -> num {
-//     let result: num = 1;
-//     if x { result = 0; }
-//     result;
-// }
-
-// fn neq(a: num, b: num) -> num {
-//     not(eq(a, b));
-// }
-
-// fn eq(a: num, b: num) -> num {
-//     let result: num = 1;
-//     if a - b {
-//         result = 0;
-//     }
-//     result;
-// }
-
-// fn factorial(n: num) -> num {
-//     if eq(n, 1) { 1; }
-//     if neq(n, 1) { n*factorial(n-1); }
-// }
-
-// fn strcpy(dst: &char, src: &char) -> void {
-//     for (let i:num=0; src[i]; i=i+1;) {
-//         dst[i] = src[i];
-//     }
-//     dst[i] = 0;
-// }
-
-// fn main() -> void {
-//     prn!(factorial(5)); prend!();
-
-//     let size: num = 10;
-//     let addr: &num = alloc(size);
-
-//     let s: &char = "test\n";
-//     strcpy(addr, s);
-//     prs!(addr);
-//     prs!(s);
-//     free addr : size;
-    
-//     prs!(s);
-// }
-// "#,
-            r#"
-fn strlen(str: &char) -> num {
-    for (let i: num=0; str[i]; i=i+1;) {}
-    i;
-}
-
-fn strcpy(dst: &char, src: &char) -> void {
-    for (let i: num=0; src[i]; i=i+1;) {
-        dst[i] = src[i];
-    }
-    dst[i] = 0;
-}
-
-fn strcat(dst: &char, src: &char) -> void {
-    let offset: num = strlen(dst);
-    for (let i: num=0; src[i]; i=i+1;) {
-        dst[offset+i] = src[i];
-    }
-    dst[offset+i] = 0;
-}
-
-fn main() -> void {
-    let size: num = 8;
-    let s: &char = alloc(size);
-    strcpy(s, "test");
-    prs!(s); prend!();
-    strcat(s, "ing");
-    prs!(s); prend!();
-    free s: size;
-}
-"#,
+    let matches = clap_app!(oak =>
+        (version: crate_version!())
+        (author: crate_authors!())
+        (about: "Compiler for the Oak programming langauge")
+        (@arg FILE: +required "The input file to use")
+        (@arg DEBUG: -d "Enable debugging")
+        (@arg FFI: -f --ffi +takes_value ... "Files to use for FFI")
+        (@group target =>
+            (@arg c: -c "Compile with C backend")
+            (@arg go: -g --go "Compile with Golang backend")
         )
-        .compile()
-        .unwrap()
-        .assemble()
-        .unwrap()
-        .assemble()
-        .unwrap(),
     )
-    .unwrap();
+    .setting(ArgRequiredElseHelp)
+    .get_matches();
+
+    if let Some(input_file) = matches.value_of("FILE") {
+        if let Ok(mut contents) = read_to_string(input_file) {
+            let mut result = String::new();
+            if let Some(ffi_files) = matches.values_of("FFI") {
+                for ffi_file in ffi_files {
+                    if let Ok(ffi_contents) = read_to_string(ffi_file) {
+                        result += &ffi_contents;
+                    } else {
+                        eprintln!("error: FFI file \"{}\" doesn't exist", input_file);
+                        exit(1);
+                    }
+                }
+            }
+
+            contents += include_str!("std.ok");
+
+            let cwd = if let Some(dir) = PathBuf::from(input_file).parent() {
+                PathBuf::from(dir)
+            } else {
+                PathBuf::from("./")
+            };
+
+            let success = if matches.is_present("c") {
+                compile(&cwd, contents, C)
+            } else if matches.is_present("go") {
+                compile(&cwd, contents, Go)
+            } else {
+                compile(&cwd, contents, C)
+            };
+
+            if success {
+                println!("compilation was successful");
+            } else {
+                eprintln!("error: failed to compile generated output code");
+            }
+        } else {
+            eprintln!("error: input file \"{}\" doesn't exist", input_file);
+        }
+    } else {
+        eprintln!("error: no input file given");
+    }
 }

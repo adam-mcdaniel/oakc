@@ -3,10 +3,11 @@ use crate::{Identifier, hir::{HirProgram, HirDeclaration, HirStructure, HirFunct
 
 grammar;
 
-
 pub Program: HirProgram = <(Declaration)*> => HirProgram::new(<>, 512);
 
 Declaration: HirDeclaration = {
+    "#" "[" "include" "(" <Str> ")" "]" => HirDeclaration::Include(<>),
+    "#" "[" "heap" "(" <Num> ")" "]" => HirDeclaration::HeapSize(<> as i32),
     "const" <name:Ident> "=" <expr:Constant> ";" => HirDeclaration::Constant(name, expr),
     <Function> => HirDeclaration::Function(<>),
     <Structure> => HirDeclaration::Structure(<>),
@@ -66,10 +67,19 @@ ConstantMathHigh: HirConstant = {
     <ConstantAtom> => <>
 }
 
-Function: HirFunction = "fn" <name:Ident> <args:List<"(", (Ident ":" Type), ",", ")">> "->" <return_type:Type> <body:Body> => HirFunction::new(name, args.iter().map(|(a, _, t)| (a.clone(), t.clone())).collect(), return_type, body);
+Function: HirFunction = {
+    "fn" <name:Ident> <args:List<"(", (Ident ":" Type), ",", ")">> <body:Body> => HirFunction::new(name, args.iter().map(|(a, _, t)| (a.clone(), t.clone())).collect(), HirType::Void, body),
+    "fn" <name:Ident> <args:List<"(", (Ident ":" Type), ",", ")">> "->" <return_type:Type> <body:Body> => HirFunction::new(name, args.iter().map(|(a, _, t)| (a.clone(), t.clone())).collect(), return_type, body),
+}
+
 Structure: HirStructure = "type" <name:Ident> "(" <size:Constant> ")" "{" <methods:Function*> "}" => HirStructure::new(name, size, methods);
 
-Body: Vec<HirStatement> = "{" <statements:Statement*> "}" => statements;
+Body: Vec<HirStatement> = "{" <head: Statement*> <tail: SmallStatement?> "}" => {
+    let mut result = Vec::new();
+    for stmt in head { result.push(stmt) }
+    if let Some(stmt) = tail { result.push(stmt) }
+    result
+};
 
 Type: HirType = {
     "&" <t:Type> => HirType::Pointer(Box::new(t)),
@@ -80,22 +90,31 @@ Type: HirType = {
 }
 
 Statement: HirStatement = {
-    "for" "(" <pre:Statement> <cond:Expression> ";" <post:Statement> ")" <body:Body> => HirStatement::For(Box::new(pre), cond, Box::new(post), body),
+    <BodyStatement> => <>,
+    <SmallStatement> ";" => <>
+}
+
+BodyStatement: HirStatement = {
+    "for" "(" <pre:SmallStatement> ";" <cond:Expression> ";" <post:SmallStatement> ")" <body:Body> => HirStatement::For(Box::new(pre), cond, Box::new(post), body),
     "while" <cond:Expression> <body:Body> => HirStatement::While(cond, body),
     "if" <cond:Expression> <body:Body> => HirStatement::If(cond, body),
-    "free" <addr:Expression> ":" <size:Expression> ";" => HirStatement::Free(addr, size),
-    "let" <name:Ident> ":" <t:Type> "=" <expr:Expression> ";" => HirStatement::Define(name, t, expr),
-    <name:Ident> "=" <expr:Expression> ";" => HirStatement::AssignVariable(name, expr),
-    "*" <lhs:Expression> "=" <rhs:Expression> ";" => HirStatement::AssignAddress(lhs, rhs),
-    <ptr:ExpressionAtom> "[" <idx:Expression> "]" "=" <rhs:Expression> ";" => HirStatement::AssignAddress(HirExpression::Index(Box::new(ptr), Box::new(idx)), rhs),
-    <instance:ExpressionAtom> "." <name:Ident> "=" <rhs:Expression> ";" => HirStatement::AssignAddress(HirExpression::Method(Box::new(instance), name, vec![]), rhs),
+    "if" <cond:Expression> <then_body:Body> "else" <else_body:Body> => HirStatement::IfElse(cond, then_body, else_body),
+}
 
-    <Expression> ";" => HirStatement::Expression(<>)
+SmallStatement: HirStatement = {
+    "free" <addr:Expression> ":" <size:Expression> => HirStatement::Free(addr, size),
+    "let" <name:Ident> ":" <t:Type> "=" <expr:Expression> => HirStatement::Define(name, t, expr),
+    <name:Ident> "=" <expr:Expression> => HirStatement::AssignVariable(name, expr),
+    "*" <lhs:Expression> "=" <rhs:Expression> => HirStatement::AssignAddress(lhs, rhs),
+    <ptr:ExpressionAtom> "[" <idx:Expression> "]" "=" <rhs:Expression> => HirStatement::AssignAddress(HirExpression::Index(Box::new(ptr), Box::new(idx)), rhs),
+    <instance:ExpressionAtom> "->" <name:Ident> "=" <rhs:Expression> => HirStatement::AssignAddress(HirExpression::Method(Box::new(instance), name, vec![]), rhs),
+
+    <Expression> => HirStatement::Expression(<>)
 }
 
 Expression: HirExpression = {
-    "*" <ptr:Expression> => HirExpression::Deref(Box::new(ptr)),
-    <ExpressionLow> => <>
+    <ExpressionLow> => <>,
+    "*" <ptr:ExpressionAtom> => HirExpression::Deref(Box::new(ptr)),
 }
 
 ExpressionAtom: HirExpression = {
@@ -109,7 +128,7 @@ ExpressionAtom: HirExpression = {
 
     "&" <name:Ident> => HirExpression::Refer(name),
     "(" <Expression> ")" => <>,
-    "-" <ExpressionAtom> => <>
+    "-" <ExpressionAtom> => <>,
 }
 
 ExpressionLow: HirExpression = {

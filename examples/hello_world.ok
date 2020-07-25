@@ -1,4 +1,4 @@
 
-fn main() -> void {
+fn main() {
     prs!("Hello world!");
 }

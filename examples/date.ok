@@ -1,11 +1,6 @@
 
-fn not(a: num) -> num {
-    let result: num = 1;
-    if a { result = 0; }
-    result;
-}
 
-# The number of memory cells the `Date` type consumes
+// The number of memory cells the `Date` type consumes
 const DATE = 3;
 type Date(DATE) {
     fn new(month: num, day: num, year: num) -> Date {
@@ -17,19 +12,19 @@ type Date(DATE) {
     }
     
     fn month(self: &Date) -> &num { self; }
-    fn day(self: &Date) -> &num   { self + 1; }
-    fn year(self: &Date) -> &num  { self + 2; }
+    fn day(self: &Date)   -> &num { self + 1; }
+    fn year(self: &Date)  -> &num { self + 2; }
 
-    fn tomorrow(self: &Date) -> void { self.day = self->day + 1; }
-    fn yesterday(self: &Date) -> void { self.day = self->day - 1; }
+    fn tomorrow(self: &Date)  { self->day = self->day + 1; }
+    fn yesterday(self: &Date) { self->day = self->day - 1; }
 
-    fn next_week(self: &Date) -> void {
-        for (let i: num = 0; i-7; i=i+1;) {
+    fn next_week(self: &Date) {
+        for (let i: num = 0; i-7; i=i+1) {
             self.tomorrow();
         }
     }
 
-    fn print(self: &Date, is_american: num) -> void {
+    fn print(self: &Date, is_american: num) {
         if is_american {
             prn!(self->month); prc!('/');
             prn!(self->day); prc!('/');
@@ -43,24 +38,24 @@ type Date(DATE) {
         }
     }
 
-    fn println(self: &Date, is_american: num) -> void { self.print(is_american); prend!(); }
+    fn println(self: &Date, is_american: num) { self.print(is_american); prend!(); }
 }
 
-fn main() -> void {
+fn main() {
     let bday: Date = Date::birthday();
 
-    bday.println(1); # American
-    bday.println(0); # Non-American
+    bday.println(1); // American
+    bday.println(0); // Non-American
     
-    # Increment the day value
+    // Increment the day value
     bday.tomorrow();
     
-    bday.println(1); # American
-    bday.println(0); # Non-American
+    bday.println(1); // American
+    bday.println(0); // Non-American
     
-    # Increment the day value seven times
+    // Increment the day value seven times
     bday.next_week();
 
-    bday.println(1); # American
-    bday.println(0); # Non-American
+    bday.println(1); // American
+    bday.println(0); // Non-American
 }

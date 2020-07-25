@@ -1,5 +1,8 @@
-use crate::{Identifier, StringLiteral};
-use core::fmt::{Debug, Error, Formatter};
+use crate::{
+    target::{Target, C},
+    Identifier, StringLiteral,
+};
+use core::fmt::{Debug, Display, Error, Formatter};
 use std::collections::BTreeMap;
 
 #[derive(Clone, PartialEq, Eq, PartialOrd, Ord, Debug)]
@@ -7,6 +10,16 @@ pub enum AsmError {
     VariableNotDefined(Identifier),
     FunctionNotDefined(Identifier),
     NoEntryPoint,
+}
+
+impl Display for AsmError {
+    fn fmt(&self, f: &mut Formatter) -> Result<(), Error> {
+        match self {
+            Self::FunctionNotDefined(name) => write!(f, "function '{}' is not defined", name),
+            Self::VariableNotDefined(name) => write!(f, "variable '{}' is not defined", name),
+            Self::NoEntryPoint => write!(f, "no entry point defined"),
+        }
+    }
 }
 
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
@@ -55,18 +68,30 @@ impl AsmType {
     }
 }
 
-#[derive(Clone)]
+impl Debug for AsmType {
+    fn fmt(&self, f: &mut Formatter) -> Result<(), Error> {
+        for _ in 0..self.ptr_level {
+            write!(f, "&")?;
+        }
+        write!(f, "{}", self.size)
+    }
+}
+
+#[derive(Clone, Debug)]
 pub struct AsmProgram(Vec<AsmFunction>, i32);
 
 impl AsmProgram {
+    const ENTRY_POINT: &'static str = "main";
+
     pub fn new(funcs: Vec<AsmFunction>, heap_size: i32) -> Self {
         Self(funcs, heap_size)
     }
 
-    pub fn assemble(&self) -> Result<String, AsmError> {
+    pub fn assemble(&self, target: &impl Target) -> Result<String, AsmError> {
         let Self(func_list, heap_size) = self;
         // Set up the output code
-        let mut result = String::from("#include \"oak.h\"\n\n");
+        // let mut result = String::from("#include \"oak.h\"\n\n");
+        let mut result = String::new();
         // Store the IDs of each function
         let mut func_ids = BTreeMap::new();
         // The number of cells to preemptively allocate on the stack
@@ -75,30 +100,48 @@ impl AsmProgram {
             // Store the function's ID
             func_ids.insert(func.name.clone(), id as i32);
             // Add the function header to the output code
-            result += &format!(
-                "void {}(machine *vm);\n",
-                AsmFunction::get_assembled_name(id as i32)
-            );
+            result += &target.fn_header(AsmFunction::get_assembled_name(id as i32));
         }
 
+        // It is very important that the entry point is assembled last.
+        // This is because of the way things are allocated on the stack.
+        let mut entry_point = None;
         for func in func_list {
             // Compile the function
-            result += &func.assemble(&func_ids, &mut var_size)?;
+            if !func.is_entry_point() {
+                result += &func.assemble(&func_ids, &mut var_size, target)?;
+            } else {
+                // Store the entry point for use later
+                // This has the side effect of ignoring multiple definitions
+                // of the `main` function, and just using the last one defined.
+                entry_point = Some(func);
+            }
         }
 
-        if let Some(main_id) = func_ids.get("main") {
-            result += &format!(
-                "int main() {{\nmachine *vm = machine_new({}, {});\n{}(vm);\nmachine_drop(vm);\nreturn 0;\n}}",
-                var_size, var_size + heap_size,
-                AsmFunction::get_assembled_name(*main_id)
-            );
-        }
+        if let Some(func) = entry_point {
+            if let Some(main_id) = func_ids.get(Self::ENTRY_POINT) {
+                // Assemble the entry point code
+                result += &func.assemble(&func_ids, &mut var_size, target)?;
 
-        Ok(result)
+                // Call the entry point
+                result += &target.begin_entry_point(var_size, *heap_size);
+                result += &target.call_fn(AsmFunction::get_assembled_name(*main_id));
+                result += &target.end_entry_point();
+
+                // FOR DEBUGGING
+                // println!("STACK SIZE: {}", var_size);
+
+                Ok(result)
+            } else {
+                Err(AsmError::NoEntryPoint)
+            }
+        } else {
+            Err(AsmError::NoEntryPoint)
+        }
     }
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct AsmFunction {
     name: Identifier,
     args: Vec<(Identifier, AsmType)>,
@@ -121,6 +164,10 @@ impl AsmFunction {
         }
     }
 
+    fn is_entry_point(&self) -> bool {
+        self.name == AsmProgram::ENTRY_POINT
+    }
+
     /// Use the function's ID to get the output code's name of the function.
     /// An ID is used to prevent invalid output code function names, or names
     /// that clash with standard library names such as "printf" or "malloc".
@@ -132,6 +179,7 @@ impl AsmFunction {
         &self,
         func_ids: &BTreeMap<String, i32>,
         var_size: &mut i32,
+        target: &impl Target,
     ) -> Result<String, AsmError> {
         let mut result = String::new();
 
@@ -140,29 +188,26 @@ impl AsmFunction {
         for (arg_name, arg_type) in &self.args {
             // Define each argument of the function
             result += &AsmStatement::Define(arg_name.clone(), *arg_type)
-                .assemble(func_ids, &mut vars, var_size)?;
-            result += &AsmStatement::Assign(*arg_type).assemble(func_ids, &mut vars, var_size)?;
+                .assemble(func_ids, &mut vars, var_size, target)?;
+            result +=
+                &AsmStatement::Assign(*arg_type).assemble(func_ids, &mut vars, var_size, target)?;
         }
 
         for stmt in &self.body {
             // Assemble each statement in the function body
-            result += &stmt.assemble(func_ids, &mut vars, var_size)?;
+            result += &stmt.assemble(func_ids, &mut vars, var_size, target)?;
         }
 
         // Write the function as output code
         if let Some(id) = func_ids.get(&self.name) {
-            Ok(format!(
-                "void {}(machine *vm) {{\n{}}}\n\n",
-                Self::get_assembled_name(*id),
-                result
-            ))
+            Ok(target.fn_definition(Self::get_assembled_name(*id), result))
         } else {
             Err(AsmError::FunctionNotDefined(self.name.clone()))
         }
     }
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub enum AsmStatement {
     For(Vec<Self>, Vec<Self>, Vec<Self>, Vec<Self>),
     Define(Identifier, AsmType),
@@ -176,6 +221,7 @@ impl AsmStatement {
         func_ids: &BTreeMap<String, i32>,
         vars: &mut BTreeMap<String, (i32, AsmType)>,
         var_size: &mut i32,
+        target: &impl Target,
     ) -> Result<String, AsmError> {
         Ok(match self {
             // Define a variable on the stack
@@ -186,43 +232,43 @@ impl AsmStatement {
                 // Increment the size of the program's variables
                 *var_size += data_type.get_size();
                 // Push the address of the new variable onto the stack
-                format!("machine_push(vm, {});", address)
+                target.push(address as f64)
             }
             // Pop an address off of the stack, pop an item of size `data_type`
             // off of the stack, and store the item at the address
-            Self::Assign(data_type) => format!("machine_store(vm, {});\n", data_type.get_size()),
+            Self::Assign(data_type) => target.store(data_type.get_size()),
             Self::For(pre, cond, post, body) => {
                 let mut result = String::new();
                 // Run the code that preps the for loop
                 for stmt in pre {
-                    result += &stmt.assemble(func_ids, vars, var_size)?;
+                    result += &stmt.assemble(func_ids, vars, var_size, target)?;
                 }
                 // Check the condition of the for loop
                 for expr in cond {
-                    result += &expr.assemble(func_ids, vars, var_size)?;
+                    result += &expr.assemble(func_ids, vars, var_size, target)?;
                 }
                 // Begin the loop body
-                result += &format!("while (machine_pop(vm)) {{");
+                result += &target.begin_while();
                 // Run the body of the loop
                 for stmt in body {
-                    result += &stmt.assemble(func_ids, vars, var_size)?;
+                    result += &stmt.assemble(func_ids, vars, var_size, target)?;
                 }
                 // Run the code that procedes the body of the loop
                 for stmt in post {
-                    result += &stmt.assemble(func_ids, vars, var_size)?;
+                    result += &stmt.assemble(func_ids, vars, var_size, target)?;
                 }
                 // Check the condition again
                 for expr in cond {
-                    result += &expr.assemble(func_ids, vars, var_size)?;
+                    result += &expr.assemble(func_ids, vars, var_size, target)?;
                 }
                 // End the loop body
-                result + "\n}\n"
+                result + &target.end_while()
             }
 
             Self::Expression(exprs) => {
                 let mut result = String::new();
                 for expr in exprs {
-                    result += &expr.assemble(func_ids, vars, var_size)?;
+                    result += &expr.assemble(func_ids, vars, var_size, target)?;
                 }
                 result
             }
@@ -259,6 +305,7 @@ impl AsmExpression {
         func_ids: &BTreeMap<String, i32>,
         vars: &BTreeMap<String, (i32, AsmType)>,
         var_size: &mut i32,
+        target: &impl Target,
     ) -> Result<String, AsmError> {
         Ok(match self {
             Self::String(s) => {
@@ -272,24 +319,25 @@ impl AsmExpression {
                 // Push each character of the string onto the stack
                 let mut result = String::new();
                 for ch in s.chars() {
-                    result += &format!("machine_push(vm, {});\n", ch as u8);
+                    result += &target.push(ch as u8 as f64);
                 }
                 // Push the zero terminated character
-                result += &format!("machine_push(vm, {});\n", 0);
+                result += &target.push(0.0);
+
                 // Store the characters at the address of the string,
                 // and push the address onto the stack.
-                result += &format!(
-                    "machine_push(vm, {addr});\nmachine_store(vm, {});\nmachine_push(vm, {addr});\n",
-                    size, addr=address
-                );
+                result += &(target.push(address as f64)
+                    + &target.store(size)
+                    + &target.push(address as f64));
+
                 // Increment the amount of data stored on the stack
                 *var_size += size;
                 result
             }
             // Push a character onto the stack
-            Self::Character(ch) => format!("machine_push(vm, {});\n", *ch as u8),
+            Self::Character(ch) => target.push(*ch as u8 as f64),
             // Push a float onto the stack
-            Self::Float(n) => format!("machine_push(vm, {});\n", *n),
+            Self::Float(n) => target.push(*n),
             // Void expressions are a No-Op
             Self::Void => String::new(),
 
@@ -299,11 +347,7 @@ impl AsmExpression {
                 // and the type of the variable
                 if let Some((addr, data_type)) = vars.get(name) {
                     // Push the address and load the data at that address
-                    format!(
-                        "machine_push(vm, {});\nmachine_load(vm, {});\n",
-                        addr,
-                        data_type.get_size()
-                    )
+                    target.push(*addr as f64) + &target.load(data_type.get_size())
                 } else {
                     return Err(AsmError::VariableNotDefined(name.clone()));
                 }
@@ -312,38 +356,38 @@ impl AsmExpression {
             // Call a function
             Self::Call(fn_name) => {
                 if let Some(fn_id) = func_ids.get(fn_name) {
-                    format!("{}(vm);\n", AsmFunction::get_assembled_name(*fn_id))
+                    target.call_fn(AsmFunction::get_assembled_name(*fn_id))
                 } else {
                     return Err(AsmError::FunctionNotDefined(fn_name.clone()));
                 }
             }
 
             // Call a foreign function
-            Self::ForeignCall(fn_name) => format!("{}(vm);\n", fn_name),
+            Self::ForeignCall(fn_name) => target.call_foreign_fn(fn_name.clone()),
 
             // Allocate data on the heap
-            Self::Alloc => String::from("machine_allocate(vm);\n"),
+            Self::Alloc => target.allocate(),
             // Free data on the heap
-            Self::Free => String::from("machine_free(vm);\n"),
+            Self::Free => target.free(),
             // Get the address of a variable on the stack
             Self::Refer(name) => {
                 if let Some((addr, _)) = vars.get(name) {
-                    format!("machine_push(vm, {});\n", addr)
+                    target.push(*addr as f64)
                 } else {
                     return Err(AsmError::VariableNotDefined(name.clone()));
                 }
             }
             // Dereference an address
-            Self::Deref(size) => format!("machine_load(vm, {});\n", size),
+            Self::Deref(size) => target.load(*size),
 
             // Add two numbers on the stack
-            Self::Add => String::from("machine_add(vm);\n"),
+            Self::Add => target.add(),
             // Subtract two numbers on the stack
-            Self::Subtract => String::from("machine_subtract(vm);\n"),
+            Self::Subtract => target.subtract(),
             // Multiply two numbers on the stack
-            Self::Multiply => String::from("machine_multiply(vm);\n"),
+            Self::Multiply => target.multiply(),
             // Divide two numbers on the stack
-            Self::Divide => String::from("machine_divide(vm);\n"),
+            Self::Divide => target.divide(),
         })
     }
 }

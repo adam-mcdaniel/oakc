@@ -5,6 +5,8 @@ use crate::{
     Identifier, StringLiteral,
 };
 
+use core::fmt::{Display, Error, Formatter};
+
 #[derive(Clone, Debug, PartialEq, PartialOrd)]
 pub enum MirError {
     FunctionNotDefined(Identifier),
@@ -12,6 +14,20 @@ pub enum MirError {
     MethodNotDefined(MirType, Identifier),
     StructureNotDefined(Identifier),
     DereferenceNonPointer(MirType),
+}
+
+impl Display for MirError {
+    fn fmt(&self, f: &mut Formatter) -> Result<(), Error> {
+        match self {
+            Self::FunctionNotDefined(name) => write!(f, "function '{}' is not defined", name),
+            Self::VariableNotDefined(name) => write!(f, "variable '{}' is not defined", name),
+            Self::MethodNotDefined(t, name) => {
+                write!(f, "method '{}' is not defined for type '{}'", name, t)
+            }
+            Self::StructureNotDefined(name) => write!(f, "type '{}' is not defined", name),
+            Self::DereferenceNonPointer(t) => write!(f, "cannot dereference type '{}'", t),
+        }
+    }
 }
 
 #[derive(Clone, Debug, PartialEq, PartialOrd)]
@@ -49,14 +65,19 @@ impl MirType {
         &self,
         structs: &BTreeMap<Identifier, MirStructure>,
     ) -> Result<AsmType, MirError> {
-        let mut result = AsmType::new(self.get_size(structs)?);
+        let mut result = AsmType::new(self.get_inner_size(structs)?);
         for _ in 0..self.ptr_level {
             result = result.refer();
         }
         Ok(result)
     }
 
-    pub fn get_size(&self, structs: &BTreeMap<Identifier, MirStructure>) -> Result<i32, MirError> {
+    fn get_size(&self, structs: &BTreeMap<Identifier, MirStructure>) -> Result<i32, MirError> {
+        if self.is_pointer() { Ok(1) }
+        else { self.get_inner_size(structs) }
+    }
+
+    fn get_inner_size(&self, structs: &BTreeMap<Identifier, MirStructure>) -> Result<i32, MirError> {
         Ok(match self.name.as_str() {
             "void" => 0,
             "float" => 1,
@@ -92,12 +113,28 @@ impl MirType {
     }
 }
 
+impl Display for MirType {
+    fn fmt(&self, f: &mut Formatter) -> Result<(), Error> {
+        for _ in 0..self.ptr_level {
+            write!(f, "&")?;
+        }
+        write!(f, "{}", self.name)
+    }
+}
+
 #[derive(Clone, Debug, PartialEq, PartialOrd)]
 pub struct MirProgram(Vec<MirDeclaration>, i32);
 
 impl MirProgram {
     pub fn new(decls: Vec<MirDeclaration>, heap_size: i32) -> Self {
         Self(decls, heap_size)
+    }
+
+    pub fn get_declarations(&self) -> Vec<MirDeclaration> {
+        (self.0).clone()
+    }
+    pub fn get_heap_size(&self) -> i32 {
+        self.1
     }
 
     pub fn assemble(&self) -> Result<AsmProgram, MirError> {
@@ -181,10 +218,7 @@ impl MirStructure {
         // Iterate over the methods and rename them to their method names.
         for function in &self.methods {
             let method = function.as_method(&mir_type);
-            funcs.insert(
-                method.get_name(),
-                method.get_return_type(),
-            );
+            funcs.insert(method.get_name(), method.get_return_type());
             result.push(method.assemble(funcs, structs)?);
         }
 
@@ -271,6 +305,7 @@ pub enum MirStatement {
     For(Box<Self>, MirExpression, Box<Self>, Vec<Self>),
     While(MirExpression, Vec<Self>),
     If(MirExpression, Vec<Self>),
+    IfElse(MirExpression, Vec<Self>, Vec<Self>),
 
     Free(MirExpression, MirExpression),
     Expression(MirExpression),
@@ -290,7 +325,7 @@ impl MirStatement {
                 vars.insert(var_name.clone(), t.clone());
                 let mut result = Vec::new();
                 let asm_t = t.to_asm_type(structs)?;
-            
+
                 // Push the expression to store in the variable
                 result.extend(expr.assemble(vars, funcs, structs)?);
                 // Allocate the variable on the stack, and store the
@@ -393,6 +428,64 @@ impl MirStatement {
                     post,
                     asm_body,
                 )]
+            }
+
+            Self::IfElse(cond, then_body, else_body) => {
+                let mut asm_then_body = Vec::new();
+                for stmt in then_body {
+                    asm_then_body.extend(stmt.assemble(vars, funcs, structs)?);
+                }
+
+                let mut asm_else_body = Vec::new();
+                for stmt in else_body {
+                    asm_else_body.extend(stmt.assemble(vars, funcs, structs)?);
+                }
+
+                // Use a variable to store the condition of the if statement
+                let mut pre = Vec::new();
+                pre.extend(cond.assemble(vars, funcs, structs)?);
+                pre.extend(vec![
+                    AsmStatement::Define(Identifier::from("%IF_VAR%"), AsmType::float()),
+                    AsmStatement::Assign(AsmType::float()),
+                    AsmStatement::Expression(vec![AsmExpression::Float(1.0)]),
+                    AsmStatement::Define(Identifier::from("%ELSE_VAR%"), AsmType::float()),
+                    AsmStatement::Assign(AsmType::float()),
+                ]);
+
+                // At the end of the loop body, store zero in the condition variable
+                // to prevent the statement from doing more than one loop.
+                let mut post = Vec::new();
+                post.extend(vec![
+                    AsmStatement::Expression(vec![
+                        AsmExpression::Float(0.0),
+                        AsmExpression::Refer(Identifier::from("%IF_VAR%")),
+                    ]),
+                    AsmStatement::Assign(AsmType::float()),
+                    AsmStatement::Expression(vec![
+                        AsmExpression::Float(0.0),
+                        AsmExpression::Refer(Identifier::from("%ELSE_VAR%")),
+                    ]),
+                    AsmStatement::Assign(AsmType::float()),
+                ]);
+
+                vec![
+                    AsmStatement::For(
+                        pre,
+                        vec![AsmStatement::Expression(vec![AsmExpression::Variable(
+                            Identifier::from("%IF_VAR%"),
+                        )])],
+                        post.clone(),
+                        asm_then_body,
+                    ),
+                    AsmStatement::For(
+                        vec![],
+                        vec![AsmStatement::Expression(vec![AsmExpression::Variable(
+                            Identifier::from("%ELSE_VAR%"),
+                        )])],
+                        post,
+                        asm_else_body,
+                    ),
+                ]
             }
 
             /// Freeing an address does not return a value, so it is a statement.
@@ -500,8 +593,15 @@ impl MirExpression {
             Self::Deref(expr) => {
                 let mut result = Vec::new();
                 result.extend(expr.assemble(vars, funcs, structs)?);
+                // The `Deref` instruction requires the size of the item in memory
+                // to push onto the stack. A pointer to the object has size 1, but
+                // the size of the type itself can vary. To get the size of the
+                // inner type, dereference the pointer type and get the size of
+                // the resulting type.
                 result.push(AsmStatement::Expression(vec![AsmExpression::Deref(
-                    expr.get_type(vars, funcs, structs)?.get_size(structs)?,
+                    expr.get_type(vars, funcs, structs)?
+                        .deref()?
+                        .get_size(structs)?,
                 )]));
                 result
             }
@@ -632,7 +732,7 @@ impl MirExpression {
             /// A void literal has type `void`
             Self::Void => MirType::void(),
             /// Allocating data on the heap returns a void pointer
-            Self::Alloc(_) => MirType::character().refer(),
+            Self::Alloc(_) => MirType::void().refer(),
 
             /// Get the type of the instance, retrieve the method from the type,
             /// then get the return type of the method.

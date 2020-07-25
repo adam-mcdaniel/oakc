@@ -1,0 +1,10 @@
+
+fn inc(n: &num) -> void {
+    *n = *n + 1;
+}
+
+fn main() -> void {
+    for (let i:num=0; lt(i, 10); inc(&i)) {
+        putnumln(i);
+    }
+}

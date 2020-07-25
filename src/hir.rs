@@ -1,11 +1,13 @@
-use std::collections::BTreeMap;
+use std::{collections::BTreeMap, fs::read_to_string, path::PathBuf, process::exit};
 
 use crate::{
     mir::{
         MirDeclaration, MirExpression, MirFunction, MirProgram, MirStatement, MirStructure, MirType,
     },
-    Identifier, StringLiteral,
+    parse, Identifier, StringLiteral,
 };
+
+use core::fmt::{Display, Error, Formatter};
 
 #[derive(Clone, Debug)]
 pub struct HirProgram(Vec<HirDeclaration>, i32);
@@ -20,18 +22,19 @@ impl HirProgram {
         decls
     }
 
-    pub fn set_heap_size(&mut self, size: i32) {
-        self.1 = size;
-    }
-
     pub fn get_heap_size(&self) -> i32 {
         let Self(_, heap_size) = self;
         *heap_size
     }
 
-    pub fn compile(&self) -> Result<MirProgram, HirError> {
+    fn set_heap_size(&mut self, size: i32) {
+        self.1 = size;
+    }
+
+    pub fn compile(&self, cwd: &PathBuf) -> Result<MirProgram, HirError> {
         let mut constants = BTreeMap::new();
         let mut mir_decls = Vec::new();
+        let mut heap_size = self.get_heap_size();
         for decl in self.get_declarations() {
             match decl {
                 HirDeclaration::Constant(name, constant) => {
@@ -43,16 +46,35 @@ impl HirProgram {
                 HirDeclaration::Structure(structure) => mir_decls.push(MirDeclaration::Structure(
                     structure.to_mir_struct(&constants)?,
                 )),
+                HirDeclaration::Include(filename) => {
+                    if let Ok(contents) = read_to_string(cwd.join(filename)) {
+                        mir_decls.extend(parse(contents).compile(cwd)?.get_declarations());
+                    } else {
+                        eprintln!("error: could not include file '{}'", filename);
+                        exit(1);
+                    }
+                }
+                HirDeclaration::HeapSize(size) => {
+                    heap_size = *size;
+                }
             }
         }
 
-        Ok(MirProgram::new(mir_decls, self.get_heap_size()))
+        Ok(MirProgram::new(mir_decls, heap_size))
     }
 }
 
 #[derive(Clone, Debug)]
 pub enum HirError {
     ConstantNotDefined(Identifier),
+}
+
+impl Display for HirError {
+    fn fmt(&self, f: &mut Formatter) -> Result<(), Error> {
+        match self {
+            Self::ConstantNotDefined(name) => write!(f, "constant '{}' is not defined", name),
+        }
+    }
 }
 
 #[derive(Clone, Debug)]
@@ -81,6 +103,8 @@ pub enum HirDeclaration {
     Constant(Identifier, HirConstant),
     Function(HirFunction),
     Structure(HirStructure),
+    Include(String),
+    HeapSize(i32),
 }
 
 #[derive(Clone, Debug)]
@@ -208,6 +232,7 @@ pub enum HirStatement {
     For(Box<Self>, HirExpression, Box<Self>, Vec<Self>),
     While(HirExpression, Vec<Self>),
     If(HirExpression, Vec<Self>),
+    IfElse(HirExpression, Vec<Self>, Vec<Self>),
 
     Free(HirExpression, HirExpression),
     Expression(HirExpression),
@@ -260,6 +285,18 @@ impl HirStatement {
                     mir_body.push(stmt.to_mir_stmt(constants)?);
                 }
                 MirStatement::If(cond.to_mir_expr(constants)?, mir_body)
+            }
+
+            Self::IfElse(cond, then_body, else_body) => {
+                let mut mir_then_body = Vec::new();
+                for stmt in then_body {
+                    mir_then_body.push(stmt.to_mir_stmt(constants)?);
+                }
+                let mut mir_else_body = Vec::new();
+                for stmt in else_body {
+                    mir_else_body.push(stmt.to_mir_stmt(constants)?);
+                }
+                MirStatement::IfElse(cond.to_mir_expr(constants)?, mir_then_body, mir_else_body)
             }
 
             Self::Free(addr, size) => {

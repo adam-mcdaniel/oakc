@@ -1,0 +1,30 @@
+
+
+
+type Counter(1) {
+    fn new() -> Counter { 0 }
+
+    fn count(self: &Counter) -> &num { self }
+
+    fn increment(self: &Counter) -> void {
+        self->count = self->count + 1;
+    }
+
+    fn decrement(self: &Counter) -> void {
+        self->count = self->count - 1;
+    }
+}
+
+fn inc(c: Counter) -> void {
+    c.increment();
+    c.increment();
+    c.increment();
+    putnumln(c->count);
+}
+
+fn main() -> void {
+    let c: Counter = Counter::new();
+    putnumln(c->count);
+    inc(c);
+    putnumln(c->count);
+}

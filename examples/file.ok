@@ -11,13 +11,13 @@ type File(FILE) {
 
     fn read(self: &File) -> &char { "Contents of file!!!"; }
 
-    fn close(self: &File) -> void {
-        self.is_open = 0;
+    fn close(self: &File) {
+        self->is_open = 0;
     }
 }
 
 
-fn main() -> void {
+fn main() {
     let f: File = File::open("test.txt");
     prs!("file status: "); prn!(f->is_open); prend!();
 

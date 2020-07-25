@@ -1,5 +1,5 @@
 #![allow(warnings, clippy, unknown_lints)]
-
+use std::{path::PathBuf, process::exit};
 pub type Identifier = String;
 pub type StringLiteral = String;
 
@@ -8,23 +8,47 @@ pub mod hir;
 pub mod mir;
 use hir::HirProgram;
 
-use comment::python::strip;
+mod target;
+pub use target::{Go, Target, C};
+
+use asciicolor::Colorize;
+use comment::cpp::strip;
 
 use lalrpop_util::{lalrpop_mod, ParseError};
 lalrpop_mod!(pub parser);
 
-pub fn parse(input: &str) -> HirProgram {
-    match parser::ProgramParser::new().parse(&strip(input).unwrap()) {
-        // if the parser succeeds, build will succeed
-        Ok(mut parsed) => {
-            // parsed.set_heap_size(65536);
-            println!("{:#?}", parsed);
-            parsed
+pub fn compile(cwd: &PathBuf, input: impl ToString, target: impl Target) -> bool {
+    match parse(input).compile(cwd) {
+        Ok(mir) => match mir.assemble() {
+            Ok(asm) => {
+                match asm.assemble(&target) {
+                    Ok(result) => target.compile(target.prelude() + &result + &target.postlude()),
+                    Err(e) => {
+                        eprintln!("compilation error: {}", e.bright_red().underline());
+                        exit(1);
+                    }
+                }
+            }
+            Err(e) => {
+                eprintln!("compilation error: {}", e.bright_red().underline());
+                exit(1);
+            }
+        },
+        Err(e) => {
+            eprintln!("compilation error: {}", e.bright_red().underline());
+            exit(1);
         }
+    }
+}
+
+pub fn parse(input: impl ToString) -> HirProgram {
+    match parser::ProgramParser::new().parse(&strip(input.to_string()).unwrap()) {
+        // if the parser succeeds, build will succeed
+        Ok(parsed) => parsed,
         // if the parser succeeds, annotate code with comments
         Err(e) => {
             eprintln!("{}", format_error(&input.to_string(), e));
-            panic!("compilation error");
+            exit(1);
         }
     }
 }
@@ -50,9 +74,9 @@ fn make_error(line: &str, unexpected: &str, line_number: usize, column_number: u
 {WS} = unexpected `{unexpected}`",
         WS = " ".repeat(line_number.to_string().len()),
         line_number = line_number,
-        line = line,
+        line = line.bright_yellow().underline(),
         underline = underline,
-        unexpected = unexpected
+        unexpected = unexpected.bright_yellow().underline()
     )
 }
 
