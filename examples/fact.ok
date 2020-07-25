@@ -1,4 +1,4 @@
-#[heap(32)]
+#[heap(512)]
 
 fn ln() { putchar('\n') }
 
@@ -8,8 +8,7 @@ fn fact(n: num) -> num {
 }
 
 fn main() {
-    putstr("result: "); putnum(fact(5)); ln();
-    for (let i: num = 0; i-10; i=i+1) {
+    for (let i: num = 0; i-100; i=i+1) {
         putnum(i); putstr("! is "); putnum(fact(i)); ln();
     }
 }

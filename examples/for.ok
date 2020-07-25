@@ -1,6 +1,7 @@
+#[heap(10)]
 
 fn inc(n: &num) -> void {
-    *n = *n + 1;
+    *n = (*n) + 1;
 }
 
 fn main() -> void {
