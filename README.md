@@ -61,8 +61,6 @@ So how exactly does the oak compiler work?
 1. Flatten structures into their functions
     - Structures in oak work differently than in other languages. The objects themselves are only arrays of memory cells: they don't have _**any**_ members or attributes. Structures _exclusively_ retrieve their data by using **_methods_** to return the addresses of their _"members"_. These methods are then flattened into simple functions. So, _`putnumln(*bday.day)`_ becomes _`putnumln(*Date::day(&bday))`_. This is a pretty simple process.
 
-![Example](assets/date.png)
-
 2. Calculate the size of every operation's type
     - Because of the structure of oak's intermediate representation, the type of every expression must be known for compilation to continue. The compiler combs over each expression and find's the size of its type. From here on, the representation of the code looks like this:
 
