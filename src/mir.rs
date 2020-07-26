@@ -370,17 +370,19 @@ impl MirStatement {
             }
 
             Self::For(pre, cond, post, body) => {
+                // Assemble the `pre` condition first so that
+                // if a variable is defined in this statement,
+                // it is defined for the rest of the loop.
+                let asm_pre = pre.assemble(vars, funcs, structs)?;
+                let mut asm_body = Vec::new();
+                for stmt in body {
+                    asm_body.extend(stmt.assemble(vars, funcs, structs)?);
+                }
                 vec![AsmStatement::For(
-                    pre.assemble(vars, funcs, structs)?,
+                    asm_pre,
                     cond.assemble(vars, funcs, structs)?,
                     post.assemble(vars, funcs, structs)?,
-                    {
-                        let mut asm_body = Vec::new();
-                        for stmt in body {
-                            asm_body.extend(stmt.assemble(vars, funcs, structs)?);
-                        }
-                        asm_body
-                    },
+                    asm_body,
                 )]
             }
 
