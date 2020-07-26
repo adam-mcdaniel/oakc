@@ -4,26 +4,8 @@ An infinitely more portable alternative to the C programming language.
 <!-- height: 41px !important;width: 174px  -->
 <a href="https://www.buymeacoffee.com/adammcdaniel" target="_blank"><img src="https://cdn.buymeacoffee.com/buttons/default-violet.png" height=41px width=174px style="!important;box-shadow: 0px 3px 2px 0px rgba(190, 190, 190, 0.5) !important;-webkit-box-shadow: 0px 3px 2px 0px rgba(190, 190, 190, 0.5) !important;" ></a>
 
-```rust
-#[heap(512)]
-#[include("str.ok")]
+![Example](assets/example.png)
 
-fn input(buffer: &char) -> &char {
-    let i: num = 0;
-    for (let ch: char = get_char(); neq(ch, '\n'); ch = get_char()) {
-        buffer[i] = ch;
-        i = i + 1;
-    }
-}
-
-fn main() -> void {
-    let size: num = 256;
-    let s: &char = alloc(size);
-    putstr("Enter some text: "); input(s);
-    putstr("You said: \""); putstr(s); putcharln('"');
-    free s: size;
-}
-```
 
 ## Intermediate Representation
 

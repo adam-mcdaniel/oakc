@@ -1,0 +1,18 @@
+#[heap(512)]
+#[include("str.ok")]
+
+fn input(buffer: &char) -> &char {
+    let i: num = 0;
+    for (let ch: char = get_char(); neq(ch, '\n'); ch = get_char()) {
+        buffer[i] = ch;
+        i = i + 1;
+    }
+}
+
+fn main() -> void {
+    let size: num = 256;
+    let s: &char = alloc(size);
+    putstr("Enter some text: "); input(s);
+    putstr("You said: \""); putstr(s); putcharln('"');
+    free s: size;
+}
