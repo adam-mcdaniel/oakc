@@ -6,7 +6,7 @@ An infinitely more portable alternative to the C programming language.
 
 ## Why Oak?
 
-For those of you that remember [free](https://github.com/adam-mcdaniel/free), oak is essentially a more robust and high level version of that project. The goal of oak is to be as high level as possible in the frontend, but as small and low level as possible in the backend.
+For those of you that remember ["free"](https://github.com/adam-mcdaniel/free), oak is essentially a more robust and high level version of that project. The goal of oak is to be as high level as possible in the frontend, but as small and low level as possible in the backend.
 
 #### About the Author
 
