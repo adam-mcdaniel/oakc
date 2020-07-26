@@ -344,7 +344,7 @@ while (machine_pop(vm)) {
 }
 ```
 
-Lastly, in the entry point, the our `fact` function is called with the argument `5`.
+Lastly, in the entry point, our `fact` function is called with the argument `5`.
 
 ```c
 void fn1(machine* vm) {
