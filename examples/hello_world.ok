@@ -1,4 +1,4 @@
 
 fn main() {
-    prs!("Hello world!");
+    putstrln("Hello world!");
 }

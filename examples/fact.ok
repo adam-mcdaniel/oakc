@@ -1,14 +1,12 @@
 #[heap(512)]
 
-fn ln() { putchar('\n') }
-
 fn fact(n: num) -> num {
-    if le(n, 1) { 1 }
-    else { n * fact(n-1) }
+    if n - 1 { n * fact(n-1) }
+    else { 1 }
 }
 
 fn main() {
-    for (let i: num = 0; i-100; i=i+1) {
-        putnum(i); putstr("! is "); putnum(fact(i)); ln();
+    for (let i: num = 1; i-100; i=i+1) {
+        putnum(i); putstr("! is "); putnumln(fact(i));
     }
 }
