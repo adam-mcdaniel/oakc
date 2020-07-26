@@ -1,11 +1,13 @@
 # Oak
 
 An infinitely more portable alternative to the C programming language.
-<!-- height: 41px !important;width: 174px  -->
 <a href="https://www.buymeacoffee.com/adammcdaniel" target="_blank"><img src="https://cdn.buymeacoffee.com/buttons/default-violet.png" height=41px width=174px style="!important;box-shadow: 0px 3px 2px 0px rgba(190, 190, 190, 0.5) !important;-webkit-box-shadow: 0px 3px 2px 0px rgba(190, 190, 190, 0.5) !important;" ></a>
 
 ![Example](assets/example_.png)
 
+## Why Oak?
+
+For those of you that remember [free](https://github.com/adam-mcdaniel/free), oak is essentially a more robust and high level version of that project. The goal of oak is to be as high level as possible in the frontend, but as small and low level as possible in the backend.
 
 ## Intermediate Representation
 
