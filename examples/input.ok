@@ -1,10 +1,10 @@
+
 #[heap(512)]
 #[include("str.ok")]
 
 fn input(buffer: &char) -> &char {
     let i: num = 0;
-    let ch: char = ' '; 
-    for (ch = get_char(); neq(ch, '\n'); ch = get_char()) {
+    for (let ch: char = get_char(); neq(ch, '\n'); ch = get_char()) {
         buffer[i] = ch;
         i = i + 1;
     }
