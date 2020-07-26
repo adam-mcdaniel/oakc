@@ -59,7 +59,9 @@ impl Display for MirError {
     fn fmt(&self, f: &mut Formatter) -> Result<(), Error> {
         match self {
             Self::FunctionNotDefined(name) => write!(f, "function '{}' is not defined", name),
-            Self::FunctionRedefined(name) => write!(f, "function '{}' is defined multiple times", name),
+            Self::FunctionRedefined(name) => {
+                write!(f, "function '{}' is defined multiple times", name)
+            }
             Self::VariableNotDefined(name) => write!(f, "variable '{}' is not defined", name),
             Self::MethodNotDefined(t, name) => {
                 write!(f, "method '{}' is not defined for type '{}'", name, t)
@@ -101,11 +103,9 @@ impl Display for MirError {
             Self::TooManyArguments(call_expr) => {
                 write!(f, "too many arguments in function call '{}'", call_expr)
             }
-            Self::ArgumentMismatchedType(call_expr) => write!(
-                f,
-                "mismatched types in function call '{}'",
-                call_expr
-            ),
+            Self::ArgumentMismatchedType(call_expr) => {
+                write!(f, "mismatched types in function call '{}'", call_expr)
+            }
             Self::CalledFunctionAsMethod(fn_name) => {
                 write!(f, "called function '{}' as a method", fn_name)
             }
@@ -130,9 +130,9 @@ pub struct MirType {
 impl MirType {
     /// The name of the float type in Oak code
     const FLOAT: &'static str = "num";
-    /// The name of the character type in the Oak code 
+    /// The name of the character type in the Oak code
     const CHAR: &'static str = "char";
-    /// The name of the unit type in the Oak code 
+    /// The name of the unit type in the Oak code
     const VOID: &'static str = "void";
 
     /// A user defined type
@@ -223,7 +223,6 @@ impl MirType {
         format!("{}::{}", self.name, method_name)
     }
 }
-
 
 /// This implementation solely governs the rules for type-checking.
 impl PartialEq for MirType {
@@ -863,7 +862,7 @@ impl MirExpression {
                 if let Some(func) = funcs.get(fn_name) {
                     // The list of parameters that the function expects
                     let params = func.get_parameters();
-                    
+
                     // Check if there are too many or few arguments
                     if args.len() < params.len() {
                         return Err(MirError::NotEnoughArguments(self.clone()));
