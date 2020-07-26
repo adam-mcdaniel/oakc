@@ -1,5 +1,6 @@
 #[heap(512)]
-type Array(3) {
+const ARRAY = 3;
+type Array(ARRAY) {
     fn new(len: num, elem_size: num) -> Array {
         len; elem_size; alloc(len * elem_size)
     }

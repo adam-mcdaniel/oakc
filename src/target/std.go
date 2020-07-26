@@ -210,17 +210,33 @@ func getch(vm *machine) {
 }
 
 func gt(vm *machine) {
-	vm.push(vm.pop() > vm.pop())
+	if vm.pop() > vm.pop() {
+		vm.push(1.0)
+	} else {
+		vm.push(0.0)
+	}
 }
 
 func ge(vm *machine) {
-	vm.push(vm.pop() >= vm.pop())
+	if vm.pop() >= vm.pop() {
+		vm.push(1.0)
+	} else {
+		vm.push(0.0)
+	}
 }
 
 func lt(vm *machine) {
-	vm.push(vm.pop() < vm.pop())
+	if vm.pop() < vm.pop() {
+		vm.push(1.0)
+	} else {
+		vm.push(0.0)
+	}
 }
 
 func le(vm *machine) {
-	vm.push(vm.pop() <= vm.pop())
+	if vm.pop() <= vm.pop() {
+		vm.push(1.0)
+	} else {
+		vm.push(0.0)
+	}
 }
