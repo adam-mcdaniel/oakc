@@ -370,15 +370,17 @@ impl MirStatement {
             }
 
             Self::For(pre, cond, post, body) => {
-                let mut asm_body = Vec::new();
-                for stmt in body {
-                    asm_body.extend(stmt.assemble(vars, funcs, structs)?);
-                }
                 vec![AsmStatement::For(
                     pre.assemble(vars, funcs, structs)?,
                     cond.assemble(vars, funcs, structs)?,
                     post.assemble(vars, funcs, structs)?,
-                    asm_body,
+                    {
+                        let mut asm_body = Vec::new();
+                        for stmt in body {
+                            asm_body.extend(stmt.assemble(vars, funcs, structs)?);
+                        }
+                        asm_body
+                    },
                 )]
             }
 

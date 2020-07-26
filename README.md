@@ -10,8 +10,7 @@ An infinitely more portable alternative to the C programming language.
 
 fn input(buffer: &char) -> &char {
     let i: num = 0;
-    let ch: char = ' '; 
-    for (ch = get_char(); neq(ch, '\n'); ch = get_char()) {
+    for (let ch: char = get_char(); neq(ch, '\n'); ch = get_char()) {
         buffer[i] = ch;
         i = i + 1;
     }
@@ -19,15 +18,9 @@ fn input(buffer: &char) -> &char {
 
 fn main() -> void {
     let size: num = 256;
-    putstr("Enter some text: ");
     let s: &char = alloc(size);
-    input(s);
-    strcat(s, " take a sad song, and make it better!");
-
-    putstr("You said: \"");
-    putstr(s);
-    putcharln('"');
-
+    putstr("Enter some text: "); input(s);
+    putstr("You said: \""); putstr(s); putcharln('"');
     free s: size;
 }
 ```
