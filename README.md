@@ -1,6 +1,7 @@
 # Oak
 
 An infinitely more portable alternative to the C programming language.
+<a href="https://www.buymeacoffee.com/gbraad" target="_blank"><img src="https://www.buymeacoffee.com/assets/img/custom_images/orange_img.png" alt="Buy Me A Coffee" style="height: 41px !important;width: 174px !important;box-shadow: 0px 3px 2px 0px rgba(190, 190, 190, 0.5) !important;-webkit-box-shadow: 0px 3px 2px 0px rgba(190, 190, 190, 0.5) !important;" ></a>
 
 ## Intermediate Representation
 
@@ -66,7 +67,7 @@ fn main() -> 0 {
 ```
 
 3. Statically compute the program's memory footprint
-    - After totalling all the statically allocated data, such as the overall memory size of variables and string literals, the program preemptively sets aside the proper amount of memory on the stack. This essentially means that the stack pointer is immediately moved to make room for all the data at the start of the program.
+    - After totalling all the statically allocated data, such as the overall memory size of variables and string literals, the program preemptively sets aside the proper amount of memory on the stack. This essentially means that the stack pointer is _immediately_ moved to make room for all the data at the start of the program.
 
 4. Convert Oak expressions and statements into equivalent IR instructions
     - Most expressions are pretty straightforward: function calls simply push their arguments onto the stack in reverse order and call a function by it's ID, references to a variable just push their assigned location on the stack as a number, and so on. Method calls, _however_, are a bit tricky.
