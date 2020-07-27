@@ -1,86 +1,197 @@
-use std::collections::BTreeMap;
+use std::{
+    collections::BTreeMap,
+    fmt::{Display, Error, Formatter},
+};
 
 use crate::{
     asm::{AsmExpression, AsmFunction, AsmProgram, AsmStatement, AsmType},
     Identifier, StringLiteral,
 };
 
-use core::fmt::{Display, Error, Formatter};
-
+/// A value representing an error while assembling the MIR code
 #[derive(Clone, Debug, PartialEq, PartialOrd)]
 pub enum MirError {
+    /// Calling a function without defining it
     FunctionNotDefined(Identifier),
+    /// Defining a function multiple times
+    FunctionRedefined(Identifier),
+    /// Using a variable without declaring it
     VariableNotDefined(Identifier),
+    /// Calling a method for a type where it is not defined
     MethodNotDefined(MirType, Identifier),
+    /// Using a structure name as a type without defining it
     StructureNotDefined(Identifier),
+    /// Dereferencing a value without a reference type
     DereferenceNonPointer(MirType),
+    /// Mismatched types in a `let` statement
+    DefineMismatchedType(String),
+    /// Mismatched types in an assignment statement
+    AssignMismatchedType(MirExpression),
+    /// Arguments to a function call do not match parameter types
+    ArgumentMismatchedType(MirExpression),
+    /// Use a `free` statement using an address argument
+    /// of a non-pointer type
+    FreeNonPointer(MirExpression),
+    /// Using a non-number for an if statement, and if-else
+    /// statement, a while loop, or a for loop
+    NonNumberCondition(MirExpression),
+    /// Using a non-number for an `alloc` call
+    NonNumberAllocate(MirExpression),
+    /// Indexing an array with a non-number value
+    NonNumberIndex(MirExpression),
+    /// Adding, subtracting, multiplying, or dividing two
+    /// values where one or more of them is not a number.
+    NonNumberBinaryOperation(MirExpression, MirExpression),
+    /// Calling a function without enough arguments
+    NotEnoughArguments(MirExpression),
+    /// Calling a function with too many arguments
+    TooManyArguments(MirExpression),
+    /// Calling an associated function, such as a constructor,
+    /// as a method
+    CalledFunctionAsMethod(String),
+    /// The return type of the function does not match the result
+    /// of the function
+    MismatchedReturnType(String),
 }
 
+/// Print an MIR error on the command line
 impl Display for MirError {
     fn fmt(&self, f: &mut Formatter) -> Result<(), Error> {
         match self {
             Self::FunctionNotDefined(name) => write!(f, "function '{}' is not defined", name),
+            Self::FunctionRedefined(name) => {
+                write!(f, "function '{}' is defined multiple times", name)
+            }
             Self::VariableNotDefined(name) => write!(f, "variable '{}' is not defined", name),
             Self::MethodNotDefined(t, name) => {
                 write!(f, "method '{}' is not defined for type '{}'", name, t)
             }
             Self::StructureNotDefined(name) => write!(f, "type '{}' is not defined", name),
             Self::DereferenceNonPointer(t) => write!(f, "cannot dereference type '{}'", t),
+
+            Self::DefineMismatchedType(var_name) => {
+                write!(f, "mismatched types when defining variable '{}'", var_name)
+            }
+
+            Self::AssignMismatchedType(lhs_expr) => {
+                write!(f, "mismatched types when assigning to '{}'", lhs_expr)
+            }
+            Self::FreeNonPointer(address_expr) => {
+                write!(f, "cannot free non-pointer '{}'", address_expr)
+            }
+            Self::NonNumberCondition(cond_expr) => {
+                write!(f, "cannot use '{}' as a boolean condition", cond_expr)
+            }
+            Self::NonNumberAllocate(size_expr) => write!(
+                f,
+                "cannot use '{}' as a size argument in 'alloc' function",
+                size_expr
+            ),
+            Self::NonNumberIndex(idx_expr) => write!(
+                f,
+                "cannot use non-number '{}' as an index for an array",
+                idx_expr
+            ),
+            Self::NonNumberBinaryOperation(lhs, rhs) => write!(
+                f,
+                "cannot use non-numbers '{}' and '{}' in binary operation",
+                lhs, rhs
+            ),
+            Self::NotEnoughArguments(call_expr) => {
+                write!(f, "too few arguments in function call '{}'", call_expr)
+            }
+            Self::TooManyArguments(call_expr) => {
+                write!(f, "too many arguments in function call '{}'", call_expr)
+            }
+            Self::ArgumentMismatchedType(call_expr) => {
+                write!(f, "mismatched types in function call '{}'", call_expr)
+            }
+            Self::CalledFunctionAsMethod(fn_name) => {
+                write!(f, "called function '{}' as a method", fn_name)
+            }
+            Self::MismatchedReturnType(fn_name) => write!(
+                f,
+                "the return type of the function '{}' does not match the function's return value",
+                fn_name
+            ),
         }
     }
 }
 
-#[derive(Clone, Debug, PartialEq, PartialOrd)]
+#[derive(Clone, Debug, PartialOrd)]
 pub struct MirType {
+    /// The name of the type
     name: Identifier,
+    /// How many references deep this type is,
+    /// or how many `&` are in front of the type.
     ptr_level: i32,
 }
 
 impl MirType {
-    const FLOAT: &'static str = "float";
+    /// The name of the float type in Oak code
+    const FLOAT: &'static str = "num";
+    /// The name of the character type in the Oak code
     const CHAR: &'static str = "char";
+    /// The name of the unit type in the Oak code
     const VOID: &'static str = "void";
 
+    /// A user defined type
     pub fn structure(name: Identifier) -> Self {
         Self { name, ptr_level: 0 }
     }
 
+    /// Oak's floating-point type
     pub fn float() -> Self {
         Self::structure(Identifier::from(Self::FLOAT))
     }
 
+    /// Oak's character type
     pub fn character() -> Self {
         Self::structure(Identifier::from(Self::CHAR))
     }
 
+    /// Oak's unit type
     pub fn void() -> Self {
         Self::structure(Identifier::from(Self::VOID))
     }
 
+    /// Is this type a pointer?
     pub fn is_pointer(&self) -> bool {
         self.ptr_level > 0
     }
 
+    /// Lower this type into the ASM's representation of MIR types
     pub fn to_asm_type(
         &self,
         structs: &BTreeMap<Identifier, MirStructure>,
     ) -> Result<AsmType, MirError> {
+        // Get the size of the underlying type with all references removed
         let mut result = AsmType::new(self.get_inner_size(structs)?);
+        // Add the references to the type
         for _ in 0..self.ptr_level {
             result = result.refer();
         }
         Ok(result)
     }
 
+    /// Get the size of this type on the stack
     fn get_size(&self, structs: &BTreeMap<Identifier, MirStructure>) -> Result<i32, MirError> {
-        if self.is_pointer() { Ok(1) }
-        else { self.get_inner_size(structs) }
+        if self.is_pointer() {
+            Ok(1)
+        } else {
+            self.get_inner_size(structs)
+        }
     }
 
-    fn get_inner_size(&self, structs: &BTreeMap<Identifier, MirStructure>) -> Result<i32, MirError> {
+    /// Get the size of the underlying type with
+    /// all references removed
+    fn get_inner_size(
+        &self,
+        structs: &BTreeMap<Identifier, MirStructure>,
+    ) -> Result<i32, MirError> {
         Ok(match self.name.as_str() {
             "void" => 0,
-            "float" => 1,
+            "num" => 1,
             "char" => 1,
             other => {
                 if let Some(structure) = structs.get(other) {
@@ -110,6 +221,27 @@ impl MirType {
 
     fn method_to_function_name(&self, method_name: &Identifier) -> Identifier {
         format!("{}::{}", self.name, method_name)
+    }
+}
+
+/// This implementation solely governs the rules for type-checking.
+impl PartialEq for MirType {
+    fn eq(&self, other: &Self) -> bool {
+        // If two types are identical, they are equal
+        if self.name == other.name && self.ptr_level == other.ptr_level {
+            true
+        } else if !self.is_pointer() {
+            // (char == num) AND (num == char)
+            match (self.name.as_str(), other.name.as_str()) {
+                ("char", "num") => true,
+                ("num", "char") => true,
+                _ => false,
+            }
+        } else {
+            // (&void == &*) AND (&* == &void)
+            (self.ptr_level == 1 && self.name == "void" && other.ptr_level == 1)
+                || (other.ptr_level == 1 && other.name == "void" && other.ptr_level == 1)
+        }
     }
 }
 
@@ -145,7 +277,7 @@ impl MirProgram {
         for decl in &decls {
             match decl {
                 MirDeclaration::Function(func) => {
-                    funcs.insert(func.get_name(), func.get_return_type());
+                    funcs.insert(func.get_name(), func.clone());
                 }
                 MirDeclaration::Structure(structure) => {
                     structs.insert(structure.get_name(), structure.clone());
@@ -170,7 +302,7 @@ pub enum MirDeclaration {
 impl MirDeclaration {
     fn assemble(
         &self,
-        funcs: &mut BTreeMap<Identifier, MirType>,
+        funcs: &mut BTreeMap<Identifier, MirFunction>,
         structs: &mut BTreeMap<Identifier, MirStructure>,
     ) -> Result<Vec<AsmFunction>, MirError> {
         Ok(match self {
@@ -210,15 +342,16 @@ impl MirStructure {
 
     fn assemble(
         &self,
-        funcs: &mut BTreeMap<Identifier, MirType>,
+        funcs: &mut BTreeMap<Identifier, MirFunction>,
         structs: &BTreeMap<Identifier, MirStructure>,
     ) -> Result<Vec<AsmFunction>, MirError> {
         let mir_type = self.to_mir_type();
         let mut result = Vec::new();
-        // Iterate over the methods and rename them to their method names.
+        // Iterate over the methods and rename them
+        // to their method names, such as `Date::day`
         for function in &self.methods {
             let method = function.as_method(&mir_type);
-            funcs.insert(method.get_name(), method.get_return_type());
+            funcs.insert(method.get_name(), method.clone());
             result.push(method.assemble(funcs, structs)?);
         }
 
@@ -260,7 +393,7 @@ impl MirFunction {
 
     fn assemble(
         &self,
-        funcs: &BTreeMap<Identifier, MirType>,
+        funcs: &BTreeMap<Identifier, MirFunction>,
         structs: &BTreeMap<Identifier, MirStructure>,
     ) -> Result<AsmFunction, MirError> {
         let mut asm_args = Vec::new();
@@ -276,8 +409,16 @@ impl MirFunction {
         // Assemble each statement in the body
         let mut asm_body = Vec::new();
         for stmt in &self.body {
-            asm_body.extend(stmt.assemble(&mut vars, funcs, structs)?)
+            asm_body.extend(stmt.assemble(&mut vars, funcs, structs)?);
+            stmt.type_check(&vars, funcs, structs)?
         }
+
+        // Check return type
+        // if let Some(last_stmt) = self.body.last() {
+        //     if self.return_type != last_stmt.get_type(&vars, funcs, structs)? {
+        //         return Err(MirError::MismatchedReturnType(self.name.clone()))
+        //     }
+        // }
 
         Ok(AsmFunction::new(
             self.name.clone(),
@@ -289,6 +430,11 @@ impl MirFunction {
 
     fn get_name(&self) -> Identifier {
         self.name.clone()
+    }
+
+    /// Get the parameters
+    fn get_parameters(&self) -> Vec<(Identifier, MirType)> {
+        self.args.clone()
     }
 
     fn get_return_type(&self) -> MirType {
@@ -312,10 +458,144 @@ pub enum MirStatement {
 }
 
 impl MirStatement {
+    fn get_type(
+        &self,
+        vars: &BTreeMap<Identifier, MirType>,
+        funcs: &BTreeMap<Identifier, MirFunction>,
+        structs: &BTreeMap<Identifier, MirStructure>,
+    ) -> Result<MirType, MirError> {
+        if let Self::Expression(expr) = self {
+            expr.get_type(vars, funcs, structs)
+        } else {
+            Ok(MirType::void())
+        }
+    }
+
+    fn type_check(
+        &self,
+        vars: &BTreeMap<Identifier, MirType>,
+        funcs: &BTreeMap<Identifier, MirFunction>,
+        structs: &BTreeMap<Identifier, MirStructure>,
+    ) -> Result<(), MirError> {
+        match self {
+            Self::Define(var_name, t, expr) => {
+                expr.type_check(vars, funcs, structs)?;
+                let rhs_type = expr.get_type(vars, funcs, structs)?;
+                // Check to see if the defined type is equal to the type
+                // of the right hand side of the assignment
+                if t != &rhs_type {
+                    // Return a mismatched type error
+                    return Err(MirError::DefineMismatchedType(var_name.clone()));
+                }
+            }
+
+            Self::AssignAddress(lhs, rhs) => {
+                lhs.type_check(vars, funcs, structs)?;
+                rhs.type_check(vars, funcs, structs)?;
+                let lhs_type = lhs.get_type(vars, funcs, structs)?;
+                let rhs_type = rhs.get_type(vars, funcs, structs)?;
+
+                // Compare the left hand side and right hand side
+                if lhs_type != MirType::void().refer() && lhs_type != rhs_type.refer() {
+                    // Return a mismatched type error
+                    return Err(MirError::AssignMismatchedType(lhs.clone()));
+                }
+            }
+
+            Self::AssignVariable(var_name, rhs) => {
+                rhs.type_check(vars, funcs, structs)?;
+                let rhs_type = rhs.get_type(vars, funcs, structs)?;
+
+                // Check to see if the variable has been defined
+                if let Some(lhs_type) = vars.get(var_name) {
+                    // Check the LHS and RHS types
+                    if lhs_type != &rhs_type {
+                        // Return a mismatched type error
+                        return Err(MirError::AssignMismatchedType(MirExpression::Variable(
+                            var_name.clone(),
+                        )));
+                    }
+                } else {
+                    return Err(MirError::VariableNotDefined(var_name.clone()));
+                }
+            }
+
+            Self::For(pre, cond, post, body) => {
+                pre.type_check(vars, funcs, structs)?;
+                cond.type_check(vars, funcs, structs)?;
+                post.type_check(vars, funcs, structs)?;
+
+                // Check if the condition is a structure or of type `void`
+                if cond.get_type(vars, funcs, structs)?.get_size(structs)? != 1 {
+                    return Err(MirError::NonNumberCondition(cond.clone()));
+                }
+
+                for stmt in body {
+                    stmt.type_check(vars, funcs, structs)?
+                }
+            }
+
+            Self::While(cond, body) => {
+                cond.type_check(vars, funcs, structs)?;
+
+                // Check if the condition is a structure or of type `void`
+                if cond.get_type(vars, funcs, structs)?.get_size(structs)? != 1 {
+                    return Err(MirError::NonNumberCondition(cond.clone()));
+                }
+
+                for stmt in body {
+                    stmt.type_check(vars, funcs, structs)?
+                }
+            }
+
+            Self::If(cond, body) => {
+                cond.type_check(vars, funcs, structs)?;
+
+                // Check if the condition is a structure or of type `void`
+                if cond.get_type(vars, funcs, structs)?.get_size(structs)? != 1 {
+                    return Err(MirError::NonNumberCondition(cond.clone()));
+                }
+
+                for stmt in body {
+                    stmt.type_check(vars, funcs, structs)?
+                }
+            }
+
+            Self::IfElse(cond, then_body, else_body) => {
+                cond.type_check(vars, funcs, structs)?;
+
+                // Check if the condition is a structure or of type `void`
+                if cond.get_type(vars, funcs, structs)?.get_size(structs)? != 1 {
+                    return Err(MirError::NonNumberCondition(cond.clone()));
+                }
+
+                for stmt in then_body {
+                    stmt.type_check(vars, funcs, structs)?
+                }
+                for stmt in else_body {
+                    stmt.type_check(vars, funcs, structs)?
+                }
+            }
+
+            Self::Free(address, size) => {
+                address.type_check(vars, funcs, structs)?;
+                size.type_check(vars, funcs, structs)?;
+
+                // If the address is a non-pointer, return an error
+                if !address.get_type(vars, funcs, structs)?.is_pointer() {
+                    return Err(MirError::FreeNonPointer(address.clone()));
+                }
+            }
+
+            Self::Expression(expr) => expr.type_check(vars, funcs, structs)?,
+        }
+        Ok(())
+    }
+
     fn assemble(
         &self,
         vars: &mut BTreeMap<Identifier, MirType>,
-        funcs: &BTreeMap<Identifier, MirType>,
+        funcs: &BTreeMap<Identifier, MirFunction>,
         structs: &BTreeMap<Identifier, MirStructure>,
     ) -> Result<Vec<AsmStatement>, MirError> {
         Ok(match self {
@@ -531,10 +811,143 @@ pub enum MirExpression {
 }
 
 impl MirExpression {
+    fn type_check(
+        &self,
+        vars: &BTreeMap<Identifier, MirType>,
+        funcs: &BTreeMap<Identifier, MirFunction>,
+        structs: &BTreeMap<Identifier, MirStructure>,
+    ) -> Result<(), MirError> {
+        match self {
+            // Typecheck binary operations
+            // Currently, type checking only fails if either the left hand side
+            // or the right hand side are of type `void`, or a user defined structure
+            Self::Add(lhs, rhs)
+            | Self::Subtract(lhs, rhs)
+            | Self::Multiply(lhs, rhs)
+            | Self::Divide(lhs, rhs) => {
+                lhs.type_check(vars, funcs, structs)?;
+                rhs.type_check(vars, funcs, structs)?;
+                let lhs_type = lhs.get_type(vars, funcs, structs)?;
+                let rhs_type = rhs.get_type(vars, funcs, structs)?;
+                if lhs_type.get_size(structs)? != 1 || rhs_type.get_size(structs)? != 1 {
+                    return Err(MirError::NonNumberBinaryOperation(
+                        *lhs.clone(),
+                        *rhs.clone(),
+                    ));
+                }
+            }
+
+            // Typecheck an `alloc` expression
+            Self::Alloc(size_expr) => {
+                size_expr.type_check(vars, funcs, structs)?;
+                if size_expr.get_type(vars, funcs, structs)? != MirType::float() {
+                    return Err(MirError::NonNumberAllocate(*size_expr.clone()));
+                }
+            }
+
+            // Typecheck an index expression
+            Self::Index(ptr, idx) => {
+                ptr.type_check(vars, funcs, structs)?;
+                idx.type_check(vars, funcs, structs)?;
+
+                // Check if the index is a structure or of type `void`
+                if idx.get_type(vars, funcs, structs)?.get_size(structs)? != 1 {
+                    return Err(MirError::NonNumberIndex(*idx.clone()));
+                }
+            }
+
+            // Typecheck a function call expression
+            Self::Call(fn_name, args) => {
+                // Get the function structure
+                if let Some(func) = funcs.get(fn_name) {
+                    // The list of parameters that the function expects
+                    let params = func.get_parameters();
+
+                    // Check if there are too many or few arguments
+                    if args.len() < params.len() {
+                        return Err(MirError::NotEnoughArguments(self.clone()));
+                    } else if args.len() > params.len() {
+                        return Err(MirError::TooManyArguments(self.clone()));
+                    }
+
+                    // Iterate over the function's parameters and the list of arguments
+                    // to the function call
+                    for ((_, param_type), arg_expr) in func.get_parameters().iter().zip(args) {
+                        // If the parameters don't match the argument types,
+                        // then throw an error.
+                        if param_type != &arg_expr.get_type(vars, funcs, structs)? {
+                            return Err(MirError::ArgumentMismatchedType(self.clone()));
+                        }
+                    }
+                } else {
+                    return Err(MirError::FunctionNotDefined(fn_name.clone()));
+                }
+            }
+
+            // Typecheck a method call expression
+            Self::Method(expr, method_name, args) => {
+                // Get the type of the object
+                let instance_type = expr.get_type(vars, funcs, structs)?;
+                // Get the name of the method
+                let fn_name = instance_type.method_to_function_name(method_name);
+
+                if let Some(func) = funcs.get(&fn_name) {
+                    // The list of parameters that the function expects
+                    let mut params = func.get_parameters();
+
+                    if let Some((_, self_type)) = params.first() {
+                        // If the first parameter of the method ISN'T a pointer,
+                        // then the function is not a method. It's an associated function,
+                        // like: `fn new(m: num, d: num, y: num) -> Date { m; d; y }`
+                        if !self_type.is_pointer() {
+                            return Err(MirError::CalledFunctionAsMethod(fn_name.clone()));
+                        }
+
+                        // Get rid of the `self` parameter
+                        let _ = params.remove(0);
+
+                        // Check if there are too many or few arguments
+                        if args.len() < params.len() {
+                            return Err(MirError::NotEnoughArguments(self.clone()));
+                        } else if args.len() > params.len() {
+                            return Err(MirError::TooManyArguments(self.clone()));
+                        }
+
+                        // Iterate over the methods's parameters and the list of arguments
+                        for ((_, param_type), arg) in func.get_parameters().iter().zip(args) {
+                            // If the parameters don't match the argument types,
+                            // then throw an error.
+                            if param_type != &arg.get_type(vars, funcs, structs)? {
+                                return Err(MirError::ArgumentMismatchedType(self.clone()));
+                            }
+                        }
+                    } else {
+                        return Err(MirError::CalledFunctionAsMethod(fn_name.clone()));
+                    }
+                } else {
+                    return Err(MirError::FunctionNotDefined(fn_name.clone()));
+                }
+            }
+
+            // Typecheck a dereference expression
+            Self::Deref(expr) => expr.type_check(vars, funcs, structs)?,
+
+            // Typecheck atomic expressions
+            Self::ForeignCall(_, _)
+            | Self::Refer(_)
+            | Self::Variable(_)
+            | Self::String(_)
+            | Self::Float(_)
+            | Self::Character(_)
+            | Self::Void => {}
+        }
+        Ok(())
+    }
+
     fn assemble(
         &self,
         vars: &BTreeMap<Identifier, MirType>,
-        funcs: &BTreeMap<Identifier, MirType>,
+        funcs: &BTreeMap<Identifier, MirFunction>,
         structs: &BTreeMap<Identifier, MirStructure>,
     ) -> Result<Vec<AsmStatement>, MirError> {
         Ok(match self {
@@ -719,7 +1132,7 @@ impl MirExpression {
     fn get_type(
         &self,
         vars: &BTreeMap<Identifier, MirType>,
-        funcs: &BTreeMap<Identifier, MirType>,
+        funcs: &BTreeMap<Identifier, MirFunction>,
         structs: &BTreeMap<Identifier, MirStructure>,
     ) -> Result<MirType, MirError> {
         Ok(match self {
@@ -745,8 +1158,8 @@ impl MirExpression {
                 let instance_type = expr.get_type(vars, funcs, structs)?;
                 // Get the return type of the method
                 let func_name = instance_type.method_to_function_name(method_name);
-                if let Some(func_type) = funcs.get(&func_name) {
-                    func_type.clone()
+                if let Some(func) = funcs.get(&func_name) {
+                    func.get_return_type()
                 } else {
                     return Err(MirError::MethodNotDefined(instance_type, func_name.clone()));
                 }
@@ -759,8 +1172,8 @@ impl MirExpression {
 
             /// Get the return type of the called function
             Self::Call(func_name, _) => {
-                if let Some(t) = funcs.get(func_name) {
-                    t.clone()
+                if let Some(func) = funcs.get(func_name) {
+                    func.get_return_type()
                 } else {
                     return Err(MirError::FunctionNotDefined(func_name.clone()));
                 }
@@ -791,5 +1204,49 @@ impl MirExpression {
                 }
             }
         })
+    }
+}
+
+impl Display for MirExpression {
+    fn fmt(&self, f: &mut Formatter) -> Result<(), Error> {
+        match self {
+            Self::Add(lhs, rhs) => write!(f, "{}+{}", lhs, rhs),
+            Self::Subtract(lhs, rhs) => write!(f, "{}-{}", lhs, rhs),
+            Self::Multiply(lhs, rhs) => write!(f, "{}/{}", lhs, rhs),
+            Self::Divide(lhs, rhs) => write!(f, "{}/{}", lhs, rhs),
+
+            Self::Alloc(size) => write!(f, "alloc({})", size),
+
+            Self::Void => write!(f, "@"),
+            Self::Character(ch) => write!(f, "{}", ch),
+            Self::Float(n) => write!(f, "{}", n),
+            Self::String(s) => write!(f, "{:?}", s),
+
+            Self::Index(ptr, idx) => write!(f, "{}[{}]", ptr, idx),
+            Self::Method(expr, method, args) => {
+                write!(f, "{}.{}(", expr, method)?;
+                for arg in args {
+                    write!(f, "{},", arg)?;
+                }
+                write!(f, ")")
+            }
+            Self::Call(fn_name, args) => {
+                write!(f, "{}(", fn_name)?;
+                for arg in args {
+                    write!(f, "{}, ", arg)?;
+                }
+                write!(f, ")")
+            }
+            Self::ForeignCall(fn_name, args) => {
+                write!(f, "{}!(", fn_name)?;
+                for arg in args {
+                    write!(f, "{}, ", arg)?;
+                }
+                write!(f, ")")
+            }
+            Self::Deref(ptr) => write!(f, "*{}", ptr),
+            Self::Refer(name) => write!(f, "&{}", name),
+            Self::Variable(name) => write!(f, "{}", name),
+        }
     }
 }
