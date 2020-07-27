@@ -53,6 +53,7 @@ ConstantAtom: HirConstant = {
     <Ident> => HirConstant::Constant(<>),
     <Num> => HirConstant::Float(<>),
     <Char> => HirConstant::Character(<>),
+    "-" <ConstantAtom> => HirConstant::Subtract(Box::new(HirConstant::Float(0.0)), Box::new(<>))
 }
 
 ConstantMathLow: HirConstant = {
@@ -128,7 +129,7 @@ ExpressionAtom: HirExpression = {
 
     "&" <name:Ident> => HirExpression::Refer(name),
     "(" <Expression> ")" => <>,
-    "-" <ExpressionAtom> => <>,
+    "-" <ExpressionAtom> => HirExpression::Subtract(Box::new(HirExpression::Constant(HirConstant::Float(0.0))), Box::new(<>)),
 }
 
 ExpressionLow: HirExpression = {
