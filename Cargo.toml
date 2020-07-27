@@ -12,7 +12,6 @@ repository = "https://github.com/adam-mcdaniel/oakc"
 
 
 
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 [[bin]]
 name = "oak"
 path = "src/bin.rs"

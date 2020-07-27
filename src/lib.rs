@@ -20,15 +20,13 @@ lalrpop_mod!(pub parser);
 pub fn compile(cwd: &PathBuf, input: impl ToString, target: impl Target) -> bool {
     match parse(input).compile(cwd) {
         Ok(mir) => match mir.assemble() {
-            Ok(asm) => {
-                match asm.assemble(&target) {
-                    Ok(result) => target.compile(target.prelude() + &result + &target.postlude()),
-                    Err(e) => {
-                        eprintln!("compilation error: {}", e.bright_red().underline());
-                        exit(1);
-                    }
+            Ok(asm) => match asm.assemble(&target) {
+                Ok(result) => target.compile(target.prelude() + &result + &target.postlude()),
+                Err(e) => {
+                    eprintln!("compilation error: {}", e.bright_red().underline());
+                    exit(1);
                 }
-            }
+            },
             Err(e) => {
                 eprintln!("compilation error: {}", e.bright_red().underline());
                 exit(1);
