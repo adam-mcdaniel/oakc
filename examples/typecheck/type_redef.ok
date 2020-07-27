@@ -1,0 +1,9 @@
+
+
+
+type Test(1) {}
+type Test(2) {}
+
+fn main() {
+    
+}

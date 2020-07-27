@@ -49,7 +49,6 @@ List<Begin, T, Sep, End>: Vec<T> = {
 Constant: HirConstant = <ConstantMathLow> => <>;
 
 ConstantAtom: HirConstant = {
-    "@" => HirConstant::Void,
     <Ident> => HirConstant::Constant(<>),
     <Num> => HirConstant::Float(<>),
     <Char> => HirConstant::Character(<>),
@@ -104,6 +103,7 @@ BodyStatement: HirStatement = {
 
 SmallStatement: HirStatement = {
     "free" <addr:Expression> ":" <size:Expression> => HirStatement::Free(addr, size),
+    "let" <name:Ident> "=" <expr:Expression> => HirStatement::AutoDefine(name, expr),
     "let" <name:Ident> ":" <t:Type> "=" <expr:Expression> => HirStatement::Define(name, t, expr),
     <name:Ident> "=" <expr:Expression> => HirStatement::AssignVariable(name, expr),
     "*" <lhs:Expression> "=" <rhs:Expression> => HirStatement::AssignAddress(lhs, rhs),
@@ -124,6 +124,8 @@ ExpressionAtom: HirExpression = {
     <name:Ident> "!" <args:List<"(", Expression, ",", ")">> => HirExpression::ForeignCall(name, args),
     <Ident> => HirExpression::Variable(<>),
     <Str> => HirExpression::String(<>),
+
+    "@" => HirExpression::Void,
     <Num> => HirExpression::Constant(HirConstant::Float(<>)),
     <Char> => HirExpression::Constant(HirConstant::Character(<>)),
 

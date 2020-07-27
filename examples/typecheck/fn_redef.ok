@@ -1,0 +1,6 @@
+
+
+fn test() {}
+fn test(x: num) {}
+
+fn main() {}
