@@ -9,7 +9,7 @@ pub mod mir;
 use hir::HirProgram;
 
 mod target;
-pub use target::{Go, Target, C};
+pub use target::{Go, Target, C, TS};
 
 use asciicolor::Colorize;
 use comment::cpp::strip;
@@ -40,13 +40,12 @@ pub fn compile(cwd: &PathBuf, input: impl ToString, target: impl Target) -> bool
 }
 
 pub fn parse(input: impl ToString) -> HirProgram {
-    let code = &strip(input.to_string()).unwrap();
-    match parser::ProgramParser::new().parse(code) {
+    match parser::ProgramParser::new().parse(&strip(input.to_string()).unwrap()) {
         // if the parser succeeds, build will succeed
         Ok(parsed) => parsed,
         // if the parser succeeds, annotate code with comments
         Err(e) => {
-            eprintln!("{}", format_error(&code, e));
+            eprintln!("{}", format_error(&input.to_string(), e));
             exit(1);
         }
     }
@@ -87,11 +86,8 @@ fn get_line(script: &str, location: usize) -> (usize, String, usize) {
     let line = match script.lines().nth(line_number - 1) {
         Some(line) => line,
         None => {
-            if let Some(line) = script.lines().last() {
-                line
-            } else {
-                ""
-            }
+            let lines = script.lines().collect::<Vec<&str>>();
+            lines[lines.len() - 1]
         }
     }
     .replace("\t", "    ");

@@ -1,4 +1,4 @@
-use oakc::{compile, Go, C};
+use oakc::{compile, Go, C, TS};
 use std::{fs::read_to_string, path::PathBuf, process::exit};
 
 use clap::{clap_app, crate_authors, crate_version, AppSettings::ArgRequiredElseHelp};
@@ -13,7 +13,8 @@ fn main() {
         (@arg FFI: -f --ffi +takes_value ... "Files to use for FFI")
         (@group target =>
             (@arg c: -c "Compile with C backend")
-            (@arg go: -g --go "Compile with Golang backend")
+			(@arg go: -g --go "Compile with Golang backend")
+			(@arg ts: --ts "Compile with TypeScript backend")
         )
     )
     .setting(ArgRequiredElseHelp)
@@ -44,7 +45,9 @@ fn main() {
             let success = if matches.is_present("c") {
                 compile(&cwd, contents, C)
             } else if matches.is_present("go") {
-                compile(&cwd, contents, Go)
+				compile(&cwd, contents, Go)
+			} else if matches.is_present("ts") {
+				compile(&cwd, contents, TS)
             } else {
                 compile(&cwd, contents, C)
             };

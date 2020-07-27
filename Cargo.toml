@@ -3,14 +3,6 @@ name = "oakc"
 version = "0.1.0"
 authors = ["Adam McDaniel <adam.mcdaniel17@gmail.com>"]
 edition = "2018"
-license = "MIT"
-description = "A portable programming language with an incredibly compact backend"
-readme = "README.md"
-documentation = "https://docs.rs/oakc"
-homepage = "https://github.com/adam-mcdaniel/oakc"
-repository = "https://github.com/adam-mcdaniel/oakc"
-
-
 
 [[bin]]
 name = "oak"
