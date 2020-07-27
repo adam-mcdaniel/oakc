@@ -1,5 +1,5 @@
 use oakc::{compile, Go, C};
-use std::{fs::read_to_string, path::PathBuf, process::exit};
+use std::{fs::read_to_string, io::Result, path::PathBuf, process::exit};
 
 use clap::{clap_app, crate_authors, crate_version, AppSettings::ArgRequiredElseHelp};
 
@@ -41,7 +41,7 @@ fn main() {
                 PathBuf::from("./")
             };
 
-            let success = if matches.is_present("c") {
+            let compile_result = if matches.is_present("c") {
                 compile(&cwd, contents, C)
             } else if matches.is_present("go") {
                 compile(&cwd, contents, Go)
@@ -49,10 +49,13 @@ fn main() {
                 compile(&cwd, contents, C)
             };
 
-            if success {
-                println!("compilation was successful");
-            } else {
-                eprintln!("error: failed to compile generated output code");
+            match compile_result {
+                Result::Ok(_) => println!("compilation successful"),
+                Result::Err(error) => {
+                    if let Some(inner_error) = error.get_ref() {
+                        eprintln!("error: {}", inner_error);
+                    }
+                }
             }
         } else {
             eprintln!("error: input file \"{}\" doesn't exist", input_file);

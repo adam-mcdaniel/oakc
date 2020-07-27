@@ -1,0 +1,12 @@
+
+type Point(2) {
+    fn new(x: num, y: num) -> Point {
+        x; y
+    }
+}
+
+type Test(2) {}
+
+fn main() {
+    let p: Test = Point::new(5, 6);
+}

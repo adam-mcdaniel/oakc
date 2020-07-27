@@ -1,20 +1,118 @@
+#[heap(1024)]
 
-fn compile(s: &char) {
-    putstrln("#include <stdio.h>\nint main() {\nchar array[30000] = {0};\nchar *ptr=array;\n");
-    for (let i:num=0; s[i]; i=i+1) {
-        if eq(s[i], '+') { putstrln("++*ptr;"); }
-        if eq(s[i], '-') { putstrln("--*ptr;"); }
-        if eq(s[i], '<') { putstrln("--ptr;"); }
-        if eq(s[i], '>') { putstrln("++ptr;"); }
-        if eq(s[i], '.') { putstrln("putchar(*ptr);"); }
-        if eq(s[i], ',') { putstrln("*ptr=getchar();"); }
-        if eq(s[i], '[') { putstrln("while (*ptr) {"); }
-        if eq(s[i], ']') { putstrln("}\n"); }
-    }
-    putstrln("}");
+//
+// A brainfuck interpreter written in Oak
+//
+
+// Copy a char array
+fn strcpy(dst: &char, src: &char) {
+	for (let i: num=0; src[i]; i = i + 1) {
+		dst[i] = src[i];
+	}
+	dst[i] = 0;
 }
 
+// Get the length of a char array
+fn strlen(str: &char) -> num {
+	for (let i: num=0; str[i]; i = i + 1) {}
+	i
+}
+
+const EOF = -1;
+const MAX_LOOP_DEPTH = 32;
+const TAPE_SIZE = 128;
+const MACHINE = 6;
+type Machine(MACHINE) {
+	fn new(source_code: &char) -> Machine {
+		let jmp_stack: &num = alloc(MAX_LOOP_DEPTH);
+		let jmp_counter: num = 0;
+		let val_ptr: num = 0;
+		let ins_ptr: num = 0;
+		let code: &char = alloc(strlen(source_code) + 1);
+		strcpy(code, source_code);
+		let tape: &num = alloc(TAPE_SIZE);
+
+		jmp_stack; jmp_counter; val_ptr; ins_ptr; tape; code
+	}
+
+	fn jmp_stack(self: &Machine)   -> &&num  { self }
+	fn jmp_counter(self: &Machine) -> &num   { self + 1 }
+	fn val_ptr(self: &Machine)     -> &num   { self + 2 }
+	fn ins_ptr(self: &Machine)     -> &num   { self + 3 }
+	fn tape(self: &Machine)        -> &&num  { self + 4 }
+	fn code(self: &Machine)        -> &&char { self + 5 }
+	fn token(self: &Machine)       -> &char  { self->code + self->ins_ptr }
+
+	fn plus(self: &Machine)   { self->val = self->val + 1 }
+	fn minus(self: &Machine)  { self->val = self->val - 1 }
+	fn left(self: &Machine)   { self->val_ptr = self->val_ptr - 1 }
+	fn right(self: &Machine)  { self->val_ptr = self->val_ptr + 1 }
+
+	fn in(self: &Machine)  { self->val = get_char() }
+	fn out(self: &Machine) {
+		if neq(self->val, EOF) {
+			putchar(self->val)
+		}
+	}
+
+	fn val(self: &Machine) -> &num { self->tape + self->val_ptr }
+
+	fn loop(self: &Machine) {
+		(self->jmp_stack)[self->jmp_counter] = self->ins_ptr;
+		self->jmp_counter = self->jmp_counter + 1;
+	}
+
+	fn end(self: &Machine) {
+		if self->val {
+			self->jmp_counter = self->jmp_counter - 1;
+			self->ins_ptr = (self->jmp_stack)[self->jmp_counter];
+			(self->jmp_stack)[self->jmp_counter] = 0;
+		} else {
+			self->jmp_counter = self->jmp_counter - 1;
+			(self->jmp_stack)[self->jmp_counter] = 0;
+			self->ins_ptr = self->ins_ptr + 1;
+		}
+	}
+
+	fn dump(self: &Machine) {
+		putstrln(self->code);
+		for (let i: num = 0; lt(i, self->ins_ptr); i=i+1) {
+			putchar(' ');
+		}
+		putcharln('^');
+
+		putchar('[');
+		for (let i: num = 0; lt(i, TAPE_SIZE); i=i+1) {
+			putchar(' '); putnum((self->tape)[i]);
+		}
+		putstr(" ]\n  ");
+		for (let i: num = 0; lt(i, self->val_ptr); i=i+1) {
+			putstr("  ");
+		}
+		putcharln('^');
+	}
+
+	fn run(self: &Machine) {
+		while neq(self->ins_ptr, strlen(self->code)) {
+			if eq(self->token, '+') { self.plus() }
+			if eq(self->token, '-') { self.minus() }
+			if eq(self->token, '<') { self.left() }
+			if eq(self->token, '>') { self.right() }
+			if eq(self->token, ',') { self.in() }
+			if eq(self->token, '.') { self.out() }
+			if eq(self->token, '[') { self.loop() }
+			if eq(self->token, ']') { self.end() }
+			else {
+				self->ins_ptr = self->ins_ptr + 1;
+			}
+		}
+	}
+}
 
 fn main() {
-    compile("++++++++[>+>++++<<-]>++>>+<[-[>>+<<-]+>>]>+[-<<<[->[+[-]+>++>>>-<<]<[<]>>++++++[<<+++++>>-]+<<++.[-]<<]>.>+[>>]>+]");
+	let m: Machine = Machine::new(
+		"++++++++[>++++[>++>+++>+++>+<<<<-]>+>+>->>+[<]<-]>>.>---.+++++++..+++.>>.<-.<.+++.------.--------.>>+.>++."
+    );
+    m.run();
+    m.dump();
 }

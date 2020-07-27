@@ -2,7 +2,8 @@ use super::Target;
 use std::{
     env::consts::EXE_SUFFIX,
     fs::{remove_file, write},
-    process::Command,
+    io::{Error, ErrorKind, Result, Write},
+    process::{Command, Stdio},
 };
 
 pub struct C;
@@ -87,20 +88,35 @@ impl Target for C {
         String::from("}\n")
     }
 
-    fn compile(&self, code: String) -> bool {
-        if let Ok(_) = write("OUTPUT.c", code) {
-            if let Ok(_) = Command::new("gcc")
-                .arg("OUTPUT.c")
-                .arg("-O2")
-                .arg("-o")
-                .arg(format!("main{}", EXE_SUFFIX))
-                .output()
-            {
-                if let Ok(_) = remove_file("OUTPUT.c") {
-                    return true;
-                }
+    fn compile(&self, code: String) -> Result<()> {
+        let mut child = Command::new("gcc")
+            .arg("-O2")
+            .args(&["-o", &format!("main{}", EXE_SUFFIX)[..]])
+            .args(&["-x", "c", "-"])
+            .stdin(Stdio::piped())
+            .spawn();
+        
+        if let Ok(mut child) = child {
+            match child.stdin.as_mut() {
+                Some(stdin) => {
+                    if let Err(error) = stdin.write_all(code.as_bytes()) {
+                        return Result::Err(Error::new(ErrorKind::Other,
+                            "unable to open write to child stdin"));
+                    }
+                },
+                None => return Result::Err(Error::new(ErrorKind::Other,
+                    "unable to open child stdin"))
             }
+
+            match child.wait_with_output() {
+                Ok(_) => return Result::Ok(()),
+                Err(_) => return Result::Err(Error::new(ErrorKind::Other,
+                    "unable to read child output"))
+            }
+        } else {
+            // child failed to execute
+            Result::Err(Error::new(ErrorKind::Other,
+                "unable to spawn child gcc proccess"))
         }
-        false
     }
 }

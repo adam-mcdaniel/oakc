@@ -13,16 +13,30 @@ use crate::{
 pub enum MirError {
     /// Calling a function without defining it
     FunctionNotDefined(Identifier),
+    /// Defining a type multiple times
+    StructureRedefined(Identifier),
     /// Defining a function multiple times
     FunctionRedefined(Identifier),
-    /// Using a variable without declaring it
+    /// Using a variable without defining it
     VariableNotDefined(Identifier),
     /// Calling a method for a type where it is not defined
     MethodNotDefined(MirType, Identifier),
     /// Using a structure name as a type without defining it
+    /// If this were acceptable, the compiler would never know
+    /// the size of the variable.
     StructureNotDefined(Identifier),
-    /// Dereferencing a value without a reference type
+    /// Dereferencing a non-pointer value
     DereferenceNonPointer(MirType),
+    /// Indexing a void pointer
+    /// This is inherently bad because void pointers have size
+    /// zero. Indexing them is the same as dereferencing, but
+    /// less efficient.
+    IndexVoidPointer(MirExpression),
+    /// Auto define a void pointer
+    /// This is less of a type error itself and more of a safety net.
+    /// Variables that hold the result of `alloc` must be the proper
+    /// type for expressions like `ptr[n]` to work.
+    AutoDefineVoidPointer(String, MirExpression),
     /// Mismatched types in a `let` statement
     DefineMismatchedType(String),
     /// Mismatched types in an assignment statement
@@ -34,6 +48,9 @@ pub enum MirError {
     FreeNonPointer(MirExpression),
     /// Using a non-number for an if statement, and if-else
     /// statement, a while loop, or a for loop
+    /// This is especially bad for while loops. If a multi-cell
+    /// structure is used as a loop condition, the stack will continue
+    /// to grow until it collides with the heap.
     NonNumberCondition(MirExpression),
     /// Using a non-number for an `alloc` call
     NonNumberAllocate(MirExpression),
@@ -62,15 +79,21 @@ impl Display for MirError {
             Self::FunctionRedefined(name) => {
                 write!(f, "function '{}' is defined multiple times", name)
             }
+            Self::StructureNotDefined(name) => write!(f, "type '{}' is not defined", name),
+            Self::StructureRedefined(name) => {
+                write!(f, "type '{}' is defined multiple times", name)
+            }
             Self::VariableNotDefined(name) => write!(f, "variable '{}' is not defined", name),
             Self::MethodNotDefined(t, name) => {
                 write!(f, "method '{}' is not defined for type '{}'", name, t)
             }
-            Self::StructureNotDefined(name) => write!(f, "type '{}' is not defined", name),
             Self::DereferenceNonPointer(t) => write!(f, "cannot dereference type '{}'", t),
+            Self::IndexVoidPointer(expr) => write!(f, "cannot index void pointer '{}'", expr),
+            Self::AutoDefineVoidPointer(var_name, expr) => 
+                write!(f, "used type inference when defining '{}' with a void pointer expression '{}'", var_name, expr),
 
             Self::DefineMismatchedType(var_name) => {
-                write!(f, "mismatched types when defining variable '{}'", var_name)
+                write!(f, "mismatched types in 'let' statement when defining variable '{}'", var_name)
             }
 
             Self::AssignMismatchedType(lhs_expr) => {
@@ -219,6 +242,10 @@ impl MirType {
         }
     }
 
+    fn is_void_ptr(&self) -> bool {
+        self.name == Self::VOID && self.ptr_level == 1
+    }
+
     fn method_to_function_name(&self, method_name: &Identifier) -> Identifier {
         format!("{}::{}", self.name, method_name)
     }
@@ -240,7 +267,7 @@ impl PartialEq for MirType {
         } else {
             // (&void == &*) AND (&* == &void)
             (self.ptr_level == 1 && self.name == "void" && other.ptr_level == 1)
-                || (other.ptr_level == 1 && other.name == "void" && other.ptr_level == 1)
+                || (other.ptr_level == 1 && other.name == "void" && self.ptr_level == 1)
         }
     }
 }
@@ -277,10 +304,20 @@ impl MirProgram {
         for decl in &decls {
             match decl {
                 MirDeclaration::Function(func) => {
-                    funcs.insert(func.get_name(), func.clone());
+                    let name = func.get_name();
+                    if funcs.contains_key(&name) {
+                        return Err(MirError::FunctionRedefined(name))
+                    } else {
+                        funcs.insert(name, func.clone());
+                    }
                 }
                 MirDeclaration::Structure(structure) => {
-                    structs.insert(structure.get_name(), structure.clone());
+                    let name = structure.get_name();
+                    if structs.contains_key(&name) {
+                        return Err(MirError::StructureRedefined(name))
+                    } else {
+                        structs.insert(structure.get_name(), structure.clone());
+                    }
                 }
             }
         }
@@ -347,12 +384,18 @@ impl MirStructure {
     ) -> Result<Vec<AsmFunction>, MirError> {
         let mir_type = self.to_mir_type();
         let mut result = Vec::new();
+
         // Iterate over the methods and rename them
         // to their method names, such as `Date::day`
         for function in &self.methods {
             let method = function.as_method(&mir_type);
             funcs.insert(method.get_name(), method.clone());
-            result.push(method.assemble(funcs, structs)?);
+        }
+
+        // After each function has been declared, go back and assemble them.
+        // We do two passes to allow methods to depend on one another.
+        for function in &self.methods {
+            result.push(function.as_method(&mir_type).assemble(funcs, structs)?);
         }
 
         Ok(result)
@@ -445,6 +488,7 @@ impl MirFunction {
 #[derive(Clone, Debug, PartialEq, PartialOrd)]
 pub enum MirStatement {
     Define(Identifier, MirType, MirExpression),
+    AutoDefine(Identifier, MirExpression),
     AssignVariable(Identifier, MirExpression),
     AssignAddress(MirExpression, MirExpression),
 
@@ -471,6 +515,7 @@ impl MirStatement {
         }
     }
 
+    /// Type check the MIR before it is lowered
     fn type_check(
         &self,
         vars: &BTreeMap<Identifier, MirType>,
@@ -489,6 +534,16 @@ impl MirStatement {
                 }
             }
 
+            Self::AutoDefine(var_name, expr) => {
+                expr.type_check(vars, funcs, structs)?;
+                let t = expr.get_type(vars, funcs, structs)?;
+                // Let expressions MUST cast void pointers.
+                // This error catches code like `let ptr = alloc(10)`
+                if t.is_void_ptr() {
+                    return Err(MirError::AutoDefineVoidPointer(var_name.clone(), expr.clone()))
+                }
+            },
+
             Self::AssignAddress(lhs, rhs) => {
                 lhs.type_check(vars, funcs, structs)?;
                 rhs.type_check(vars, funcs, structs)?;
@@ -496,7 +551,9 @@ impl MirStatement {
                 let rhs_type = rhs.get_type(vars, funcs, structs)?;
 
                 // Compare the left hand side and right hand side
-                if lhs_type != MirType::void().refer() && lhs_type != rhs_type.refer() {
+                // If the LHS is a void pointer, allow the assignment.
+                // If the type *LHS is equal to RHS, also allow the assignment.
+                if lhs_type != MirType::void().refer() && lhs_type.deref()? != rhs_type {
                     // Return a mismatched type error
                     return Err(MirError::AssignMismatchedType(lhs.clone()));
                 }
@@ -592,6 +649,7 @@ impl MirStatement {
         Ok(())
     }
 
+    /// Lower MIR into Oak's ASM
     fn assemble(
         &self,
         vars: &mut BTreeMap<Identifier, MirType>,
@@ -616,6 +674,12 @@ impl MirStatement {
                 ]);
                 result
             }
+
+            /// A let statement that automatically deduces the type
+            /// of the variable just expands to a manually defined MIR let statement.
+            Self::AutoDefine(var_name, expr) =>
+                Self::Define(var_name.clone(), expr.get_type(vars, funcs, structs)?, expr.clone())
+                    .assemble(vars, funcs, structs)?,
 
             /// Assign an expression to a defined variable
             Self::AssignVariable(var_name, expr) => {
@@ -752,6 +816,7 @@ impl MirStatement {
                     AsmStatement::Assign(AsmType::float()),
                 ]);
 
+                // The resulting code for an if-else statement!
                 vec![
                     AsmStatement::For(
                         pre,
@@ -854,6 +919,11 @@ impl MirExpression {
                 if idx.get_type(vars, funcs, structs)?.get_size(structs)? != 1 {
                     return Err(MirError::NonNumberIndex(*idx.clone()));
                 }
+
+                // Check to see if the pointer being indexed is a void pointer
+                if ptr.get_type(vars, funcs, structs)?.deref()?.get_size(structs)? == 0 {
+                    return Err(MirError::IndexVoidPointer(*ptr.clone()));
+                }
             }
 
             // Typecheck a function call expression
@@ -914,7 +984,7 @@ impl MirExpression {
                         }
 
                         // Iterate over the methods's parameters and the list of arguments
-                        for ((_, param_type), arg) in func.get_parameters().iter().zip(args) {
+                        for ((_, param_type), arg) in params.iter().zip(args) {
                             // If the parameters don't match the argument types,
                             // then throw an error.
                             if param_type != &arg.get_type(vars, funcs, structs)? {
@@ -1155,13 +1225,19 @@ impl MirExpression {
             /// then get the return type of the method.
             Self::Method(expr, method_name, _) => {
                 // Get the type of the object
-                let instance_type = expr.get_type(vars, funcs, structs)?;
+                let mut instance_type = expr.get_type(vars, funcs, structs)?;
+                while instance_type.is_pointer() {
+                    instance_type = instance_type.deref()?
+                }
                 // Get the return type of the method
                 let func_name = instance_type.method_to_function_name(method_name);
                 if let Some(func) = funcs.get(&func_name) {
                     func.get_return_type()
                 } else {
-                    return Err(MirError::MethodNotDefined(instance_type, func_name.clone()));
+                    return Err(MirError::MethodNotDefined(
+                        instance_type,
+                        method_name.clone(),
+                    ));
                 }
             }
 
