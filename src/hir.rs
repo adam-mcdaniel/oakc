@@ -188,7 +188,6 @@ impl HirFunction {
 
 #[derive(Clone, Debug)]
 pub enum HirConstant {
-    Void,
     Float(f64),
     Character(char),
 
@@ -203,7 +202,6 @@ pub enum HirConstant {
 impl HirConstant {
     pub fn to_value(&self, constants: &BTreeMap<Identifier, Self>) -> Result<f64, HirError> {
         Ok(match self {
-            Self::Void => 0.0,
             Self::Float(n) => *n,
             Self::Character(ch) => *ch as u8 as f64,
 
@@ -225,20 +223,32 @@ impl HirConstant {
 
 #[derive(Clone, Debug)]
 pub enum HirStatement {
+    /// An HIR let expression with a manually assigned type
     Define(Identifier, HirType, HirExpression),
+    /// An HIR let expression with an automatically assigned type
+    AutoDefine(Identifier, HirExpression),
+    /// A variable assignment
     AssignVariable(Identifier, HirExpression),
+    /// An assignment to a dereferenced address
     AssignAddress(HirExpression, HirExpression),
 
+    /// An HIR for loop
     For(Box<Self>, HirExpression, Box<Self>, Vec<Self>),
+    /// An HIR while loop
     While(HirExpression, Vec<Self>),
+    /// An HIR if statement
     If(HirExpression, Vec<Self>),
+    /// An HIR if statement with an else clause
     IfElse(HirExpression, Vec<Self>, Vec<Self>),
 
+    /// An HIR free statement to deallocate memory
     Free(HirExpression, HirExpression),
+    /// Any expression
     Expression(HirExpression),
 }
 
 impl HirStatement {
+    /// Lower an HIR statement into an equivalent MIR statement
     pub fn to_mir_stmt(
         &self,
         constants: &BTreeMap<Identifier, HirConstant>,
@@ -247,6 +257,10 @@ impl HirStatement {
             Self::Define(name, data_type, expr) => MirStatement::Define(
                 name.clone(),
                 data_type.to_mir_type(),
+                expr.to_mir_expr(constants)?,
+            ),
+            Self::AutoDefine(name, expr) => MirStatement::AutoDefine(
+                name.clone(),
                 expr.to_mir_expr(constants)?,
             ),
 
@@ -320,6 +334,7 @@ pub enum HirExpression {
     Refer(Identifier),
     Deref(Box<Self>),
 
+    Void,
     String(StringLiteral),
     Variable(Identifier),
 
@@ -337,6 +352,7 @@ impl HirExpression {
         constants: &BTreeMap<Identifier, HirConstant>,
     ) -> Result<MirExpression, HirError> {
         Ok(match self {
+            /// Convert a constant expression into a float literal
             Self::Constant(constant) => MirExpression::Float(constant.to_value(constants)?),
 
             Self::Add(l, r) => MirExpression::Add(
@@ -362,7 +378,11 @@ impl HirExpression {
             Self::Refer(name) => MirExpression::Refer(name.clone()),
             Self::Deref(value) => MirExpression::Deref(Box::new(value.to_mir_expr(constants)?)),
 
+            Self::Void => MirExpression::Void,
             Self::String(string) => MirExpression::String(string.clone()),
+
+            /// If a variable is actually a constant,
+            /// replace it with its constant value
             Self::Variable(name) => {
                 if let Some(val) = constants.get(name) {
                     MirExpression::Float(val.to_value(constants)?)

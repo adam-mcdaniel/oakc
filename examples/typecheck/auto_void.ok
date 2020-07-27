@@ -1,0 +1,7 @@
+
+
+fn test(size: num) -> &void { alloc(size) }
+
+fn main() {
+    let x = test(10);
+}
