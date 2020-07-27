@@ -1,0 +1,1 @@
+oak -c foreign.ok -f foreign.c

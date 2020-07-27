@@ -21,11 +21,15 @@ fn main() {
 
     if let Some(input_file) = matches.value_of("FILE") {
         if let Ok(mut contents) = read_to_string(input_file) {
-            let mut result = String::new();
+            let mut ffi_code = String::new();
             if let Some(ffi_files) = matches.values_of("FFI") {
+                // For each FFI file, add its code to the compiled output
                 for ffi_file in ffi_files {
+                    // Get the contents of the FFI file
                     if let Ok(ffi_contents) = read_to_string(ffi_file) {
-                        result += &ffi_contents;
+                        // Add the FFI file's contents to the ffi code
+                        // and add a newline at the end for good measure
+                        ffi_code += &(ffi_contents + "\n");
                     } else {
                         eprintln!("error: FFI file \"{}\" doesn't exist", input_file);
                         exit(1);
@@ -42,11 +46,11 @@ fn main() {
             };
 
             let compile_result = if matches.is_present("c") {
-                compile(&cwd, contents, C)
+                compile(&cwd, ffi_code, contents, C)
             } else if matches.is_present("go") {
-                compile(&cwd, contents, Go)
+                compile(&cwd, ffi_code, contents, Go)
             } else {
-                compile(&cwd, contents, C)
+                compile(&cwd, ffi_code, contents, C)
             };
 
             match compile_result {
