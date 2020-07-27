@@ -352,7 +352,12 @@ impl MirStructure {
         for function in &self.methods {
             let method = function.as_method(&mir_type);
             funcs.insert(method.get_name(), method.clone());
-            result.push(method.assemble(funcs, structs)?);
+        }
+
+        // After each function has been declared, go back and assemble them.
+        // We do two passes to allow methods to depend on one another.
+        for function in &self.methods {
+            result.push(function.as_method(&mir_type).assemble(funcs, structs)?);
         }
 
         Ok(result)
@@ -914,7 +919,7 @@ impl MirExpression {
                         }
 
                         // Iterate over the methods's parameters and the list of arguments
-                        for ((_, param_type), arg) in func.get_parameters().iter().zip(args) {
+                        for ((_, param_type), arg) in params.iter().zip(args) {
                             // If the parameters don't match the argument types,
                             // then throw an error.
                             if param_type != &arg.get_type(vars, funcs, structs)? {
@@ -1155,13 +1160,19 @@ impl MirExpression {
             /// then get the return type of the method.
             Self::Method(expr, method_name, _) => {
                 // Get the type of the object
-                let instance_type = expr.get_type(vars, funcs, structs)?;
+                let mut instance_type = expr.get_type(vars, funcs, structs)?;
+                while instance_type.is_pointer() {
+                    instance_type = instance_type.deref()?
+                }
                 // Get the return type of the method
                 let func_name = instance_type.method_to_function_name(method_name);
                 if let Some(func) = funcs.get(&func_name) {
                     func.get_return_type()
                 } else {
-                    return Err(MirError::MethodNotDefined(instance_type, func_name.clone()));
+                    return Err(MirError::MethodNotDefined(
+                        instance_type,
+                        method_name.clone(),
+                    ));
                 }
             }
 
