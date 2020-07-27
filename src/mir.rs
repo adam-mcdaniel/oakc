@@ -920,7 +920,8 @@ impl MirExpression {
                     return Err(MirError::NonNumberIndex(*idx.clone()));
                 }
 
-                if ptr.get_type(vars, funcs, structs)?.get_size(structs)? == 0 {
+                // Check to see if the pointer being indexed is a void pointer
+                if ptr.get_type(vars, funcs, structs)?.deref()?.get_size(structs)? == 0 {
                     return Err(MirError::IndexVoidPointer(*ptr.clone()));
                 }
             }
