@@ -1,6 +1,7 @@
 use super::Target;
 use std::{
     fs::{remove_file, write},
+    io::{Error, ErrorKind, Result},
     process::Command,
 };
 
@@ -86,14 +87,14 @@ impl Target for Go {
         String::from("}\n")
     }
 
-    fn compile(&self, code: String) -> bool {
+    fn compile(&self, code: String) -> Result<()> {
         if let Ok(_) = write("main.go", code) {
             if let Ok(_) = Command::new("go").arg("build").arg("main.go").output() {
                 if let Ok(_) = remove_file("main.go") {
-                    return true;
+                    return Result::Ok(());
                 }
             }
         }
-        false
+        Result::Err(Error::new(ErrorKind::Other, "error compiling "))
     }
 }

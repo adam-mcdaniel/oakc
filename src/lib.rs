@@ -1,5 +1,5 @@
 #![allow(warnings, clippy, unknown_lints)]
-use std::{path::PathBuf, process::exit};
+use std::{io::Result, path::PathBuf, process::exit};
 pub type Identifier = String;
 pub type StringLiteral = String;
 
@@ -17,7 +17,7 @@ use comment::cpp::strip;
 use lalrpop_util::{lalrpop_mod, ParseError};
 lalrpop_mod!(pub parser);
 
-pub fn compile(cwd: &PathBuf, input: impl ToString, target: impl Target) -> bool {
+pub fn compile(cwd: &PathBuf, input: impl ToString, target: impl Target) -> Result<()> {
     match parse(input).compile(cwd) {
         Ok(mir) => match mir.assemble() {
             Ok(asm) => match asm.assemble(&target) {
