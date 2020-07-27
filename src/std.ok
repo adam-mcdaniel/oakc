@@ -15,12 +15,12 @@ fn gt(x: num, y: num) -> num { gt!(x, y) }
 fn ge(x: num, y: num) -> num { ge!(x, y) }
 
 fn putstr(s: &char) -> void { prs!(s); }
-fn putstrln(s: &char) -> void { putstr(s); putstr("\n"); }
+fn putstrln(s: &char) -> void { putstr(s); prend!(); }
 
 fn putnum(n: num) -> void { prn!(n); }
-fn putnumln(n: num) -> void { putnum(n); putstr("\n"); }
+fn putnumln(n: num) -> void { putnum(n); prend!(); }
 
 fn putchar(ch: char) -> void { prc!(ch); }
-fn putcharln(ch: char) -> void { putchar(ch); putstr("\n"); }
+fn putcharln(ch: char) -> void { putchar(ch); prend!(); }
 
 fn get_char() -> char { getch!(); }
