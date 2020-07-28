@@ -1,0 +1,24 @@
+
+
+fn main() {
+    putstr("5 < 6 is:    "); putnumln(5 < 6);
+    putstr("6 < 6 is:    "); putnumln(6 < 6);
+    putstr("6.1 < 6 is:  "); putnumln(6.1 < 6);
+    putstr("7 < 6 is:    "); putnumln(7 < 6);
+
+    putstr("5 <= 6 is:   "); putnumln(5 <= 6);
+    putstr("6 <= 6 is:   "); putnumln(6 <= 6);
+    putstr("6.1 <= 6 is: "); putnumln(6.1 <= 6);
+    putstr("7 < 6 is:    "); putnumln(7 <= 6);
+
+    putstr("5 > 6 is:    "); putnumln(5 > 6);
+    putstr("6 > 6 is:    "); putnumln(6 > 6);
+    putstr("6.1 > 6 is:  "); putnumln(6.1 > 6);
+    putstr("7 > 6 is:    "); putnumln(7 > 6);
+    
+
+    putstr("5 >= 6 is:   "); putnumln(5 >= 6);
+    putstr("6 >= 6 is:   "); putnumln(6 >= 6);
+    putstr("6.1 >= 6 is: "); putnumln(6.1 >= 6);
+    putstr("7 >= 6 is:   "); putnumln(7 >= 6);
+}

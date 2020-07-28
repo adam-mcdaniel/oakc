@@ -76,17 +76,17 @@ type Machine(MACHINE) {
 
 	fn dump(self: &Machine) {
 		putstrln(self->code);
-		for (let i: num = 0; lt(i, self->ins_ptr); i=i+1) {
+		for (let i: num = 0; i < self->ins_ptr; i=i+1) {
 			putchar(' ');
 		}
 		putcharln('^');
 
 		putchar('[');
-		for (let i: num = 0; lt(i, TAPE_SIZE); i=i+1) {
+		for (let i: num = 0; i<TAPE_SIZE; i=i+1) {
 			putchar(' '); putnum((self->tape)[i]);
 		}
 		putstr(" ]\n  ");
-		for (let i: num = 0; lt(i, self->val_ptr); i=i+1) {
+		for (let i: num = 0; i<self->val_ptr; i=i+1) {
 			putstr("  ");
 		}
 		putcharln('^');

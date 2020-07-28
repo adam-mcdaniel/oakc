@@ -89,12 +89,17 @@ impl Display for MirError {
             }
             Self::DereferenceNonPointer(t) => write!(f, "cannot dereference type '{}'", t),
             Self::IndexVoidPointer(expr) => write!(f, "cannot index void pointer '{}'", expr),
-            Self::AutoDefineVoidPointer(var_name, expr) => 
-                write!(f, "used type inference when defining '{}' with a void pointer expression '{}'", var_name, expr),
+            Self::AutoDefineVoidPointer(var_name, expr) => write!(
+                f,
+                "used type inference when defining '{}' with a void pointer expression '{}'",
+                var_name, expr
+            ),
 
-            Self::DefineMismatchedType(var_name) => {
-                write!(f, "mismatched types in 'let' statement when defining variable '{}'", var_name)
-            }
+            Self::DefineMismatchedType(var_name) => write!(
+                f,
+                "mismatched types in 'let' statement when defining variable '{}'",
+                var_name
+            ),
 
             Self::AssignMismatchedType(lhs_expr) => {
                 write!(f, "mismatched types when assigning to '{}'", lhs_expr)
@@ -306,7 +311,7 @@ impl MirProgram {
                 MirDeclaration::Function(func) => {
                     let name = func.get_name();
                     if funcs.contains_key(&name) {
-                        return Err(MirError::FunctionRedefined(name))
+                        return Err(MirError::FunctionRedefined(name));
                     } else {
                         funcs.insert(name, func.clone());
                     }
@@ -314,7 +319,7 @@ impl MirProgram {
                 MirDeclaration::Structure(structure) => {
                     let name = structure.get_name();
                     if structs.contains_key(&name) {
-                        return Err(MirError::StructureRedefined(name))
+                        return Err(MirError::StructureRedefined(name));
                     } else {
                         structs.insert(structure.get_name(), structure.clone());
                     }
@@ -540,9 +545,12 @@ impl MirStatement {
                 // Let expressions MUST cast void pointers.
                 // This error catches code like `let ptr = alloc(10)`
                 if t.is_void_ptr() {
-                    return Err(MirError::AutoDefineVoidPointer(var_name.clone(), expr.clone()))
+                    return Err(MirError::AutoDefineVoidPointer(
+                        var_name.clone(),
+                        expr.clone(),
+                    ));
                 }
-            },
+            }
 
             Self::AssignAddress(lhs, rhs) => {
                 lhs.type_check(vars, funcs, structs)?;
@@ -677,9 +685,12 @@ impl MirStatement {
 
             /// A let statement that automatically deduces the type
             /// of the variable just expands to a manually defined MIR let statement.
-            Self::AutoDefine(var_name, expr) =>
-                Self::Define(var_name.clone(), expr.get_type(vars, funcs, structs)?, expr.clone())
-                    .assemble(vars, funcs, structs)?,
+            Self::AutoDefine(var_name, expr) => Self::Define(
+                var_name.clone(),
+                expr.get_type(vars, funcs, structs)?,
+                expr.clone(),
+            )
+            .assemble(vars, funcs, structs)?,
 
             /// Assign an expression to a defined variable
             Self::AssignVariable(var_name, expr) => {
@@ -858,6 +869,11 @@ pub enum MirExpression {
     Multiply(Box<Self>, Box<Self>),
     Divide(Box<Self>, Box<Self>),
 
+    Greater(Box<Self>, Box<Self>),
+    Less(Box<Self>, Box<Self>),
+    GreaterEqual(Box<Self>, Box<Self>),
+    LessEqual(Box<Self>, Box<Self>),
+
     String(StringLiteral),
     Float(f64),
     Character(char),
@@ -889,7 +905,11 @@ impl MirExpression {
             Self::Add(lhs, rhs)
             | Self::Subtract(lhs, rhs)
             | Self::Multiply(lhs, rhs)
-            | Self::Divide(lhs, rhs) => {
+            | Self::Divide(lhs, rhs)
+            | Self::Greater(lhs, rhs)
+            | Self::Less(lhs, rhs)
+            | Self::GreaterEqual(lhs, rhs)
+            | Self::LessEqual(lhs, rhs) => {
                 lhs.type_check(vars, funcs, structs)?;
                 rhs.type_check(vars, funcs, structs)?;
                 let lhs_type = lhs.get_type(vars, funcs, structs)?;
@@ -921,7 +941,12 @@ impl MirExpression {
                 }
 
                 // Check to see if the pointer being indexed is a void pointer
-                if ptr.get_type(vars, funcs, structs)?.deref()?.get_size(structs)? == 0 {
+                if ptr
+                    .get_type(vars, funcs, structs)?
+                    .deref()?
+                    .get_size(structs)?
+                    == 0
+                {
                     return Err(MirError::IndexVoidPointer(*ptr.clone()));
                 }
             }
@@ -1021,6 +1046,75 @@ impl MirExpression {
         structs: &BTreeMap<Identifier, MirStructure>,
     ) -> Result<Vec<AsmStatement>, MirError> {
         Ok(match self {
+            /// Is the LHS greater than or equal the RHS?
+            Self::GreaterEqual(l, r) => {
+                let mut result = Vec::new();
+                result.extend(l.assemble(vars, funcs, structs)?);
+                result.extend(r.assemble(vars, funcs, structs)?);
+                result.push(AsmStatement::Expression(vec![
+                    // Subtract RHS from the LHS and check the sign
+                    AsmExpression::Subtract,
+                    AsmExpression::Sign,
+                    // If the sign was 1, then this expression is true.
+                    AsmExpression::Float(1.0),
+                    AsmExpression::Add,
+                    AsmExpression::Float(2.0),
+                    AsmExpression::Divide,
+                ]));
+                result
+            }
+            /// Is the LHS greater than the RHS?
+            Self::Greater(l, r) => {
+                let mut result = Vec::new();
+                result.extend(r.assemble(vars, funcs, structs)?);
+                result.extend(l.assemble(vars, funcs, structs)?);
+                result.push(AsmStatement::Expression(vec![
+                    // Subtract LHS from the RHS and check the sign
+                    AsmExpression::Subtract,
+                    AsmExpression::Sign,
+                    // If the sign was -1, then this expression is true.
+                    AsmExpression::Float(1.0),
+                    AsmExpression::Subtract,
+                    AsmExpression::Float(-2.0),
+                    AsmExpression::Divide,
+                ]));
+                result
+            }
+            /// Is the LHS less than or equal to the RHS?
+            Self::LessEqual(l, r) => {
+                let mut result = Vec::new();
+                result.extend(r.assemble(vars, funcs, structs)?);
+                result.extend(l.assemble(vars, funcs, structs)?);
+                result.push(AsmStatement::Expression(vec![
+                    // Subtract LHS from the RHS and check the sign
+                    AsmExpression::Subtract,
+                    AsmExpression::Sign,
+                    // If the sign was 1, then this expression is true.
+                    AsmExpression::Float(1.0),
+                    AsmExpression::Add,
+                    AsmExpression::Float(2.0),
+                    AsmExpression::Divide,
+                ]));
+                result
+            }
+            /// Is the LHS less than the RHS?
+            Self::Less(l, r) => {
+                let mut result = Vec::new();
+                result.extend(l.assemble(vars, funcs, structs)?);
+                result.extend(r.assemble(vars, funcs, structs)?);
+                result.push(AsmStatement::Expression(vec![
+                    // Subtract RHS from the LHS and check the sign
+                    AsmExpression::Subtract,
+                    AsmExpression::Sign,
+                    // If the sign was -1, then this expression is true.
+                    AsmExpression::Float(1.0),
+                    AsmExpression::Subtract,
+                    AsmExpression::Float(-2.0),
+                    AsmExpression::Divide,
+                ]));
+                result
+            }
+
             /// Add two values
             Self::Add(l, r) => {
                 let mut result = Vec::new();
@@ -1210,6 +1304,13 @@ impl MirExpression {
             Self::Add(l, _) | Self::Subtract(l, _) | Self::Multiply(l, _) | Self::Divide(l, _) => {
                 l.get_type(vars, funcs, structs)?
             }
+            /// Greater than, less than, greater or equal,
+            /// and less than or equal expressions ALL return
+            /// boolean values.
+            Self::Greater(_, _)
+            | Self::Less(_, _)
+            | Self::GreaterEqual(_, _)
+            | Self::LessEqual(_, _) => MirType::float(),
             /// Float literals have type `num`
             Self::Float(_) => MirType::float(),
             /// String literals have type `&char`
@@ -1290,6 +1391,11 @@ impl Display for MirExpression {
             Self::Subtract(lhs, rhs) => write!(f, "{}-{}", lhs, rhs),
             Self::Multiply(lhs, rhs) => write!(f, "{}/{}", lhs, rhs),
             Self::Divide(lhs, rhs) => write!(f, "{}/{}", lhs, rhs),
+
+            Self::Greater(lhs, rhs) => write!(f, "{}>{}", lhs, rhs),
+            Self::GreaterEqual(lhs, rhs) => write!(f, "{}>={}", lhs, rhs),
+            Self::Less(lhs, rhs) => write!(f, "{}<{}", lhs, rhs),
+            Self::LessEqual(lhs, rhs) => write!(f, "{}<={}", lhs, rhs),
 
             Self::Alloc(size) => write!(f, "alloc({})", size),
 

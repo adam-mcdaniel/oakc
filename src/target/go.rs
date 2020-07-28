@@ -47,6 +47,10 @@ impl Target for Go {
         String::from("vm.divide()\n")
     }
 
+    fn sign(&self) -> String {
+        String::from("vm.sign()\n")
+    }
+
     fn allocate(&self) -> String {
         String::from("vm.allocate()\n")
     }

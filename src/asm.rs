@@ -297,6 +297,7 @@ pub enum AsmExpression {
     Multiply,
     Subtract,
     Add,
+    Sign,
 }
 
 impl AsmExpression {
@@ -380,6 +381,8 @@ impl AsmExpression {
             // Dereference an address
             Self::Deref(size) => target.load(*size),
 
+            // Get the absolute value of a number on the stack
+            Self::Sign => target.sign(),
             // Add two numbers on the stack
             Self::Add => target.add(),
             // Subtract two numbers on the stack

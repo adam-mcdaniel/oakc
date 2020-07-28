@@ -41,7 +41,7 @@ fn test() -> void {
 }
 
 fn main() -> void {
-    for (let i: num = 0; i - 10; i=i+1) {
+    for (let i: num = 0; i<10; i=i+1) {
         test();
         prn!(i); prend!();
     }

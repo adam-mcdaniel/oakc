@@ -259,10 +259,9 @@ impl HirStatement {
                 data_type.to_mir_type(),
                 expr.to_mir_expr(constants)?,
             ),
-            Self::AutoDefine(name, expr) => MirStatement::AutoDefine(
-                name.clone(),
-                expr.to_mir_expr(constants)?,
-            ),
+            Self::AutoDefine(name, expr) => {
+                MirStatement::AutoDefine(name.clone(), expr.to_mir_expr(constants)?)
+            }
 
             Self::AssignVariable(name, expr) => {
                 MirStatement::AssignVariable(name.clone(), expr.to_mir_expr(constants)?)
@@ -331,6 +330,11 @@ pub enum HirExpression {
     Multiply(Box<Self>, Box<Self>),
     Divide(Box<Self>, Box<Self>),
 
+    Greater(Box<Self>, Box<Self>),
+    Less(Box<Self>, Box<Self>),
+    GreaterEqual(Box<Self>, Box<Self>),
+    LessEqual(Box<Self>, Box<Self>),
+
     Refer(Identifier),
     Deref(Box<Self>),
 
@@ -356,6 +360,26 @@ impl HirExpression {
             Self::Constant(constant) => MirExpression::Float(constant.to_value(constants)?),
 
             Self::Add(l, r) => MirExpression::Add(
+                Box::new(l.to_mir_expr(constants)?),
+                Box::new(r.to_mir_expr(constants)?),
+            ),
+
+            Self::Greater(l, r) => MirExpression::Greater(
+                Box::new(l.to_mir_expr(constants)?),
+                Box::new(r.to_mir_expr(constants)?),
+            ),
+
+            Self::GreaterEqual(l, r) => MirExpression::GreaterEqual(
+                Box::new(l.to_mir_expr(constants)?),
+                Box::new(r.to_mir_expr(constants)?),
+            ),
+
+            Self::Less(l, r) => MirExpression::Less(
+                Box::new(l.to_mir_expr(constants)?),
+                Box::new(r.to_mir_expr(constants)?),
+            ),
+
+            Self::LessEqual(l, r) => MirExpression::LessEqual(
                 Box::new(l.to_mir_expr(constants)?),
                 Box::new(r.to_mir_expr(constants)?),
             ),

@@ -16,6 +16,7 @@ pub trait Target {
     fn subtract(&self) -> String;
     fn multiply(&self) -> String;
     fn divide(&self) -> String;
+    fn sign(&self) -> String;
 
     fn allocate(&self) -> String;
     fn free(&self) -> String;
