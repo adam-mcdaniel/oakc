@@ -114,7 +114,7 @@ SmallStatement: HirStatement = {
 }
 
 Expression: HirExpression = {
-    <ExpressionLow> => <>,
+    <ExpressionBottom> => <>,
     "*" <ptr:ExpressionAtom> => HirExpression::Deref(Box::new(ptr)),
 }
 
@@ -132,6 +132,14 @@ ExpressionAtom: HirExpression = {
     "&" <name:Ident> => HirExpression::Refer(name),
     "(" <Expression> ")" => <>,
     "-" <ExpressionAtom> => HirExpression::Subtract(Box::new(HirExpression::Constant(HirConstant::Float(0.0))), Box::new(<>)),
+}
+
+ExpressionBottom: HirExpression = {
+    <l:ExpressionLow> ">=" <r:ExpressionLow> => HirExpression::GreaterEqual(Box::new(l), Box::new(r)),
+    <l:ExpressionLow> ">" <r:ExpressionLow> => HirExpression::Greater(Box::new(l), Box::new(r)),
+    <l:ExpressionLow> "<=" <r:ExpressionLow> => HirExpression::LessEqual(Box::new(l), Box::new(r)),
+    <l:ExpressionLow> "<" <r:ExpressionLow> => HirExpression::Less(Box::new(l), Box::new(r)),
+    <ExpressionLow> => <>
 }
 
 ExpressionLow: HirExpression = {

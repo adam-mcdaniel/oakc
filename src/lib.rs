@@ -17,11 +17,20 @@ use comment::cpp::strip;
 use lalrpop_util::{lalrpop_mod, ParseError};
 lalrpop_mod!(pub parser);
 
-pub fn compile(cwd: &PathBuf, input: impl ToString, target: impl Target) -> Result<()> {
+pub fn compile(
+    cwd: &PathBuf,
+    ffi_code: impl ToString,
+    input: impl ToString,
+    target: impl Target,
+) -> Result<()> {
     match parse(input).compile(cwd) {
         Ok(mir) => match mir.assemble() {
             Ok(asm) => match asm.assemble(&target) {
-                Ok(result) => target.compile(target.prelude() + &result + &target.postlude()),
+                // Add the target's prelude, the FFI code from the user,
+                // the compiled Oak code, and the target's postlude
+                Ok(result) => target.compile(
+                    target.prelude() + &ffi_code.to_string() + &result + &target.postlude(),
+                ),
                 Err(e) => {
                     eprintln!("compilation error: {}", e.bright_red().underline());
                     exit(1);

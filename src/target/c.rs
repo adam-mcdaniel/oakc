@@ -48,6 +48,10 @@ impl Target for C {
         String::from("machine_divide(vm);\n")
     }
 
+    fn sign(&self) -> String {
+        String::from("machine_sign(vm);\n")
+    }
+
     fn allocate(&self) -> String {
         String::from("machine_allocate(vm);\n")
     }
@@ -95,28 +99,34 @@ impl Target for C {
             .args(&["-x", "c", "-"])
             .stdin(Stdio::piped())
             .spawn();
-        
+
         if let Ok(mut child) = child {
             match child.stdin.as_mut() {
                 Some(stdin) => {
                     if let Err(error) = stdin.write_all(code.as_bytes()) {
-                        return Result::Err(Error::new(ErrorKind::Other,
-                            "unable to open write to child stdin"));
+                        return Result::Err(Error::new(
+                            ErrorKind::Other,
+                            "unable to open write to child stdin",
+                        ));
                     }
-                },
-                None => return Result::Err(Error::new(ErrorKind::Other,
-                    "unable to open child stdin"))
+                }
+                None => {
+                    return Result::Err(Error::new(ErrorKind::Other, "unable to open child stdin"))
+                }
             }
 
             match child.wait_with_output() {
                 Ok(_) => return Result::Ok(()),
-                Err(_) => return Result::Err(Error::new(ErrorKind::Other,
-                    "unable to read child output"))
+                Err(_) => {
+                    return Result::Err(Error::new(ErrorKind::Other, "unable to read child output"))
+                }
             }
         } else {
             // child failed to execute
-            Result::Err(Error::new(ErrorKind::Other,
-                "unable to spawn child gcc proccess"))
+            Result::Err(Error::new(
+                ErrorKind::Other,
+                "unable to spawn child gcc proccess",
+            ))
         }
     }
 }

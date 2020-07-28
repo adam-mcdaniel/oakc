@@ -9,11 +9,6 @@ fn eq(a: num, b: num) -> num {
     else { 1 }
 }
 
-fn lt(x: num, y: num) -> num { lt!(x, y) }
-fn le(x: num, y: num) -> num { le!(x, y) }
-fn gt(x: num, y: num) -> num { gt!(x, y) }
-fn ge(x: num, y: num) -> num { ge!(x, y) }
-
 fn putstr(s: &char) -> void { prs!(s); }
 fn putstrln(s: &char) -> void { putstr(s); prend!(); }
 

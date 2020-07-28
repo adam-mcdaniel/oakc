@@ -16,7 +16,7 @@ I'm a freshly minted highschool graduate and freshman in college looking for wor
 
 ## Intermediate Representation
 
-The key to oak's insane portability is its incredibly compact backend implementation. _The code for Oak's backend can be expressed in under 100 lines of C._ Such a small implementation is only possible because of the tiny instruction set of the intermediate representation. Oak's IR is only composed of **_13 different instructions_**. That's on par with [brainfuck](https://esolangs.org/wiki/Brainfuck)!
+The key to oak's insane portability is its incredibly compact backend implementation. _The code for Oak's backend can be expressed in under 100 lines of C._ Such a small implementation is only possible because of the tiny instruction set of the intermediate representation. Oak's IR is only composed of **_14 different instructions_**. That's on par with [brainfuck](https://esolangs.org/wiki/Brainfuck)!
 
 The backend of oak functions very simply. Every instruction operates on a _memory tape_. This tape is essentially a static array of double-precision floats.
 
@@ -43,6 +43,7 @@ Now that you understand how oak's backend fundamentally operates, here's the com
 | `subtract();` | Pop two numbers off of the stack. Subtract the first from the second, and push the result. |
 | `multiply();` | Pop two numbers off of the stack, and push their product. |
 | `divide();` | Pop two numbers off of the stack. Divide the second by the first, and push the result. |
+| `size();` | Pop a number off of the stack. If it is greater or equal to zero, push `1`, otherwise push `-1`. |
 | `allocate();` | Pop a number off of the stack, and return a pointer to that number of free cells on the heap. |
 | `free();` | Pop a number off of the stack, and go to where this number points in memory. Pop another number off of the stack, and free that many cells at this location in memory. |
 | `store(size: i32);` | Pop a number off of the stack, and go to where this number points in memory. Then, pop `size` numbers off of the stack. Store these numbers in reverse order at this location in memory. |
@@ -96,7 +97,6 @@ The syntax of oak is heavily inspired by the Rust programming language.
 
 ```rust
 // Flag to include another file in this directory
-// If this file contains a "main" method, it will be overridden.
 #[include("str.ok")]
 
 // An optional flag to set the exact number of memory cells to use for the heap.
@@ -119,7 +119,7 @@ type bool(1) {
 fn main() {
     putnumln(square(5));
 
-    let b: bool = bool::false();
+    let b = bool::false();
     putboolln(b);
     // assign to b's "val" attribute
     b->val = 1;

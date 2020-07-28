@@ -68,7 +68,7 @@ type Date(DATE) {
 
     fn next_week(self: &Date) -> Date {
         let result: Date = *self;
-        for (let i:num=0; lt(i, 10); i=i+1) {
+        for (let i:num=0; i<10; i=i+1) {
             result = result.tomorrow();
         }
         result
@@ -89,7 +89,7 @@ fn main() -> void {
     *arr.idx(2) = Date::birthday().yesterday();
     *arr.idx(3) = (Date::birthday().next_week()).next_month();
     // Date::from(arr.idx(1)).print();
-    for (let i:num=0; lt(i, arr->len); i=i+1) {
+    for (let i:num=0; i < arr->len; i=i+1) {
         Date::from(arr.idx(i)).print();
     }
 
