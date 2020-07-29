@@ -300,7 +300,7 @@ impl PartialEq for MirType {
         // If two types are identical, they are equal
         if self.name == other.name && self.ptr_level == other.ptr_level {
             true
-        } else if !self.is_pointer() {
+        } else if !self.is_pointer() && !other.is_pointer() {
             // (char == num) AND (num == char)
             match (self.name.as_str(), other.name.as_str()) {
                 ("char", "num") => true,
