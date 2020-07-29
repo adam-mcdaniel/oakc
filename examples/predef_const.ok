@@ -1,5 +1,9 @@
 
 
+#[if(DATE_MONTH == 8) {
+    #[error("this code doesn't compile in august")]
+}]
+
 
 fn main() {
     putstr("compiled on: ");
