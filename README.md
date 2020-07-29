@@ -96,23 +96,21 @@ fn main() -> 0 {
 The syntax of oak is heavily inspired by the Rust programming language.
 
 ```rust
-// Flag to include another file in this directory
-#[include("str.ok")]
-
 // An optional flag to set the exact number of memory cells to use for the heap.
 // This makes Oak an extremely suitable language for embedded development!
 #[heap(128)]
 
-// The `1` here is the size of the type on the stack
 type bool(1) {
-    fn true()  -> bool { 1 }
-    fn false() -> bool { 0 }
+    fn true()  -> bool { return 1 as bool }
+    fn false() -> bool { return 0 as bool }
 
-    fn val(self: &bool) -> &num { self }
+    fn val(self: &bool) -> &num { return self as &num }
 
     fn not(self: &bool) -> bool {
-        if *self { bool::false() }
-        else { bool::true() }
+        let result: bool = bool::true();
+        // "self->val" is equivalent to "*self.val()"
+        if self->val { result = bool::false(); }
+        return result
     }
 }
 
@@ -124,10 +122,9 @@ fn main() {
     // assign to b's "val" attribute
     b->val = 1;
     putboolln(b);
-
     b = bool::true();
     putboolln(b);
-    
+
     let size: num = 32;
     // Allocate 32 cells
     let addr: &char = alloc(size);
@@ -137,8 +134,11 @@ fn main() {
 
 
 fn putbool(b: bool) {
-    if b { putstr("true") }
-    else { putstr("false") }
+    if b {
+        putstr("true");
+    } else {
+        putstr("false");
+    }
 }
 
 fn putboolln(b: bool) {
@@ -147,9 +147,11 @@ fn putboolln(b: bool) {
 
 // Functions can be ordered independently
 fn square(x: num) -> num {
-    putstr("Squaring the number '"); putnum(x); putcharln('\'');
+    putstr("Squaring the number '");
+    putnum(x);
+    putcharln('\'');
     // The last statement in a body doesn't require brackets
-    x * x
+    return x * x
 }
 ```
 

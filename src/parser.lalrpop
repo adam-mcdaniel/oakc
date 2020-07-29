@@ -102,6 +102,8 @@ BodyStatement: HirStatement = {
 }
 
 SmallStatement: HirStatement = {
+    "return" <exprs:List<"[", Expression, ",", "]">> => HirStatement::Return(exprs),
+    "return" <expr:Expression> => HirStatement::Return(vec![expr]),
     "free" <addr:Expression> ":" <size:Expression> => HirStatement::Free(addr, size),
     "let" <name:Ident> "=" <expr:Expression> => HirStatement::AutoDefine(name, expr),
     "let" <name:Ident> ":" <t:Type> "=" <expr:Expression> => HirStatement::Define(name, t, expr),
@@ -114,8 +116,9 @@ SmallStatement: HirStatement = {
 }
 
 Expression: HirExpression = {
+    <expr:ExpressionAtom> "as" <t:Type> => HirExpression::TypeCast(Box::new(expr), t),
+    "*" <ptr:ExpressionBottom> => HirExpression::Deref(Box::new(ptr)),
     <ExpressionBottom> => <>,
-    "*" <ptr:ExpressionAtom> => HirExpression::Deref(Box::new(ptr)),
 }
 
 ExpressionAtom: HirExpression = {

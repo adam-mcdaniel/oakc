@@ -1,0 +1,7 @@
+
+
+fn test() {
+    return 1;
+}
+
+fn main() {}

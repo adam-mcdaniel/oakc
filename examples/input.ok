@@ -1,19 +1,19 @@
 
 fn strlen(str: &char) -> num {
-    for (let i: num=0; str[i]; i=i+1) {}
-    i;
+    for (let i=0; str[i]; i=i+1) {}
+    return i
 }
 
 fn strcpy(dst: &char, src: &char) {
-    for (let i: num=0; src[i]; i=i+1) {
+    for (let i=0; src[i]; i=i+1) {
         dst[i] = src[i];
     }
     dst[i] = 0;
 }
 
 fn strcat(dst: &char, src: &char) {
-    let offset: num = strlen(dst);
-    for (let i: num=0; src[i]; i=i+1) {
+    let offset = strlen(dst);
+    for (let i=0; src[i]; i=i+1) {
         dst[offset+i] = src[i];
     }
     dst[offset+i] = 0;
@@ -21,7 +21,7 @@ fn strcat(dst: &char, src: &char) {
 
 
 fn input(buffer: &char) -> void {
-    let i: num = 0;
+    let i = 0;
     for (let ch = get_char(); neq(ch, '\n'); ch = get_char()) {
         buffer[i] = ch;
         i = i + 1;
@@ -29,9 +29,9 @@ fn input(buffer: &char) -> void {
 }
 
 fn main() -> void {
-    let size: num = 256;
+    let size = 256;
     putstr("Enter some text: ");
-    let s: &char = alloc(size);
+    let s = alloc(size) as &char;
     input(s);
     strcat(s, " take a sad song, and make it better!");
 

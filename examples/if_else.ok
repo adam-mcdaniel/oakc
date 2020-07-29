@@ -1,12 +1,13 @@
 
 fn not_(x: num) -> num {
+    let result = 0;
     if x {
         putstrln("x is true");
-        0
+        result = 1
     } else {
         putstrln("x is false");
-        1
     }
+    return result
 }
 
 fn main() {

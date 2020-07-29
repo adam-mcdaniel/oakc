@@ -1,7 +1,7 @@
 
 fn strlen(str: &char) -> num {
     for (let i=0; str[i]; i=i+1) {}
-    i
+    return i
 }
 
 fn strcpy(dst: &char, src: &char) {
@@ -12,7 +12,7 @@ fn strcpy(dst: &char, src: &char) {
 }
 
 fn strcat(dst: &char, src: &char) {
-    let offset: num = strlen(dst);
+    let offset = strlen(dst);
     for (let i=0; src[i]; i=i+1) {
         dst[offset+i] = src[i];
     }
