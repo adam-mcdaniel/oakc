@@ -1,0 +1,9 @@
+
+
+
+fn main() {
+    putstr("compiled on: ");
+    putnum(DATE_MONTH); putchar('/');
+    putnum(DATE_DAY);   putchar('/');
+    putnum(DATE_YEAR);
+}

@@ -1,24 +1,77 @@
 #![allow(warnings, clippy, unknown_lints)]
-use std::{collections::BTreeMap, io::Result, path::PathBuf, process::exit};
+use std::{
+    collections::BTreeMap,
+    env::consts::{FAMILY, OS},
+    io::Result,
+    path::PathBuf,
+    process::exit,
+};
 pub type Identifier = String;
 pub type StringLiteral = String;
 
 pub mod asm;
 pub mod hir;
 pub mod mir;
-use hir::HirProgram;
+use hir::{HirConstant, HirProgram};
 
 mod target;
 pub use target::{Go, Target, C};
 
 use asciicolor::Colorize;
 use comment::cpp::strip;
+use time::OffsetDateTime;
 
 use lalrpop_util::{lalrpop_mod, ParseError};
 lalrpop_mod!(pub parser);
 
 pub fn compile(cwd: &PathBuf, input: impl ToString, target: impl Target) -> Result<()> {
-    match parse(input).compile(cwd, &target, &mut BTreeMap::new()) {
+    let mut constants = BTreeMap::new();
+
+    constants.insert(
+        String::from("TARGET"),
+        HirConstant::Float(target.get_name() as u8 as f64),
+    );
+    constants.insert(
+        String::from("IS_STANDARD"),
+        HirConstant::Float(target.is_standard() as i32 as f64),
+    );
+
+    constants.insert(
+        String::from("ON_WINDOWS"),
+        HirConstant::Float((OS == "windows") as i32 as f64),
+    );
+    constants.insert(
+        String::from("ON_MACOS"),
+        HirConstant::Float((OS == "macos") as i32 as f64),
+    );
+    constants.insert(
+        String::from("ON_LINUX"),
+        HirConstant::Float((OS == "linux") as i32 as f64),
+    );
+
+    constants.insert(
+        String::from("ON_NIX"),
+        HirConstant::Float((FAMILY == "unix") as i32 as f64),
+    );
+    constants.insert(
+        String::from("ON_NON_NIX"),
+        HirConstant::Float((FAMILY != "unix") as i32 as f64),
+    );
+
+    constants.insert(
+        String::from("DATE_DAY"),
+        HirConstant::Float(OffsetDateTime::now_local().day() as f64),
+    );
+    constants.insert(
+        String::from("DATE_MONTH"),
+        HirConstant::Float(OffsetDateTime::now_local().month() as f64),
+    );
+    constants.insert(
+        String::from("DATE_YEAR"),
+        HirConstant::Float(OffsetDateTime::now_local().year() as f64),
+    );
+
+    match parse(input).compile(cwd, &target, &mut constants) {
         Ok(mir) => match mir.assemble() {
             Ok(asm) => match asm.assemble(&target) {
                 // Add the target's prelude, the FFI code from the user,

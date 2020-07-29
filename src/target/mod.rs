@@ -5,6 +5,7 @@ pub use go::Go;
 
 pub trait Target {
     fn get_name(&self) -> char;
+    fn is_standard(&self) -> bool;
 
     fn prelude(&self) -> String;
     fn postlude(&self) -> String;

@@ -8,7 +8,13 @@ use std::{
 
 pub struct C;
 impl Target for C {
-    fn get_name(&self) -> char { 'c' }
+    fn get_name(&self) -> char {
+        'c'
+    }
+
+    fn is_standard(&self) -> bool {
+        true
+    }
 
     fn prelude(&self) -> String {
         String::from(include_str!("std.c"))

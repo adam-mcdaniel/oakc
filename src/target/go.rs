@@ -7,7 +7,13 @@ use std::{
 
 pub struct Go;
 impl Target for Go {
-    fn get_name(&self) -> char { 'g' }
+    fn get_name(&self) -> char {
+        'g'
+    }
+
+    fn is_standard(&self) -> bool {
+        true
+    }
 
     fn prelude(&self) -> String {
         String::from(include_str!("std.go"))
