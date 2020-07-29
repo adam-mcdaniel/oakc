@@ -8,6 +8,8 @@ use std::{
 
 pub struct C;
 impl Target for C {
+    fn get_name(&self) -> char { 'c' }
+
     fn prelude(&self) -> String {
         String::from(include_str!("std.c"))
     }

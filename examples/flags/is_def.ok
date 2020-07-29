@@ -1,0 +1,26 @@
+#[if(!isdef("TEST_H")) {
+    const TEST_H = 1;
+    fn test1() {
+        putstrln("isdef works!");
+    }
+} else {
+    fn test1() {
+        putstrln("isdef doesn't work :(");
+    }
+}]
+
+#[if(isdef("TEST_H")) {
+    fn test2() {
+        putstrln("isdef works!");
+    }
+} else {
+    fn test2() {
+        putstrln("isdef doesn't work :(");
+    }
+}]
+
+
+fn main() {
+    test1();
+    test2();
+}

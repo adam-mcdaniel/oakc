@@ -1,7 +1,12 @@
-// compile this file with the following command:
-// `oak -c foreign.ok -f foreign.c`
 
+#[if(TARGET == 'c') {
+    #[extern("foreign.c")]
+} else {
+    #[extern("foreign.go")]
+}]
+
+fn test() { test!() }
 
 fn main() -> void {
-    test!();
+    test();
 }

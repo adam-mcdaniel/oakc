@@ -1,0 +1,10 @@
+
+
+
+const Y = X + 1;
+const X = 1;
+
+
+fn main() {
+    putnumln(Y);
+}
