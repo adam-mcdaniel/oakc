@@ -243,6 +243,9 @@ pub enum HirStatement {
 
     /// An HIR free statement to deallocate memory
     Free(HirExpression, HirExpression),
+    /// Return one or more values at the end of a function
+    Return(Vec<HirExpression>),
+
     /// Any expression
     Expression(HirExpression),
 }
@@ -312,6 +315,14 @@ impl HirStatement {
                 MirStatement::IfElse(cond.to_mir_expr(constants)?, mir_then_body, mir_else_body)
             }
 
+            Self::Return(exprs) => {
+                let mut mir_exprs = Vec::new();
+                for expr in exprs {
+                    mir_exprs.push(expr.to_mir_expr(constants)?)
+                }
+                MirStatement::Return(mir_exprs)
+            }
+
             Self::Free(addr, size) => {
                 MirStatement::Free(addr.to_mir_expr(constants)?, size.to_mir_expr(constants)?)
             }
@@ -342,6 +353,7 @@ pub enum HirExpression {
     String(StringLiteral),
     Variable(Identifier),
 
+    TypeCast(Box<Self>, HirType),
     Alloc(Box<Self>),
 
     Call(Identifier, Vec<Self>),
@@ -416,6 +428,8 @@ impl HirExpression {
             }
 
             Self::Alloc(value) => MirExpression::Alloc(Box::new(value.to_mir_expr(constants)?)),
+
+            Self::TypeCast(expr, t) => MirExpression::TypeCast(Box::new(expr.to_mir_expr(constants)?), t.to_mir_type()),
 
             Self::Call(name, arguments) => MirExpression::Call(name.clone(), {
                 let mut result = Vec::new();

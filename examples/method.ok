@@ -1,22 +1,22 @@
 
 type Date(3) {
     fn new(month: num, day: num, year: num) -> Date {
-        month; day; year;
+        return [month, day, year]
     }
 
     fn birthday() -> Date {
-        Date::new(5, 14, 2002);
+        return Date::new(5, 14, 2002)
     }
 
-    fn month(self: &Date) -> &num { self; }
-    fn day(self: &Date) -> &num { self + 1; }
-    fn year(self: &Date) -> &num { self + 2; }
+    fn month(self: &Date) -> &num { return self as &num; }
+    fn day(self: &Date)   -> &num { return (self + 1) as &num; }
+    fn year(self: &Date)  -> &num { return (self + 2) as &num; }
 
     fn tmrw(self: &Date) -> Date {
-        Date::new(self->month, self->day + 1, self->year);
+        return Date::new(self->month, self->day + 1, self->year);
     }
 
-    fn print(self: &Date) -> void {
+    fn print(self: &Date) {
         prn!(self->month); prc!('/');
         prn!(self->day); prc!('/');
         prn!(self->year);
@@ -24,15 +24,15 @@ type Date(3) {
 }
 
 type Test(1) {
-    fn new(n: num) -> Test { n; }
-    fn n(self: &Test) -> &num { self; }
+    fn new(n: num) -> Test { return n as Test; }
+    fn n(self: &Test) -> &num { return self as &num; }
 
-    fn print(self: &Test) -> void {
+    fn print(self: &Test) {
         prs!("test: "); prn!(self->n); prend!();
     }
 }
 
-fn test() -> void {
+fn test() {
     let bday: Date = Date::birthday();
     bday.print(); prend!();
     ((bday.tmrw()).tmrw()).print(); prend!();
@@ -41,7 +41,7 @@ fn test() -> void {
 }
 
 fn main() -> void {
-    for (let i: num = 0; i<10; i=i+1) {
+    for (let i=0; i<10; i=i+1) {
         test();
         prn!(i); prend!();
     }

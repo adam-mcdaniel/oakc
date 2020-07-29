@@ -6,7 +6,7 @@
 
 // Copy a char array
 fn strcpy(dst: &char, src: &char) {
-	for (let i: num=0; src[i]; i = i + 1) {
+	for (let i=0; src[i]; i=i+1) {
 		dst[i] = src[i];
 	}
 	dst[i] = 0;
@@ -14,34 +14,42 @@ fn strcpy(dst: &char, src: &char) {
 
 // Get the length of a char array
 fn strlen(str: &char) -> num {
-	for (let i: num=0; str[i]; i = i + 1) {}
-	i
+	for (let i=0; str[i]; i=i+1) {}
+	return i
 }
 
 const EOF = -1;
 const MAX_LOOP_DEPTH = 32;
 const TAPE_SIZE = 128;
 const MACHINE = 6;
+
 type Machine(MACHINE) {
 	fn new(source_code: &char) -> Machine {
-		let jmp_stack: &num = alloc(MAX_LOOP_DEPTH);
-		let jmp_counter: num = 0;
-		let val_ptr: num = 0;
-		let ins_ptr: num = 0;
-		let code: &char = alloc(strlen(source_code) + 1);
+		let jmp_stack = alloc(MAX_LOOP_DEPTH) as &num;
+		let jmp_counter = 0;
+		let val_ptr = 0;
+		let ins_ptr = 0;
+		let code = alloc(strlen(source_code) + 1) as &char;
 		strcpy(code, source_code);
-		let tape: &num = alloc(TAPE_SIZE);
+		let tape = alloc(TAPE_SIZE) as &num;
 
-		jmp_stack; jmp_counter; val_ptr; ins_ptr; tape; code
+		return [
+			jmp_stack,
+			jmp_counter,
+			val_ptr,
+			ins_ptr,
+			tape,
+			code
+		];
 	}
 
-	fn jmp_stack(self: &Machine)   -> &&num  { self }
-	fn jmp_counter(self: &Machine) -> &num   { self + 1 }
-	fn val_ptr(self: &Machine)     -> &num   { self + 2 }
-	fn ins_ptr(self: &Machine)     -> &num   { self + 3 }
-	fn tape(self: &Machine)        -> &&num  { self + 4 }
-	fn code(self: &Machine)        -> &&char { self + 5 }
-	fn token(self: &Machine)       -> &char  { self->code + self->ins_ptr }
+	fn jmp_stack(self: &Machine)   -> &&num  { return self as &&num }
+	fn jmp_counter(self: &Machine) -> &num   { return (self + 1) as &num }
+	fn val_ptr(self: &Machine)     -> &num   { return (self + 2) as &num }
+	fn ins_ptr(self: &Machine)     -> &num   { return (self + 3) as &num }
+	fn tape(self: &Machine)        -> &&num  { return (self + 4) as &&num }
+	fn code(self: &Machine)        -> &&char { return (self + 5) as &&char }
+	fn token(self: &Machine)       -> &char  { return self->code + self->ins_ptr }
 
 	fn plus(self: &Machine)   { self->val = self->val + 1 }
 	fn minus(self: &Machine)  { self->val = self->val - 1 }
@@ -55,7 +63,7 @@ type Machine(MACHINE) {
 		}
 	}
 
-	fn val(self: &Machine) -> &num { self->tape + self->val_ptr }
+	fn val(self: &Machine) -> &num { return self->tape + self->val_ptr }
 
 	fn loop(self: &Machine) {
 		(self->jmp_stack)[self->jmp_counter] = self->ins_ptr;

@@ -1,7 +1,7 @@
 
 type Point(2) {
     fn new(x: num, y: num) -> Point {
-        x; y
+        return [x, y]
     }
 }
 

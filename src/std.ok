@@ -1,12 +1,14 @@
 fn not(x: num) -> num {
-    if x { 0 }
-    else { 1 }
+    let result = 1;
+    if x { result = 0 }
+    return result
 }
 
-fn neq(a: num, b: num) -> num { not(eq(a, b)); }
+fn neq(a: num, b: num) -> num { return not(eq(a, b)); }
 fn eq(a: num, b: num) -> num {
-    if a - b { 0 }
-    else { 1 }
+    let result = 1;
+    if a - b { result = 0 }
+    return result
 }
 
 fn putstr(s: &char) -> void { prs!(s); }
@@ -18,4 +20,4 @@ fn putnumln(n: num) -> void { putnum(n); prend!(); }
 fn putchar(ch: char) -> void { prc!(ch); }
 fn putcharln(ch: char) -> void { putchar(ch); prend!(); }
 
-fn get_char() -> char { getch!(); }
+fn get_char() -> char { return getch!() as char; }

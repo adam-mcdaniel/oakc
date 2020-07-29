@@ -2,23 +2,23 @@
 const ARRAY = 3;
 type Array(ARRAY) {
     fn new(len: num, elem_size: num) -> Array {
-        len; elem_size; alloc(len * elem_size)
+        return [len, elem_size, alloc(len * elem_size)]
     }
 
     fn len(self: &Array) -> &num {
-        self
+        return self as &num
     }
 
     fn elem_size(self: &Array) -> &num {
-        self + 1
+        return (self + 1) as &num
     }
 
     fn contents(self: &Array) -> &&void {
-        self + 2
+        return (self + 2) as &&void
     }
 
     fn idx(self: &Array, n: num) -> &void {
-        self->contents + (n * (self->elem_size))
+        return self->contents + (n * (self->elem_size))
     }
 
     fn print(self: &Array) -> void {
@@ -36,16 +36,16 @@ type Array(ARRAY) {
 
 const DATE = 3;
 type Date(DATE) {
-    fn from(ptr: &void) -> &Date { ptr }
+    fn from(ptr: &void) -> &Date { return ptr as &Date }
     fn new(month: num, day: num, year: num) -> Date {
-        month; day; year
+        return [month, day, year]
     }
 
-    fn birthday() -> Date { Date::new(5, 14, 2002) }
+    fn birthday() -> Date { return Date::new(5, 14, 2002) }
 
-    fn month(self: &Date) -> &num { self }
-    fn day(self: &Date)   -> &num { self + 1 }
-    fn year(self: &Date)  -> &num { self + 2 }
+    fn month(self: &Date) -> &num { return self as &num }
+    fn day(self: &Date)   -> &num { return (self + 1) as &num }
+    fn year(self: &Date)  -> &num { return (self + 2) as &num }
 
     fn print(self: &Date) -> void {
         prn!(self->month);
@@ -58,12 +58,12 @@ type Date(DATE) {
 
     fn yesterday(self: &Date) -> Date {
         self->day = self->day - 1;
-        *self
+        return *self
     }
 
     fn tomorrow(self: &Date) -> Date {
         self->day = self->day + 1;
-        *self
+        return *self
     }
 
     fn next_week(self: &Date) -> Date {
@@ -71,12 +71,12 @@ type Date(DATE) {
         for (let i:num=0; i<10; i=i+1) {
             result = result.tomorrow();
         }
-        result
+        return result
     }
 
     fn next_month(self: &Date) -> Date {
         self->month = self->month + 1;
-        *self
+        return *self
     }
 }
 

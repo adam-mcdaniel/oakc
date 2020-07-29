@@ -1,0 +1,8 @@
+
+
+
+fn test() -> num {
+    return [2, 2];
+}
+
+fn main() {}

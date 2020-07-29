@@ -1,0 +1,13 @@
+
+
+type Date(3) {
+    fn new(m: num, d: num, y: num) -> Date {
+        return [m, d, y]
+    }
+}
+
+fn test() -> num {
+    return Date::new(5, 14, 2002)
+}
+
+fn main() {}
