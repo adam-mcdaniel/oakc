@@ -31,7 +31,12 @@ impl HirProgram {
         self.1 = size;
     }
 
-    pub fn compile(&mut self, cwd: &PathBuf, target: &impl Target, constants: &mut BTreeMap<String, HirConstant>) -> Result<MirProgram, HirError> {
+    pub fn compile(
+        &mut self,
+        cwd: &PathBuf,
+        target: &impl Target,
+        constants: &mut BTreeMap<String, HirConstant>,
+    ) -> Result<MirProgram, HirError> {
         let mut mir_decls = Vec::new();
         let mut heap_size = self.get_heap_size();
 
@@ -93,7 +98,8 @@ impl HirProgram {
                 HirDeclaration::If(cond, code) => {
                     if cond.to_value(constants, target)? != 0.0 {
                         mir_decls.extend(
-                            code.clone().compile(cwd, target, constants)?
+                            code.clone()
+                                .compile(cwd, target, constants)?
                                 .get_declarations(),
                         );
                     }
@@ -102,12 +108,16 @@ impl HirProgram {
                 HirDeclaration::IfElse(cond, then_code, else_code) => {
                     if cond.to_value(constants, target)? != 0.0 {
                         mir_decls.extend(
-                            then_code.clone().compile(cwd, target, constants)?
+                            then_code
+                                .clone()
+                                .compile(cwd, target, constants)?
                                 .get_declarations(),
                         );
                     } else {
                         mir_decls.extend(
-                            else_code.clone().compile(cwd, target, constants)?
+                            else_code
+                                .clone()
+                                .compile(cwd, target, constants)?
                                 .get_declarations(),
                         );
                     }
@@ -263,7 +273,7 @@ pub enum HirConstant {
     Subtract(Box<Self>, Box<Self>),
     Multiply(Box<Self>, Box<Self>),
     Divide(Box<Self>, Box<Self>),
-    
+
     Greater(Box<Self>, Box<Self>),
     Less(Box<Self>, Box<Self>),
     GreaterEqual(Box<Self>, Box<Self>),
@@ -286,12 +296,48 @@ impl HirConstant {
             Self::Float(n) => *n,
             Self::Character(ch) => *ch as u8 as f64,
 
-            Self::Equal(l, r) => if l.to_value(constants, target)? == r.to_value(constants, target)? { 1.0 } else { 0.0 },
-            Self::NotEqual(l, r) => if l.to_value(constants, target)? != r.to_value(constants, target)? { 1.0 } else { 0.0 },
-            Self::Greater(l, r) => if l.to_value(constants, target)? > r.to_value(constants, target)? { 1.0 } else { 0.0 },
-            Self::Less(l, r) => if l.to_value(constants, target)? < r.to_value(constants, target)? { 1.0 } else { 0.0 },
-            Self::GreaterEqual(l, r) => if l.to_value(constants, target)? >= r.to_value(constants, target)? { 1.0 } else { 0.0 },
-            Self::LessEqual(l, r) => if l.to_value(constants, target)? <= r.to_value(constants, target)? { 1.0 } else { 0.0 },
+            Self::Equal(l, r) => {
+                if l.to_value(constants, target)? == r.to_value(constants, target)? {
+                    1.0
+                } else {
+                    0.0
+                }
+            }
+            Self::NotEqual(l, r) => {
+                if l.to_value(constants, target)? != r.to_value(constants, target)? {
+                    1.0
+                } else {
+                    0.0
+                }
+            }
+            Self::Greater(l, r) => {
+                if l.to_value(constants, target)? > r.to_value(constants, target)? {
+                    1.0
+                } else {
+                    0.0
+                }
+            }
+            Self::Less(l, r) => {
+                if l.to_value(constants, target)? < r.to_value(constants, target)? {
+                    1.0
+                } else {
+                    0.0
+                }
+            }
+            Self::GreaterEqual(l, r) => {
+                if l.to_value(constants, target)? >= r.to_value(constants, target)? {
+                    1.0
+                } else {
+                    0.0
+                }
+            }
+            Self::LessEqual(l, r) => {
+                if l.to_value(constants, target)? <= r.to_value(constants, target)? {
+                    1.0
+                } else {
+                    0.0
+                }
+            }
 
             Self::Add(l, r) => l.to_value(constants, target)? + r.to_value(constants, target)?,
             Self::Subtract(l, r) => {
@@ -465,6 +511,8 @@ pub enum HirExpression {
     Less(Box<Self>, Box<Self>),
     GreaterEqual(Box<Self>, Box<Self>),
     LessEqual(Box<Self>, Box<Self>),
+    Equal(Box<Self>, Box<Self>),
+    NotEqual(Box<Self>, Box<Self>),
 
     Refer(Identifier),
     Deref(Box<Self>),
@@ -513,6 +561,16 @@ impl HirExpression {
             ),
 
             Self::LessEqual(l, r) => MirExpression::LessEqual(
+                Box::new(l.to_mir_expr(constants, target)?),
+                Box::new(r.to_mir_expr(constants, target)?),
+            ),
+
+            Self::Equal(l, r) => MirExpression::Equal(
+                Box::new(l.to_mir_expr(constants, target)?),
+                Box::new(r.to_mir_expr(constants, target)?),
+            ),
+
+            Self::NotEqual(l, r) => MirExpression::NotEqual(
                 Box::new(l.to_mir_expr(constants, target)?),
                 Box::new(r.to_mir_expr(constants, target)?),
             ),

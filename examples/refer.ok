@@ -21,12 +21,12 @@ fn inc(c: Counter) {
     c.increment();
     c.increment();
     c.increment();
-    putnumln(c->count);
+    putstr("this should print 3 => "); putnumln(c->count);
 }
 
 fn main() {
     let c = Counter::new();
-    putnumln(c->count);
+    putstr("this should print 0 => "); putnumln(c->count);
     inc(c);
-    putnumln(c->count);
+    putstr("this should print 0 => "); putnumln(c->count);
 }

@@ -837,7 +837,7 @@ impl MirStatement {
             /// Assign an expression to a defined variable
             Self::AssignVariable(var_name, expr) => {
                 // Check to see if the variable has been defined
-                if let Some(t) = vars.get(var_name) {
+                if let Some(t) = vars.clone().get(var_name) {
                     let mut result = Vec::new();
                     // Push the expression to store onto the stack
                     result.extend(expr.assemble(vars, funcs, structs)?);
@@ -1023,6 +1023,8 @@ pub enum MirExpression {
     Less(Box<Self>, Box<Self>),
     GreaterEqual(Box<Self>, Box<Self>),
     LessEqual(Box<Self>, Box<Self>),
+    Equal(Box<Self>, Box<Self>),
+    NotEqual(Box<Self>, Box<Self>),
 
     String(StringLiteral),
     Float(f64),
@@ -1071,7 +1073,9 @@ impl MirExpression {
             | Self::Greater(lhs, rhs)
             | Self::Less(lhs, rhs)
             | Self::GreaterEqual(lhs, rhs)
-            | Self::LessEqual(lhs, rhs) => {
+            | Self::LessEqual(lhs, rhs)
+            | Self::Equal(lhs, rhs)
+            | Self::NotEqual(lhs, rhs) => {
                 lhs.type_check(vars, funcs, structs)?;
                 rhs.type_check(vars, funcs, structs)?;
                 let lhs_type = lhs.get_type(vars, funcs, structs)?;
@@ -1203,11 +1207,29 @@ impl MirExpression {
 
     fn assemble(
         &self,
-        vars: &BTreeMap<Identifier, MirType>,
+        vars: &mut BTreeMap<Identifier, MirType>,
         funcs: &BTreeMap<Identifier, MirFunction>,
         structs: &BTreeMap<Identifier, MirStructure>,
     ) -> Result<Vec<AsmStatement>, MirError> {
         Ok(match self {
+            /// Are two numbers equal?
+            /// I know this expression doesn't type check,
+            /// but it is correctly implemented.
+            Self::Equal(l, r) => MirStatement::IfElse(
+                MirExpression::Subtract(l.clone(), r.clone()),
+                vec![MirStatement::Expression(MirExpression::Float(0.0))],
+                vec![MirStatement::Expression(MirExpression::Float(1.0))],
+            ).assemble(vars, funcs, structs)?,
+            
+            /// Are two numbers not equal?
+            /// I know this expression doesn't type check,
+            /// but it is correctly implemented.
+            Self::NotEqual(l, r) => MirStatement::IfElse(
+                MirExpression::Subtract(l.clone(), r.clone()),
+                vec![MirStatement::Expression(MirExpression::Float(1.0))],
+                vec![MirStatement::Expression(MirExpression::Float(0.0))],
+            ).assemble(vars, funcs, structs)?,
+
             /// A typecast is only a way to explicitly validate
             /// some kinds of typechecks. The typecast expression
             /// has no change on the output code.
@@ -1482,7 +1504,9 @@ impl MirExpression {
             Self::Greater(_, _)
             | Self::Less(_, _)
             | Self::GreaterEqual(_, _)
-            | Self::LessEqual(_, _) => MirType::float(),
+            | Self::LessEqual(_, _)
+            | Self::Equal(_, _)
+            | Self::NotEqual(_, _) => MirType::float(),
             /// Float literals have type `num`
             Self::Float(_) => MirType::float(),
             /// String literals have type `&char`
@@ -1565,6 +1589,8 @@ impl Display for MirExpression {
             Self::Multiply(lhs, rhs) => write!(f, "{}/{}", lhs, rhs),
             Self::Divide(lhs, rhs) => write!(f, "{}/{}", lhs, rhs),
 
+            Self::Equal(lhs, rhs) => write!(f, "{}=={}", lhs, rhs),
+            Self::NotEqual(lhs, rhs) => write!(f, "{}!={}", lhs, rhs),
             Self::Greater(lhs, rhs) => write!(f, "{}>{}", lhs, rhs),
             Self::GreaterEqual(lhs, rhs) => write!(f, "{}>={}", lhs, rhs),
             Self::Less(lhs, rhs) => write!(f, "{}<{}", lhs, rhs),
