@@ -148,6 +148,7 @@ ExpressionAtom: HirExpression = {
     <Num> => HirExpression::Constant(HirConstant::Float(<>)),
     <Char> => HirExpression::Constant(HirConstant::Character(<>)),
 
+    "!" <ExpressionAtom> => HirExpression::Not(Box::new(<>)),
     "&" <name:Ident> => HirExpression::Refer(name),
     "(" <Expression> ")" => <>,
     "-" <ExpressionAtom> => HirExpression::Subtract(Box::new(HirExpression::Constant(HirConstant::Float(0.0))), Box::new(<>)),

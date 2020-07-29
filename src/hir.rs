@@ -507,6 +507,7 @@ pub enum HirExpression {
     Multiply(Box<Self>, Box<Self>),
     Divide(Box<Self>, Box<Self>),
 
+    Not(Box<Self>),
     Greater(Box<Self>, Box<Self>),
     Less(Box<Self>, Box<Self>),
     GreaterEqual(Box<Self>, Box<Self>),
@@ -543,6 +544,10 @@ impl HirExpression {
             Self::Add(l, r) => MirExpression::Add(
                 Box::new(l.to_mir_expr(constants, target)?),
                 Box::new(r.to_mir_expr(constants, target)?),
+            ),
+
+            Self::Not(expr) => MirExpression::Not(
+                Box::new(expr.to_mir_expr(constants, target)?),
             ),
 
             Self::Greater(l, r) => MirExpression::Greater(

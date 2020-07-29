@@ -60,6 +60,9 @@ pub enum MirError {
     /// Adding, subtracting, multiplying, or dividing two
     /// values where one or more of them is not a number.
     NonNumberBinaryOperation(MirExpression, MirExpression),
+    /// Using the not operator or other unary operator
+    /// on a non-number value.
+    NonNumberUnaryOperation(MirExpression),
     /// Calling a function without enough arguments
     NotEnoughArguments(MirExpression),
     /// Calling a function with too many arguments
@@ -138,6 +141,11 @@ impl Display for MirError {
                 f,
                 "cannot use non-numbers '{}' and '{}' in binary operation",
                 lhs, rhs
+            ),
+            Self::NonNumberUnaryOperation(expr) => write!(
+                f,
+                "cannot use non-number '{}' in unary operation",
+                expr
             ),
             Self::NotEnoughArguments(call_expr) => {
                 write!(f, "too few arguments in function call '{}'", call_expr)
@@ -1019,6 +1027,7 @@ pub enum MirExpression {
     Multiply(Box<Self>, Box<Self>),
     Divide(Box<Self>, Box<Self>),
 
+    Not(Box<Self>),
     Greater(Box<Self>, Box<Self>),
     Less(Box<Self>, Box<Self>),
     GreaterEqual(Box<Self>, Box<Self>),
@@ -1060,6 +1069,16 @@ impl MirExpression {
                 // then the expression cannot be cast to this type.
                 if expr.get_type(vars, funcs, structs)?.get_size(structs) != t.get_size(structs) {
                     return Err(MirError::MismatchedCastSize(*expr.clone(), t.clone()));
+                }
+            }
+
+            Self::Not(expr) => {
+                expr.type_check(vars, funcs, structs)?;
+                let expr_type = expr.get_type(vars, funcs, structs)?;
+                if expr_type.get_size(structs)? != 1 {
+                    return Err(MirError::NonNumberUnaryOperation(
+                        *expr.clone(),
+                    ));
                 }
             }
 
@@ -1212,6 +1231,14 @@ impl MirExpression {
         structs: &BTreeMap<Identifier, MirStructure>,
     ) -> Result<Vec<AsmStatement>, MirError> {
         Ok(match self {
+            Self::Not(expr) => {
+                MirStatement::IfElse(
+                    *expr.clone(),
+                    vec![MirStatement::Expression(MirExpression::Float(0.0))],
+                    vec![MirStatement::Expression(MirExpression::Float(1.0))],
+                ).assemble(vars, funcs, structs)?
+            }
+
             /// Are two numbers equal?
             /// I know this expression doesn't type check,
             /// but it is correctly implemented.
@@ -1506,7 +1533,8 @@ impl MirExpression {
             | Self::GreaterEqual(_, _)
             | Self::LessEqual(_, _)
             | Self::Equal(_, _)
-            | Self::NotEqual(_, _) => MirType::float(),
+            | Self::NotEqual(_, _)
+            | Self::Not(_) => MirType::float(),
             /// Float literals have type `num`
             Self::Float(_) => MirType::float(),
             /// String literals have type `&char`
@@ -1584,6 +1612,7 @@ impl Display for MirExpression {
     fn fmt(&self, f: &mut Formatter) -> Result<(), Error> {
         match self {
             Self::TypeCast(expr, t) => write!(f, "{} as {}", expr, t),
+            Self::Not(expr) => write!(f, "!{}", expr),
             Self::Add(lhs, rhs) => write!(f, "{}+{}", lhs, rhs),
             Self::Subtract(lhs, rhs) => write!(f, "{}-{}", lhs, rhs),
             Self::Multiply(lhs, rhs) => write!(f, "{}/{}", lhs, rhs),
