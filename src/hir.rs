@@ -47,8 +47,27 @@ impl HirProgram {
                     structure.to_mir_struct(&constants)?,
                 )),
                 HirDeclaration::Include(filename) => {
-                    if let Ok(contents) = read_to_string(cwd.join(filename)) {
-                        mir_decls.extend(parse(contents).compile(cwd)?.get_declarations());
+                    // This takes the path of the file in the `include` flag
+                    // and appends it to the directory of the file which is
+                    // including it.
+                    //
+                    // So, if `src/main.ok` includes "lib/all.ok",
+                    // `file_path` will be equal to "src/lib/all.ok"
+                    let file_path = cwd.join(filename);
+                    if let Ok(contents) = read_to_string(file_path.clone()) {
+                        // Get the directory of the included file.
+
+                        // If `src/main.ok` includes "lib/all.ok",
+                        // `include_path` will be equal to "src/lib/"
+                        let include_path = if let Some(dir) = file_path.parent() {
+                            PathBuf::from(dir)
+                        } else {
+                            PathBuf::from("./")
+                        };
+
+                        // Compile the included file using the `include_path` as
+                        // the current working directory.
+                        mir_decls.extend(parse(contents).compile(&include_path)?.get_declarations());
                     } else {
                         eprintln!("error: could not include file '{}'", filename);
                         exit(1);
