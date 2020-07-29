@@ -1,6 +1,7 @@
 use std::{
     collections::BTreeMap,
     fmt::{Display, Error, Formatter},
+    path::PathBuf,
 };
 
 use crate::{
@@ -341,6 +342,7 @@ impl MirProgram {
 
     pub fn assemble(&self) -> Result<AsmProgram, MirError> {
         let Self(decls, heap_size) = self.clone();
+        let mut externs = Vec::new();
         let mut funcs = BTreeMap::new();
         let mut structs = BTreeMap::new();
         let mut result = Vec::new();
@@ -362,6 +364,7 @@ impl MirProgram {
                         structs.insert(structure.get_name(), structure.clone());
                     }
                 }
+                MirDeclaration::Extern(filename) => externs.push(filename.clone()),
             }
         }
 
@@ -369,7 +372,7 @@ impl MirProgram {
             result.extend(decl.assemble(&mut funcs, &mut structs)?);
         }
 
-        Ok(AsmProgram::new(result, heap_size))
+        Ok(AsmProgram::new(externs, result, heap_size))
     }
 }
 
@@ -377,6 +380,7 @@ impl MirProgram {
 pub enum MirDeclaration {
     Structure(MirStructure),
     Function(MirFunction),
+    Extern(PathBuf),
 }
 
 impl MirDeclaration {
@@ -388,6 +392,7 @@ impl MirDeclaration {
         Ok(match self {
             Self::Structure(structure) => structure.assemble(funcs, structs)?,
             Self::Function(func) => vec![func.assemble(funcs, structs)?],
+            _ => vec![],
         })
     }
 }
@@ -499,8 +504,6 @@ impl MirFunction {
             stmt.type_check(&vars, funcs, structs)?
         }
 
-
-
         // Check return type
         let mut has_returned = false;
         for (i, stmt) in self.body.iter().enumerate() {
@@ -508,39 +511,39 @@ impl MirFunction {
                 // If the function has already used a return statement,
                 // throw an error.
                 if has_returned {
-                    return Err(MirError::MultipleReturns(self.name.clone()))
+                    return Err(MirError::MultipleReturns(self.name.clone()));
                 }
                 has_returned = true;
 
                 // Get the size of the return statement's stack allocation
                 let mut result_size = 0;
                 for expr in exprs {
-                    result_size += expr.get_type(&vars, funcs, structs)?
-                                    .get_size(structs)?;
+                    result_size += expr.get_type(&vars, funcs, structs)?.get_size(structs)?;
                 }
 
                 // If the result's size is not equal to the size of the
                 // return type, throw a type error.
                 if result_size != self.return_type.get_size(structs)? {
-                    return Err(MirError::MismatchedReturnType(self.name.clone()))
+                    return Err(MirError::MismatchedReturnType(self.name.clone()));
 
                 // If there is only one return argument, check the individual
                 // expression's type against the return type.
-                } else if exprs.len() == 1 && self.return_type != exprs[0]
-                    .get_type(&vars, funcs, structs)? {
-                    return Err(MirError::MismatchedReturnType(self.name.clone()))
+                } else if exprs.len() == 1
+                    && self.return_type != exprs[0].get_type(&vars, funcs, structs)?
+                {
+                    return Err(MirError::MismatchedReturnType(self.name.clone()));
                 }
             // If a statement has a return statement, but is not a return
             // statement itself, it must be a conditional return statement
             } else if stmt.has_return() {
-                return Err(MirError::ConditionalReturn(self.name.clone()))
+                return Err(MirError::ConditionalReturn(self.name.clone()));
             }
         }
 
         // If the function is non-void and has not returned,
         // then throw an error.
         if !has_returned && self.return_type != MirType::void() {
-            return Err(MirError::NonVoidNoReturn(self.name.clone()))
+            return Err(MirError::NonVoidNoReturn(self.name.clone()));
         }
 
         Ok(AsmFunction::new(
@@ -609,30 +612,38 @@ impl MirStatement {
 
             Self::While(_, body) => {
                 for stmt in body {
-                    if stmt.has_return() { return true }
+                    if stmt.has_return() {
+                        return true;
+                    }
                 }
                 false
             }
 
             Self::If(_, body) => {
                 for stmt in body {
-                    if stmt.has_return() { return true }
+                    if stmt.has_return() {
+                        return true;
+                    }
                 }
                 false
             }
 
             Self::IfElse(_, then_body, else_body) => {
                 for stmt in then_body {
-                    if stmt.has_return() { return true }
+                    if stmt.has_return() {
+                        return true;
+                    }
                 }
                 for stmt in else_body {
-                    if stmt.has_return() { return true }
+                    if stmt.has_return() {
+                        return true;
+                    }
                 }
                 false
             }
 
             Self::Return(_) => true,
-            _ => false
+            _ => false,
         }
     }
 
@@ -781,9 +792,9 @@ impl MirStatement {
                     // trust that the user is calling a void foreign
                     // function.
                 } else if expr.get_type(vars, funcs, structs)?.get_size(structs)? != 0 {
-                    return Err(MirError::NonVoidExpressionNotUsed(expr.clone()))
+                    return Err(MirError::NonVoidExpressionNotUsed(expr.clone()));
                 }
-            },
+            }
         }
         Ok(())
     }
@@ -1045,9 +1056,8 @@ impl MirExpression {
 
                 // If the expression and cast type have different sizes,
                 // then the expression cannot be cast to this type.
-                if expr.get_type(vars, funcs, structs)?
-                       .get_size(structs) != t.get_size(structs) {
-                    return Err(MirError::MismatchedCastSize(*expr.clone(), t.clone()))
+                if expr.get_type(vars, funcs, structs)?.get_size(structs) != t.get_size(structs) {
+                    return Err(MirError::MismatchedCastSize(*expr.clone(), t.clone()));
                 }
             }
 

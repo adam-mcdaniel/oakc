@@ -1,0 +1,12 @@
+
+#[if(TARGET == 'c') {
+    #[extern("foreign.c")]
+} else {
+    #[if(TARGET == 'g') {
+        #[extern("foreign.go")]
+    } else {
+        #[error("this program only supports go and c backends")]
+    }]
+}]
+
+fn test() { test!() }

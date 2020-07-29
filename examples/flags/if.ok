@@ -1,0 +1,11 @@
+
+
+const THROW_ERROR = 1;
+
+#[if(THROW_ERROR) {
+    #[error("this is a compile time user error")]
+}]
+
+fn main() {
+
+}

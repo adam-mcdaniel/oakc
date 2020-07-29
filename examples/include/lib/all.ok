@@ -1,2 +1,5 @@
 // Include string library
 #[include("str.ok")]
+#[include("str.ok")]
+#[include("str.ok")]
+#[include("str.ok")]
