@@ -31,61 +31,7 @@ impl HirProgram {
         self.1 = size;
     }
 
-    /// Recursively resolve conditional compilation statements
-    fn resolve_conditions(
-        &mut self,
-        constants: &mut BTreeMap<String, HirConstant>,
-        target: &impl Target
-    ) -> Result<(), HirError> {
-        for (i, decl) in self.get_declarations().iter().enumerate() {
-            match decl {
-                HirDeclaration::Constant(name, constant) => {
-                    constants.insert(name.clone(), constant.clone());
-                }
-                HirDeclaration::If(cond, code) => {
-                    let mut result = self.get_declarations().to_vec();
-                    // Remove the "if" from the declarations
-                    result.remove(i);
-                    // If the condition is true, iterate over the
-                    // body's declarations and insert them into the
-                    // codes declarations
-                    if cond.to_value(&constants, target)? != 0.0 {
-                        for (j, decl) in code.get_declarations().iter().enumerate() {
-                            result.insert(i + j, decl.clone());
-                        }
-                    }
-                    // Save the result
-                    self.0 = result;
-                    return self.resolve_conditions(constants, target);
-                }
-                HirDeclaration::IfElse(cond, then_code, else_code) => {
-                    let mut result = self.get_declarations().to_vec();
-                    // Get which branch to compile
-                    let code;
-                    if cond.to_value(&constants, target)? != 0.0 {
-                        code = then_code;
-                    } else {
-                        code = else_code;
-                    }
-                    // Remove the "if else" from the declarations
-                    result.remove(i);
-                    // Iterate over the body's declarations
-                    // and insert them into the codes declarations.
-                    for (j, decl) in code.get_declarations().iter().enumerate() {
-                        result.insert(i + j, decl.clone());
-                    }
-                    // Save the result
-                    self.0 = result;
-                    return self.resolve_conditions(constants, target);
-                }
-                _ => {}
-            }
-        }
-        Ok(())
-    }
-
-    pub fn compile(&mut self, cwd: &PathBuf, target: &impl Target) -> Result<MirProgram, HirError> {
-        let mut constants = BTreeMap::new();
+    pub fn compile(&mut self, cwd: &PathBuf, target: &impl Target, constants: &mut BTreeMap<String, HirConstant>) -> Result<MirProgram, HirError> {
         let mut mir_decls = Vec::new();
         let mut heap_size = self.get_heap_size();
 
@@ -95,9 +41,6 @@ impl HirProgram {
                 constants.insert(name.clone(), constant.clone());
             }
         }
-
-        // Resolve conditional compilation statements
-        self.resolve_conditions(&mut constants, target);
 
         for decl in self.get_declarations() {
             /// The reason we don't handle conditional compilation here
@@ -137,7 +80,7 @@ impl HirProgram {
                         // the current working directory.
                         mir_decls.extend(
                             parse(contents)
-                                .compile(&include_path, target)?
+                                .compile(&include_path, target, constants)?
                                 .get_declarations(),
                         );
                     } else {
@@ -145,6 +88,30 @@ impl HirProgram {
                         exit(1);
                     }
                 }
+
+                HirDeclaration::If(cond, code) => {
+                    if cond.to_value(constants, target)? != 0.0 {
+                        mir_decls.extend(
+                            code.clone().compile(cwd, target, constants)?
+                                .get_declarations(),
+                        );
+                    }
+                }
+
+                HirDeclaration::IfElse(cond, then_code, else_code) => {
+                    if cond.to_value(constants, target)? != 0.0 {
+                        mir_decls.extend(
+                            then_code.clone().compile(cwd, target, constants)?
+                                .get_declarations(),
+                        );
+                    } else {
+                        mir_decls.extend(
+                            else_code.clone().compile(cwd, target, constants)?
+                                .get_declarations(),
+                        );
+                    }
+                }
+                
                 HirDeclaration::HeapSize(size) => {
                     heap_size = *size;
                 }

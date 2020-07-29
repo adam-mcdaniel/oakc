@@ -1,5 +1,5 @@
 #![allow(warnings, clippy, unknown_lints)]
-use std::{io::Result, path::PathBuf, process::exit};
+use std::{collections::BTreeMap, io::Result, path::PathBuf, process::exit};
 pub type Identifier = String;
 pub type StringLiteral = String;
 
@@ -18,7 +18,7 @@ use lalrpop_util::{lalrpop_mod, ParseError};
 lalrpop_mod!(pub parser);
 
 pub fn compile(cwd: &PathBuf, input: impl ToString, target: impl Target) -> Result<()> {
-    match parse(input).compile(cwd, &target) {
+    match parse(input).compile(cwd, &target, &mut BTreeMap::new()) {
         Ok(mir) => match mir.assemble(cwd) {
             Ok(asm) => match asm.assemble(cwd, &target) {
                 // Add the target's prelude, the FFI code from the user,
