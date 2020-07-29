@@ -6,6 +6,7 @@ grammar;
 pub Program: HirProgram = <(Declaration)*> => HirProgram::new(<>, 512);
 
 Declaration: HirDeclaration = {
+    "#" "[" "assert" "(" <Constant> ")" "]" => HirDeclaration::Assert(<>),
     "#" "[" "extern" "(" <Str> ")" "]" => HirDeclaration::Extern(<>),
     "#" "[" "include" "(" <Str> ")" "]" => HirDeclaration::Include(<>),
     "#" "[" "heap" "(" <Num> ")" "]" => HirDeclaration::HeapSize(<> as i32),
