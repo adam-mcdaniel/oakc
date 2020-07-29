@@ -87,7 +87,7 @@ impl Debug for AsmType {
 
 #[derive(Clone, Debug)]
 pub struct AsmProgram {
-    externs: Vec<String>,
+    externs: Vec<PathBuf>,
     funcs: Vec<AsmFunction>,
     heap_size: i32,
 }
@@ -95,7 +95,7 @@ pub struct AsmProgram {
 impl AsmProgram {
     const ENTRY_POINT: &'static str = "main";
 
-    pub fn new(externs: Vec<String>, funcs: Vec<AsmFunction>, heap_size: i32) -> Self {
+    pub fn new(externs: Vec<PathBuf>, funcs: Vec<AsmFunction>, heap_size: i32) -> Self {
         Self {
             externs,
             funcs,
@@ -103,20 +103,23 @@ impl AsmProgram {
         }
     }
 
-    pub fn assemble(&self, cwd: &PathBuf, target: &impl Target) -> Result<String, AsmError> {
+    pub fn assemble(&self, target: &impl Target) -> Result<String, AsmError> {
         // Set up the output code
         let mut result = String::new();
 
         // Iterate over the external files to include
         for filename in &self.externs {
             // Find them in the current working directory
-            let file_path = cwd.join(filename.clone());
-            if let Ok(contents) = read_to_string(file_path.clone()) {
+            if let Ok(contents) = read_to_string(filename.clone()) {
                 // Add the contents of the file to the result
                 result += &contents
             } else {
                 // If the file doesn't exist, throw an error
-                return Err(AsmError::NonExistantExternFile(filename.clone()));
+                if let Ok(name) = filename.clone().into_os_string().into_string() {
+                    return Err(AsmError::NonExistantExternFile(name));
+                } else {
+                    return Err(AsmError::NonExistantExternFile(String::from("")));
+                }
             }
         }
 

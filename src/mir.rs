@@ -340,7 +340,7 @@ impl MirProgram {
         self.1
     }
 
-    pub fn assemble(&self, cwd: &PathBuf) -> Result<AsmProgram, MirError> {
+    pub fn assemble(&self) -> Result<AsmProgram, MirError> {
         let Self(decls, heap_size) = self.clone();
         let mut externs = Vec::new();
         let mut funcs = BTreeMap::new();
@@ -380,7 +380,7 @@ impl MirProgram {
 pub enum MirDeclaration {
     Structure(MirStructure),
     Function(MirFunction),
-    Extern(String),
+    Extern(PathBuf),
 }
 
 impl MirDeclaration {

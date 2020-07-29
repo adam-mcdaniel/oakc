@@ -19,8 +19,8 @@ lalrpop_mod!(pub parser);
 
 pub fn compile(cwd: &PathBuf, input: impl ToString, target: impl Target) -> Result<()> {
     match parse(input).compile(cwd, &target, &mut BTreeMap::new()) {
-        Ok(mir) => match mir.assemble(cwd) {
-            Ok(asm) => match asm.assemble(cwd, &target) {
+        Ok(mir) => match mir.assemble() {
+            Ok(asm) => match asm.assemble(&target) {
                 // Add the target's prelude, the FFI code from the user,
                 // the compiled Oak code, and the target's postlude
                 Ok(result) => target.compile(target.prelude() + &result + &target.postlude()),

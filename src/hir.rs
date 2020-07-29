@@ -54,7 +54,8 @@ impl HirProgram {
                     structure.to_mir_struct(&constants, target)?,
                 )),
                 HirDeclaration::Extern(filename) => {
-                    mir_decls.push(MirDeclaration::Extern(filename.clone()))
+                    let file_path = cwd.join(filename.clone());
+                    mir_decls.push(MirDeclaration::Extern(file_path))
                 }
                 HirDeclaration::Error(err) => return Err(HirError::UserError(err.clone())),
                 HirDeclaration::Include(filename) => {
@@ -111,7 +112,7 @@ impl HirProgram {
                         );
                     }
                 }
-                
+
                 HirDeclaration::HeapSize(size) => {
                     heap_size = *size;
                 }

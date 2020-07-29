@@ -1,4 +1,5 @@
 
+// The `isdef` guard prevents redefining functions
 #[if(!isdef("STR")) {
     const STR = 1;
 
