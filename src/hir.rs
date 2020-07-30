@@ -58,6 +58,11 @@ impl HirProgram {
                 HirDeclaration::Structure(structure) => mir_decls.push(MirDeclaration::Structure(
                     structure.to_mir_struct(&constants, target)?,
                 )),
+                HirDeclaration::Assert(constant) => {
+                    if constant.to_value(constants, target)? == 0.0 {
+                        return Err(HirError::FailedAssertion(constant.clone()))
+                    }
+                }
                 HirDeclaration::Extern(filename) => {
                     let file_path = cwd.join(filename.clone());
                     mir_decls.push(MirDeclaration::Extern(file_path))
@@ -137,6 +142,7 @@ impl HirProgram {
 #[derive(Clone, Debug)]
 pub enum HirError {
     ConstantNotDefined(Identifier),
+    FailedAssertion(HirConstant),
     UserError(String),
 }
 
@@ -145,6 +151,7 @@ impl Display for HirError {
         match self {
             Self::ConstantNotDefined(name) => write!(f, "constant '{}' is not defined", name),
             Self::UserError(err) => write!(f, "{}", err),
+            Self::FailedAssertion(assertion) => write!(f, "failed assertion '{}'", assertion),
         }
     }
 }
@@ -175,6 +182,7 @@ pub enum HirDeclaration {
     Constant(Identifier, HirConstant),
     Function(HirFunction),
     Structure(HirStructure),
+    Assert(HirConstant),
     If(HirConstant, HirProgram),
     IfElse(HirConstant, HirProgram, HirProgram),
     Error(String),
@@ -284,6 +292,29 @@ pub enum HirConstant {
     Constant(Identifier),
     IsDefined(String),
     Not(Box<Self>),
+}
+
+
+impl Display for HirConstant {
+    fn fmt(&self, f: &mut Formatter) -> Result<(), Error> {
+        match self {
+            Self::Float(n) => write!(f, "{}", n),
+            Self::Character(ch) => write!(f, "'{}'", ch),
+            Self::Add(l, r) => write!(f, "{}+{}", l, r),
+            Self::Subtract(l, r) => write!(f, "{}-{}", l, r),
+            Self::Multiply(l, r) => write!(f, "{}*{}", l, r),
+            Self::Divide(l, r) => write!(f, "{}/{}", l, r),
+            Self::Greater(l, r) => write!(f, "{}>{}", l, r),
+            Self::Less(l, r) => write!(f, "{}<{}", l, r),
+            Self::GreaterEqual(l, r) => write!(f, "{}>={}", l, r),
+            Self::LessEqual(l, r) => write!(f, "{}<={}", l, r),
+            Self::Equal(l, r) => write!(f, "{}=={}", l, r),
+            Self::NotEqual(l, r) => write!(f, "{}!={}", l, r),
+            Self::Constant(name) => write!(f, "{}", name),
+            Self::IsDefined(name) => write!(f, "isdef(\"{}\")", name),
+            Self::Not(expr) => write!(f, "!{}", expr),
+        }
+    }
 }
 
 impl HirConstant {
