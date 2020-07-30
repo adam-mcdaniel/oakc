@@ -1,0 +1,6 @@
+#[std]
+
+fn main() {
+    // putstrln works!
+    putstrln("Hello world!")
+}

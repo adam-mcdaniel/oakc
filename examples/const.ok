@@ -1,5 +1,4 @@
-
-
+#[std]
 
 const Y = X + 1;
 const X = 1;

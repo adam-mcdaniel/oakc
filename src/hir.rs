@@ -17,9 +17,13 @@ impl HirProgram {
         Self(decls, heap_size)
     }
 
-    pub fn get_declarations(&self) -> &[HirDeclaration] {
+    pub fn get_declarations(&self) -> &Vec<HirDeclaration> {
         let Self(decls, _) = self;
         decls
+    }
+
+    pub fn extend_declarations(&mut self, decls: &Vec<HirDeclaration>) {
+        self.0.extend(decls.clone())
     }
 
     pub fn get_heap_size(&self) -> i32 {
@@ -31,9 +35,21 @@ impl HirProgram {
         self.1 = size;
     }
 
-    pub fn compile(&mut self, cwd: &PathBuf, target: &impl Target, constants: &mut BTreeMap<String, HirConstant>) -> Result<MirProgram, HirError> {
+    pub fn use_std(&self) -> bool {
+        for decl in self.get_declarations() {
+            match decl {
+                HirDeclaration::NoStd => return false,
+                HirDeclaration::RequireStd => return true,
+                _ => {}
+            }
+        }
+        false
+    }
+
+    pub fn compile(&self, cwd: &PathBuf, target: &impl Target, constants: &mut BTreeMap<String, HirConstant>) -> Result<MirProgram, HirError> {
         let mut mir_decls = Vec::new();
         let mut heap_size = self.get_heap_size();
+        let mut std_required = None;
 
         // Iterate over the declarations and retreive the constants
         for decl in self.get_declarations() {
@@ -53,6 +69,16 @@ impl HirProgram {
                 HirDeclaration::Structure(structure) => mir_decls.push(MirDeclaration::Structure(
                     structure.to_mir_struct(&constants, target)?,
                 )),
+                HirDeclaration::RequireStd => if let Some(false) = std_required {
+                    return Err(HirError::ConflictingStdReqs)
+                } else {
+                    std_required = Some(true)
+                },
+                HirDeclaration::NoStd => if let Some(true) = std_required {
+                    return Err(HirError::ConflictingStdReqs)
+                } else {
+                    std_required = Some(false)
+                },
                 HirDeclaration::Extern(filename) => {
                     let file_path = cwd.join(filename.clone());
                     mir_decls.push(MirDeclaration::Extern(file_path))
@@ -127,6 +153,7 @@ impl HirProgram {
 #[derive(Clone, Debug)]
 pub enum HirError {
     ConstantNotDefined(Identifier),
+    ConflictingStdReqs,
     UserError(String),
 }
 
@@ -135,6 +162,7 @@ impl Display for HirError {
         match self {
             Self::ConstantNotDefined(name) => write!(f, "constant '{}' is not defined", name),
             Self::UserError(err) => write!(f, "{}", err),
+            Self::ConflictingStdReqs => write!(f, "conflicting 'require_std' and 'no_std' flags present"),
         }
     }
 }
@@ -171,6 +199,8 @@ pub enum HirDeclaration {
     Extern(String),
     Include(String),
     HeapSize(i32),
+    RequireStd,
+    NoStd
 }
 
 #[derive(Clone, Debug)]

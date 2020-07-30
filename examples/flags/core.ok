@@ -1,0 +1,7 @@
+#[no_std]
+
+fn main() {
+    // `core.ok` implements the `not` function,
+    // so this file compiles
+    let x = not(1);
+}

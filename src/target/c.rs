@@ -10,11 +10,15 @@ pub struct C;
 impl Target for C {
     fn get_name(&self) -> char { 'c' }
 
-    fn prelude(&self) -> String {
-        String::from(include_str!("std.c"))
+    fn std(&self) -> String {
+        String::from(include_str!("std/std.c"))
     }
 
-    fn postlude(&self) -> String {
+    fn core_prelude(&self) -> String {
+        String::from(include_str!("core/core.c"))
+    }
+
+    fn core_postlude(&self) -> String {
         String::new()
     }
 

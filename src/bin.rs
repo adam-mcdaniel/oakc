@@ -19,9 +19,7 @@ fn main() {
     .get_matches();
 
     if let Some(input_file) = matches.value_of("FILE") {
-        if let Ok(mut contents) = read_to_string(input_file) {
-            contents += include_str!("std.ok");
-
+        if let Ok(contents) = read_to_string(input_file) {
             let cwd = if let Some(dir) = PathBuf::from(input_file).parent() {
                 PathBuf::from(dir)
             } else {

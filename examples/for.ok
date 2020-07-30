@@ -1,3 +1,4 @@
+#[std]
 #[heap(10)]
 
 fn inc(n: &num) -> void {

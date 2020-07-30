@@ -1,4 +1,6 @@
+#[std]
 #[heap(512)]
+
 const ARRAY = 3;
 type Array(ARRAY) {
     fn new(len: num, elem_size: num) -> Array {

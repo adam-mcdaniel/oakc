@@ -1,5 +1,4 @@
-
-
+#[std]
 
 type Counter(1) {
     fn new() -> Counter { return 0 as Counter }
