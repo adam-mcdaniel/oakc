@@ -5,6 +5,12 @@ interface machine {
 	stack_ptr: number;
 }
 
+const OAK_TS__PSEUDO_CONSOLE = document.getElementById("oak-out");
+
+function OAK_TS__PRINT(x: any){
+	if(OAK_TS__PSEUDO_CONSOLE) OAK_TS__PSEUDO_CONSOLE.innerHTML += x;
+	else console.log(x);
+}
 
 ///////////////////////////////////////////////////////////////////////
 ///////////////////////////// Error codes /////////////////////////////
@@ -49,26 +55,26 @@ function machine_new(vars: number, capacity: number): machine {
 
 // Free the virtual machine's memory. This is called at the end of the program.
 function machine_drop(vm: machine): void {
-	// number i;
-	// console.log("stack: [ ");
-	// for (i=0; i<vm.stack_ptr; i++)
-	//	 console.log("%g ", vm.memory[i]);
-	// for (i=vm.stack_ptr; i<vm.capacity; i++)
-	//	 console.log("  ");
-	// console.log("]\nheap:  [ ");
-	// for (i=0; i<vm.stack_ptr; i++)
-	//	 console.log("  ");
-	// for (i=vm.stack_ptr; i<vm.capacity; i++)
-	//	 console.log("%g ", vm.memory[i]);
-	// console.log("]\nalloc: [ ");
-	// for (i=0; i<vm.capacity; i++)
-	//	 console.log("%d ", vm.allocated[i]);
-	// console.log("]\n");
-	// number total = 0;
-	// for (i=0; i<vm.capacity; i++)
-	//	 total += vm.allocated[i];
-	// console.log("STACK SIZE	%d\n", vm.stack_ptr);
-	// console.log("TOTAL ALLOC'D %d\n", total);
+	//let i:number;
+	//OAK_TS__PRINT("stack: [ ");
+	//for (i=0; i<vm.stack_ptr; i++)
+	//	OAK_TS__PRINT(vm.memory[i]);
+	//for (i=vm.stack_ptr; i<vm.capacity; i++)
+	//	OAK_TS__PRINT("  ");
+	//OAK_TS__PRINT("]\nheap:  [ ");
+	//for (i=0; i<vm.stack_ptr; i++)
+	//	OAK_TS__PRINT("  ");
+	//for (i=vm.stack_ptr; i<vm.capacity; i++)
+	//	OAK_TS__PRINT(`${vm.memory[i]} `);
+	//OAK_TS__PRINT("]\nalloc: [ ");
+	//for (i=0; i<vm.capacity; i++)
+	//	OAK_TS__PRINT(`${vm.allocated[i]} `);
+	//OAK_TS__PRINT("]\n");
+	//let total: number = 0;
+	//for (i=0; i<vm.capacity; i++)
+	//	total += vm.allocated[i] ? 1 : 0;
+	//OAK_TS__PRINT(`STACK SIZE	${vm.stack_ptr}\n`);
+	//OAK_TS__PRINT(`TOTAL ALLOC'D ${total}\n`);
 
 	//free(vm.memory);
 	//free(vm.allocated);
@@ -170,35 +176,48 @@ function machine_divide(vm: machine): void {
 
 function prn(vm: machine): void {
 	let n = machine_pop(vm);
-	console.log(n);
+	OAK_TS__PRINT(n);
+	
 }
 
 function prs(vm: machine): void {
 	let addr = machine_pop(vm);
 	for (let i=addr; vm.memory[i]; i++) {
-		console.log(String.fromCharCode(vm.memory[i]));
+		OAK_TS__PRINT(String.fromCharCode(vm.memory[i]));
 	}
 }
 
 function prc(vm: machine): void {
 	let n = machine_pop(vm);
-	console.log(String.fromCharCode(n));
+	OAK_TS__PRINT(String.fromCharCode(n));
 }
 
 function prend(vm: machine): void {
-	console.log("\n");
+	OAK_TS__PRINT("<br />");
 }
 
 async function getch(vm: machine): Promise<void> {
+	//doesn't work
 	//https://stackoverflow.com/questions/44746592/is-there-a-way-to-write-async-await-code-that-responds-to-onkeypress-events
 	async function readKey(): Promise<KeyboardEvent>{
 		return new Promise(resolve => {
 			window.addEventListener('keypress', resolve, {once:true});
 		});
 	}
-	let ch: number = (await readKey()).keyCode;
-	if (String.fromCharCode(ch) == '\r') {
-		ch = (await readKey()).keyCode;
+	let key: string = (await readKey()).key;
+	let ch: number;
+	//if (ch === '\r'.charCodeAt(0)) {
+	//	key = (await readKey()).key;
+	//	ch = key.charCodeAt(0);
+	//}
+
+	if (key === "Enter") {
+		ch = "\n".charCodeAt(0);
+	} else if (key.length > 1){
+		//find a way to make this non-recursive
+		getch(vm);
+	} else {
+		ch = key.charCodeAt(0);
 	}
 	machine_push(vm, ch);
 }

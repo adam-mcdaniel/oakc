@@ -68,15 +68,15 @@ impl Target for TS {
     }
 
     fn fn_definition(&self, name: String, body: String) -> String {
-        format!("function {}(vm: machine): void {{ {}}}\n", name, body)
+        format!("async function {}(vm: machine): void {{ {}}}\n", name, body)
     }
 
     fn call_fn(&self, name: String) -> String {
-        format!("{}(vm);\n", name)
+        format!("await {}(vm);\n", name)
     }
 
     fn call_foreign_fn(&self, name: String) -> String {
-        format!("{}(vm);\n", name)
+        format!("await {}(vm);\n", name)
     }
 
     fn begin_while(&self) -> String {
