@@ -1,4 +1,5 @@
 #[std]
+#[no_std]
 
 fn main() {
 
