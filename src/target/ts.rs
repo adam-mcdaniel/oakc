@@ -2,11 +2,15 @@ use super::Target;
 use std::{
     env::consts::EXE_SUFFIX,
     fs::{remove_file, write},
-    process::Command,
+    io::{Error, ErrorKind, Result, Write},
+    process::{Command, Stdio},
 };
+
 
 pub struct TS;
 impl Target for TS {
+	fn get_name(&self) -> char { 'T' }
+
     fn prelude(&self) -> String {
         String::from(include_str!("std.ts"))
     }
@@ -45,6 +49,10 @@ impl Target for TS {
 
     fn divide(&self) -> String {
         String::from("machine_divide(vm);\n")
+	}
+	
+	fn sign(&self) -> String {
+        String::from("machine_sign(vm);\n")
     }
 
     fn allocate(&self) -> String {
@@ -87,7 +95,7 @@ impl Target for TS {
         String::from("}\n")
     }
 
-    fn compile(&self, code: String) -> bool {
+    fn compile(&self, code: String) -> Result<()> {
         if let Ok(_) = write("OUTPUT.ts", code) {
             if let Ok(_) = Command::new("tsc")
 				.arg("OUTPUT.ts")
@@ -98,10 +106,10 @@ impl Target for TS {
                 .output()
             {
                 if let Ok(_) = remove_file("OUTPUT.ts") {
-                    return true;
+            		return Result::Ok(());
                 }
             }
-        }
-        false
+		}
+		Result::Err(Error::new(ErrorKind::Other, "error compiling "))
     }
 }
