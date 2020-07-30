@@ -1,0 +1,12 @@
+
+type Two(2) {
+    fn new() -> Two { return [2, 2] }
+}
+type Three(3) {
+    fn new() -> Three { return [3, 3, 3] }
+}
+
+
+fn main() {
+    let three = Two::new() as Three;
+}

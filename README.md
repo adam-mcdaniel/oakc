@@ -16,7 +16,7 @@ I'm a freshly minted highschool graduate and freshman in college looking for wor
 
 ## Intermediate Representation
 
-The key to oak's insane portability is its incredibly compact backend implementation. _The code for Oak's backend can be expressed in under 100 lines of C._ Such a small implementation is only possible because of the tiny instruction set of the intermediate representation. Oak's IR is only composed of **_13 different instructions_**. That's on par with [brainfuck](https://esolangs.org/wiki/Brainfuck)!
+The key to oak's insane portability is its incredibly compact backend implementation. _The code for Oak's backend can be expressed in under 100 lines of C._ Such a small implementation is only possible because of the tiny instruction set of the intermediate representation. Oak's IR is only composed of **_14 different instructions_**. That's on par with [brainfuck](https://esolangs.org/wiki/Brainfuck)!
 
 The backend of oak functions very simply. Every instruction operates on a _memory tape_. This tape is essentially a static array of double-precision floats.
 
@@ -43,6 +43,7 @@ Now that you understand how oak's backend fundamentally operates, here's the com
 | `subtract();` | Pop two numbers off of the stack. Subtract the first from the second, and push the result. |
 | `multiply();` | Pop two numbers off of the stack, and push their product. |
 | `divide();` | Pop two numbers off of the stack. Divide the second by the first, and push the result. |
+| `sign();` | Pop a number off of the stack. If it is greater or equal to zero, push `1`, otherwise push `-1`. |
 | `allocate();` | Pop a number off of the stack, and return a pointer to that number of free cells on the heap. |
 | `free();` | Pop a number off of the stack, and go to where this number points in memory. Pop another number off of the stack, and free that many cells at this location in memory. |
 | `store(size: i32);` | Pop a number off of the stack, and go to where this number points in memory. Then, pop `size` numbers off of the stack. Store these numbers in reverse order at this location in memory. |
@@ -95,39 +96,35 @@ fn main() -> 0 {
 The syntax of oak is heavily inspired by the Rust programming language.
 
 ```rust
-// Flag to include another file in this directory
-// If this file contains a "main" method, it will be overridden.
-#[include("str.ok")]
-
 // An optional flag to set the exact number of memory cells to use for the heap.
 // This makes Oak an extremely suitable language for embedded development!
 #[heap(128)]
 
-// The `1` here is the size of the type on the stack
 type bool(1) {
-    fn true()  -> bool { 1 }
-    fn false() -> bool { 0 }
+    fn true()  -> bool { return 1 as bool }
+    fn false() -> bool { return 0 as bool }
 
-    fn val(self: &bool) -> &num { self }
+    fn val(self: &bool) -> &num { return self as &num }
 
     fn not(self: &bool) -> bool {
-        if *self { bool::false() }
-        else { bool::true() }
+        let result: bool = bool::true();
+        // "self->val" is equivalent to "*self.val()"
+        if self->val { result = bool::false(); }
+        return result
     }
 }
 
 fn main() {
     putnumln(square(5));
 
-    let b: bool = bool::false();
+    let b = bool::false();
     putboolln(b);
     // assign to b's "val" attribute
     b->val = 1;
     putboolln(b);
-
     b = bool::true();
     putboolln(b);
-    
+
     let size: num = 32;
     // Allocate 32 cells
     let addr: &char = alloc(size);
@@ -137,8 +134,11 @@ fn main() {
 
 
 fn putbool(b: bool) {
-    if b { putstr("true") }
-    else { putstr("false") }
+    if b {
+        putstr("true");
+    } else {
+        putstr("false");
+    }
 }
 
 fn putboolln(b: bool) {
@@ -147,9 +147,11 @@ fn putboolln(b: bool) {
 
 // Functions can be ordered independently
 fn square(x: num) -> num {
-    putstr("Squaring the number '"); putnum(x); putcharln('\'');
+    putstr("Squaring the number '");
+    putnum(x);
+    putcharln('\'');
     // The last statement in a body doesn't require brackets
-    x * x
+    return x * x
 }
 ```
 

@@ -4,7 +4,7 @@ use crate::{
     mir::{
         MirDeclaration, MirExpression, MirFunction, MirProgram, MirStatement, MirStructure, MirType,
     },
-    parse, Identifier, StringLiteral,
+    parse, Identifier, StringLiteral, Target,
 };
 
 use core::fmt::{Display, Error, Formatter};
@@ -31,32 +31,92 @@ impl HirProgram {
         self.1 = size;
     }
 
-    pub fn compile(&self, cwd: &PathBuf) -> Result<MirProgram, HirError> {
-        let mut constants = BTreeMap::new();
+    pub fn compile(&mut self, cwd: &PathBuf, target: &impl Target, constants: &mut BTreeMap<String, HirConstant>) -> Result<MirProgram, HirError> {
         let mut mir_decls = Vec::new();
         let mut heap_size = self.get_heap_size();
+
+        // Iterate over the declarations and retreive the constants
         for decl in self.get_declarations() {
+            if let HirDeclaration::Constant(name, constant) = decl {
+                constants.insert(name.clone(), constant.clone());
+            }
+        }
+
+        for decl in self.get_declarations() {
+            /// The reason we don't handle conditional compilation here
+            /// is because it does not allow constants to be defined in
+            /// the `if` statements' body.
             match decl {
-                HirDeclaration::Constant(name, constant) => {
-                    constants.insert(name.clone(), constant.clone());
-                }
-                HirDeclaration::Function(func) => {
-                    mir_decls.push(MirDeclaration::Function(func.to_mir_fn(&constants)?))
-                }
-                HirDeclaration::Structure(structure) => mir_decls.push(MirDeclaration::Structure(
-                    structure.to_mir_struct(&constants)?,
+                HirDeclaration::Function(func) => mir_decls.push(MirDeclaration::Function(
+                    func.to_mir_fn(&constants, target)?,
                 )),
+                HirDeclaration::Structure(structure) => mir_decls.push(MirDeclaration::Structure(
+                    structure.to_mir_struct(&constants, target)?,
+                )),
+                HirDeclaration::Extern(filename) => {
+                    let file_path = cwd.join(filename.clone());
+                    mir_decls.push(MirDeclaration::Extern(file_path))
+                }
+                HirDeclaration::Error(err) => return Err(HirError::UserError(err.clone())),
                 HirDeclaration::Include(filename) => {
-                    if let Ok(contents) = read_to_string(cwd.join(filename)) {
-                        mir_decls.extend(parse(contents).compile(cwd)?.get_declarations());
+                    // This takes the path of the file in the `include` flag
+                    // and appends it to the directory of the file which is
+                    // including it.
+                    //
+                    // So, if `src/main.ok` includes "lib/all.ok",
+                    // `file_path` will be equal to "src/lib/all.ok"
+                    let file_path = cwd.join(filename.clone());
+                    if let Ok(contents) = read_to_string(file_path.clone()) {
+                        // Get the directory of the included file.
+
+                        // If `src/main.ok` includes "lib/all.ok",
+                        // `include_path` will be equal to "src/lib/"
+                        let include_path = if let Some(dir) = file_path.parent() {
+                            PathBuf::from(dir)
+                        } else {
+                            PathBuf::from("./")
+                        };
+
+                        // Compile the included file using the `include_path` as
+                        // the current working directory.
+                        mir_decls.extend(
+                            parse(contents)
+                                .compile(&include_path, target, constants)?
+                                .get_declarations(),
+                        );
                     } else {
                         eprintln!("error: could not include file '{}'", filename);
                         exit(1);
                     }
                 }
+
+                HirDeclaration::If(cond, code) => {
+                    if cond.to_value(constants, target)? != 0.0 {
+                        mir_decls.extend(
+                            code.clone().compile(cwd, target, constants)?
+                                .get_declarations(),
+                        );
+                    }
+                }
+
+                HirDeclaration::IfElse(cond, then_code, else_code) => {
+                    if cond.to_value(constants, target)? != 0.0 {
+                        mir_decls.extend(
+                            then_code.clone().compile(cwd, target, constants)?
+                                .get_declarations(),
+                        );
+                    } else {
+                        mir_decls.extend(
+                            else_code.clone().compile(cwd, target, constants)?
+                                .get_declarations(),
+                        );
+                    }
+                }
+
                 HirDeclaration::HeapSize(size) => {
                     heap_size = *size;
                 }
+                _ => {}
             }
         }
 
@@ -67,12 +127,14 @@ impl HirProgram {
 #[derive(Clone, Debug)]
 pub enum HirError {
     ConstantNotDefined(Identifier),
+    UserError(String),
 }
 
 impl Display for HirError {
     fn fmt(&self, f: &mut Formatter) -> Result<(), Error> {
         match self {
             Self::ConstantNotDefined(name) => write!(f, "constant '{}' is not defined", name),
+            Self::UserError(err) => write!(f, "{}", err),
         }
     }
 }
@@ -103,6 +165,10 @@ pub enum HirDeclaration {
     Constant(Identifier, HirConstant),
     Function(HirFunction),
     Structure(HirStructure),
+    If(HirConstant, HirProgram),
+    IfElse(HirConstant, HirProgram, HirProgram),
+    Error(String),
+    Extern(String),
     Include(String),
     HeapSize(i32),
 }
@@ -126,15 +192,16 @@ impl HirStructure {
     pub fn to_mir_struct(
         &self,
         constants: &BTreeMap<Identifier, HirConstant>,
+        target: &impl Target,
     ) -> Result<MirStructure, HirError> {
         let mut mir_methods = Vec::new();
         for method in self.methods.clone() {
-            mir_methods.push(method.to_mir_fn(constants)?);
+            mir_methods.push(method.to_mir_fn(constants, target)?);
         }
 
         Ok(MirStructure::new(
             self.name.clone(),
-            self.size.to_value(constants)? as i32,
+            self.size.to_value(constants, target)? as i32,
             mir_methods,
         ))
     }
@@ -166,6 +233,7 @@ impl HirFunction {
     pub fn to_mir_fn(
         &self,
         constants: &BTreeMap<Identifier, HirConstant>,
+        target: &impl Target,
     ) -> Result<MirFunction, HirError> {
         let mut mir_args = Vec::new();
         for (arg_name, arg_type) in self.args.clone() {
@@ -174,7 +242,7 @@ impl HirFunction {
 
         let mut mir_body = Vec::new();
         for stmt in self.body.clone() {
-            mir_body.push(stmt.to_mir_stmt(constants)?);
+            mir_body.push(stmt.to_mir_stmt(constants, target)?);
         }
 
         Ok(MirFunction::new(
@@ -188,7 +256,6 @@ impl HirFunction {
 
 #[derive(Clone, Debug)]
 pub enum HirConstant {
-    Void,
     Float(f64),
     Character(char),
 
@@ -196,27 +263,70 @@ pub enum HirConstant {
     Subtract(Box<Self>, Box<Self>),
     Multiply(Box<Self>, Box<Self>),
     Divide(Box<Self>, Box<Self>),
+    
+    Greater(Box<Self>, Box<Self>),
+    Less(Box<Self>, Box<Self>),
+    GreaterEqual(Box<Self>, Box<Self>),
+    LessEqual(Box<Self>, Box<Self>),
+    Equal(Box<Self>, Box<Self>),
+    NotEqual(Box<Self>, Box<Self>),
 
     Constant(Identifier),
+    IsDefined(String),
+    Not(Box<Self>),
 }
 
 impl HirConstant {
-    pub fn to_value(&self, constants: &BTreeMap<Identifier, Self>) -> Result<f64, HirError> {
+    pub fn to_value(
+        &self,
+        constants: &BTreeMap<Identifier, Self>,
+        target: &impl Target,
+    ) -> Result<f64, HirError> {
         Ok(match self {
-            Self::Void => 0.0,
             Self::Float(n) => *n,
             Self::Character(ch) => *ch as u8 as f64,
 
-            Self::Add(l, r) => l.to_value(constants)? + r.to_value(constants)?,
-            Self::Subtract(l, r) => l.to_value(constants)? - r.to_value(constants)?,
-            Self::Multiply(l, r) => l.to_value(constants)? * r.to_value(constants)?,
-            Self::Divide(l, r) => l.to_value(constants)? / r.to_value(constants)?,
+            Self::Equal(l, r) => if l.to_value(constants, target)? == r.to_value(constants, target)? { 1.0 } else { 0.0 },
+            Self::NotEqual(l, r) => if l.to_value(constants, target)? != r.to_value(constants, target)? { 1.0 } else { 0.0 },
+            Self::Greater(l, r) => if l.to_value(constants, target)? > r.to_value(constants, target)? { 1.0 } else { 0.0 },
+            Self::Less(l, r) => if l.to_value(constants, target)? < r.to_value(constants, target)? { 1.0 } else { 0.0 },
+            Self::GreaterEqual(l, r) => if l.to_value(constants, target)? >= r.to_value(constants, target)? { 1.0 } else { 0.0 },
+            Self::LessEqual(l, r) => if l.to_value(constants, target)? <= r.to_value(constants, target)? { 1.0 } else { 0.0 },
 
-            Self::Constant(name) => {
+            Self::Add(l, r) => l.to_value(constants, target)? + r.to_value(constants, target)?,
+            Self::Subtract(l, r) => {
+                l.to_value(constants, target)? - r.to_value(constants, target)?
+            }
+            Self::Multiply(l, r) => {
+                l.to_value(constants, target)? * r.to_value(constants, target)?
+            }
+            Self::Divide(l, r) => l.to_value(constants, target)? / r.to_value(constants, target)?,
+
+            Self::Constant(name) => match name.as_str() {
+                "TARGET" => target.get_name() as u8 as f64,
+
+                _ => {
+                    if let Some(value) = constants.get(name) {
+                        value.to_value(constants, target)?
+                    } else {
+                        return Err(HirError::ConstantNotDefined(name.clone()));
+                    }
+                }
+            },
+
+            Self::IsDefined(name) => {
                 if let Some(value) = constants.get(name) {
-                    value.to_value(constants)?
+                    1.0
                 } else {
-                    return Err(HirError::ConstantNotDefined(name.clone()));
+                    0.0
+                }
+            }
+
+            Self::Not(constant) => {
+                if constant.to_value(constants, target)? != 0.0 {
+                    0.0
+                } else {
+                    1.0
                 }
             }
         })
@@ -225,48 +335,67 @@ impl HirConstant {
 
 #[derive(Clone, Debug)]
 pub enum HirStatement {
+    /// An HIR let expression with a manually assigned type
     Define(Identifier, HirType, HirExpression),
+    /// An HIR let expression with an automatically assigned type
+    AutoDefine(Identifier, HirExpression),
+    /// A variable assignment
     AssignVariable(Identifier, HirExpression),
+    /// An assignment to a dereferenced address
     AssignAddress(HirExpression, HirExpression),
 
+    /// An HIR for loop
     For(Box<Self>, HirExpression, Box<Self>, Vec<Self>),
+    /// An HIR while loop
     While(HirExpression, Vec<Self>),
+    /// An HIR if statement
     If(HirExpression, Vec<Self>),
+    /// An HIR if statement with an else clause
     IfElse(HirExpression, Vec<Self>, Vec<Self>),
 
+    /// An HIR free statement to deallocate memory
     Free(HirExpression, HirExpression),
+    /// Return one or more values at the end of a function
+    Return(Vec<HirExpression>),
+
+    /// Any expression
     Expression(HirExpression),
 }
 
 impl HirStatement {
+    /// Lower an HIR statement into an equivalent MIR statement
     pub fn to_mir_stmt(
         &self,
         constants: &BTreeMap<Identifier, HirConstant>,
+        target: &impl Target,
     ) -> Result<MirStatement, HirError> {
         Ok(match self {
             Self::Define(name, data_type, expr) => MirStatement::Define(
                 name.clone(),
                 data_type.to_mir_type(),
-                expr.to_mir_expr(constants)?,
+                expr.to_mir_expr(constants, target)?,
             ),
+            Self::AutoDefine(name, expr) => {
+                MirStatement::AutoDefine(name.clone(), expr.to_mir_expr(constants, target)?)
+            }
 
             Self::AssignVariable(name, expr) => {
-                MirStatement::AssignVariable(name.clone(), expr.to_mir_expr(constants)?)
+                MirStatement::AssignVariable(name.clone(), expr.to_mir_expr(constants, target)?)
             }
             Self::AssignAddress(addr, expr) => MirStatement::AssignAddress(
-                addr.to_mir_expr(constants)?,
-                expr.to_mir_expr(constants)?,
+                addr.to_mir_expr(constants, target)?,
+                expr.to_mir_expr(constants, target)?,
             ),
 
             Self::For(pre, cond, post, body) => {
                 let mut mir_body = Vec::new();
                 for stmt in body {
-                    mir_body.push(stmt.to_mir_stmt(constants)?);
+                    mir_body.push(stmt.to_mir_stmt(constants, target)?);
                 }
                 MirStatement::For(
-                    Box::new(pre.to_mir_stmt(constants)?),
-                    cond.to_mir_expr(constants)?,
-                    Box::new(post.to_mir_stmt(constants)?),
+                    Box::new(pre.to_mir_stmt(constants, target)?),
+                    cond.to_mir_expr(constants, target)?,
+                    Box::new(post.to_mir_stmt(constants, target)?),
                     mir_body,
                 )
             }
@@ -274,36 +403,51 @@ impl HirStatement {
             Self::While(cond, body) => {
                 let mut mir_body = Vec::new();
                 for stmt in body {
-                    mir_body.push(stmt.to_mir_stmt(constants)?);
+                    mir_body.push(stmt.to_mir_stmt(constants, target)?);
                 }
-                MirStatement::While(cond.to_mir_expr(constants)?, mir_body)
+                MirStatement::While(cond.to_mir_expr(constants, target)?, mir_body)
             }
 
             Self::If(cond, body) => {
                 let mut mir_body = Vec::new();
                 for stmt in body {
-                    mir_body.push(stmt.to_mir_stmt(constants)?);
+                    mir_body.push(stmt.to_mir_stmt(constants, target)?);
                 }
-                MirStatement::If(cond.to_mir_expr(constants)?, mir_body)
+                MirStatement::If(cond.to_mir_expr(constants, target)?, mir_body)
             }
 
             Self::IfElse(cond, then_body, else_body) => {
                 let mut mir_then_body = Vec::new();
                 for stmt in then_body {
-                    mir_then_body.push(stmt.to_mir_stmt(constants)?);
+                    mir_then_body.push(stmt.to_mir_stmt(constants, target)?);
                 }
                 let mut mir_else_body = Vec::new();
                 for stmt in else_body {
-                    mir_else_body.push(stmt.to_mir_stmt(constants)?);
+                    mir_else_body.push(stmt.to_mir_stmt(constants, target)?);
                 }
-                MirStatement::IfElse(cond.to_mir_expr(constants)?, mir_then_body, mir_else_body)
+                MirStatement::IfElse(
+                    cond.to_mir_expr(constants, target)?,
+                    mir_then_body,
+                    mir_else_body,
+                )
             }
 
-            Self::Free(addr, size) => {
-                MirStatement::Free(addr.to_mir_expr(constants)?, size.to_mir_expr(constants)?)
+            Self::Return(exprs) => {
+                let mut mir_exprs = Vec::new();
+                for expr in exprs {
+                    mir_exprs.push(expr.to_mir_expr(constants, target)?)
+                }
+                MirStatement::Return(mir_exprs)
             }
 
-            Self::Expression(expr) => MirStatement::Expression(expr.to_mir_expr(constants)?),
+            Self::Free(addr, size) => MirStatement::Free(
+                addr.to_mir_expr(constants, target)?,
+                size.to_mir_expr(constants, target)?,
+            ),
+
+            Self::Expression(expr) => {
+                MirStatement::Expression(expr.to_mir_expr(constants, target)?)
+            }
         })
     }
 }
@@ -317,12 +461,19 @@ pub enum HirExpression {
     Multiply(Box<Self>, Box<Self>),
     Divide(Box<Self>, Box<Self>),
 
+    Greater(Box<Self>, Box<Self>),
+    Less(Box<Self>, Box<Self>),
+    GreaterEqual(Box<Self>, Box<Self>),
+    LessEqual(Box<Self>, Box<Self>),
+
     Refer(Identifier),
     Deref(Box<Self>),
 
+    Void,
     String(StringLiteral),
     Variable(Identifier),
 
+    TypeCast(Box<Self>, HirType),
     Alloc(Box<Self>),
 
     Call(Identifier, Vec<Self>),
@@ -335,48 +486,83 @@ impl HirExpression {
     pub fn to_mir_expr(
         &self,
         constants: &BTreeMap<Identifier, HirConstant>,
+        target: &impl Target,
     ) -> Result<MirExpression, HirError> {
         Ok(match self {
-            Self::Constant(constant) => MirExpression::Float(constant.to_value(constants)?),
+            /// Convert a constant expression into a float literal
+            Self::Constant(constant) => MirExpression::Float(constant.to_value(constants, target)?),
 
             Self::Add(l, r) => MirExpression::Add(
-                Box::new(l.to_mir_expr(constants)?),
-                Box::new(r.to_mir_expr(constants)?),
+                Box::new(l.to_mir_expr(constants, target)?),
+                Box::new(r.to_mir_expr(constants, target)?),
+            ),
+
+            Self::Greater(l, r) => MirExpression::Greater(
+                Box::new(l.to_mir_expr(constants, target)?),
+                Box::new(r.to_mir_expr(constants, target)?),
+            ),
+
+            Self::GreaterEqual(l, r) => MirExpression::GreaterEqual(
+                Box::new(l.to_mir_expr(constants, target)?),
+                Box::new(r.to_mir_expr(constants, target)?),
+            ),
+
+            Self::Less(l, r) => MirExpression::Less(
+                Box::new(l.to_mir_expr(constants, target)?),
+                Box::new(r.to_mir_expr(constants, target)?),
+            ),
+
+            Self::LessEqual(l, r) => MirExpression::LessEqual(
+                Box::new(l.to_mir_expr(constants, target)?),
+                Box::new(r.to_mir_expr(constants, target)?),
             ),
 
             Self::Subtract(l, r) => MirExpression::Subtract(
-                Box::new(l.to_mir_expr(constants)?),
-                Box::new(r.to_mir_expr(constants)?),
+                Box::new(l.to_mir_expr(constants, target)?),
+                Box::new(r.to_mir_expr(constants, target)?),
             ),
 
             Self::Multiply(l, r) => MirExpression::Multiply(
-                Box::new(l.to_mir_expr(constants)?),
-                Box::new(r.to_mir_expr(constants)?),
+                Box::new(l.to_mir_expr(constants, target)?),
+                Box::new(r.to_mir_expr(constants, target)?),
             ),
 
             Self::Divide(l, r) => MirExpression::Divide(
-                Box::new(l.to_mir_expr(constants)?),
-                Box::new(r.to_mir_expr(constants)?),
+                Box::new(l.to_mir_expr(constants, target)?),
+                Box::new(r.to_mir_expr(constants, target)?),
             ),
 
             Self::Refer(name) => MirExpression::Refer(name.clone()),
-            Self::Deref(value) => MirExpression::Deref(Box::new(value.to_mir_expr(constants)?)),
+            Self::Deref(value) => {
+                MirExpression::Deref(Box::new(value.to_mir_expr(constants, target)?))
+            }
 
+            Self::Void => MirExpression::Void,
             Self::String(string) => MirExpression::String(string.clone()),
+
+            /// If a variable is actually a constant,
+            /// replace it with its constant value
             Self::Variable(name) => {
                 if let Some(val) = constants.get(name) {
-                    MirExpression::Float(val.to_value(constants)?)
+                    MirExpression::Float(val.to_value(constants, target)?)
                 } else {
                     MirExpression::Variable(name.clone())
                 }
             }
 
-            Self::Alloc(value) => MirExpression::Alloc(Box::new(value.to_mir_expr(constants)?)),
+            Self::Alloc(value) => {
+                MirExpression::Alloc(Box::new(value.to_mir_expr(constants, target)?))
+            }
+
+            Self::TypeCast(expr, t) => MirExpression::TypeCast(
+                Box::new(expr.to_mir_expr(constants, target)?),
+                t.to_mir_type(),
+            ),
 
             Self::Call(name, arguments) => MirExpression::Call(name.clone(), {
                 let mut result = Vec::new();
                 for arg in arguments {
-                    result.push(arg.to_mir_expr(constants)?);
+                    result.push(arg.to_mir_expr(constants, target)?);
                 }
                 result
             }),
@@ -384,24 +570,26 @@ impl HirExpression {
             Self::ForeignCall(name, arguments) => MirExpression::ForeignCall(name.clone(), {
                 let mut result = Vec::new();
                 for arg in arguments {
-                    result.push(arg.to_mir_expr(constants)?);
+                    result.push(arg.to_mir_expr(constants, target)?);
                 }
                 result
             }),
 
-            Self::Method(instance, name, arguments) => {
-                MirExpression::Method(Box::new(instance.to_mir_expr(constants)?), name.clone(), {
+            Self::Method(instance, name, arguments) => MirExpression::Method(
+                Box::new(instance.to_mir_expr(constants, target)?),
+                name.clone(),
+                {
                     let mut result = Vec::new();
                     for arg in arguments {
-                        result.push(arg.to_mir_expr(constants)?);
+                        result.push(arg.to_mir_expr(constants, target)?);
                     }
                     result
-                })
-            }
+                },
+            ),
 
             Self::Index(ptr, idx) => MirExpression::Index(
-                Box::new(ptr.to_mir_expr(constants)?),
-                Box::new(idx.to_mir_expr(constants)?),
+                Box::new(ptr.to_mir_expr(constants, target)?),
+                Box::new(idx.to_mir_expr(constants, target)?),
             ),
         })
     }

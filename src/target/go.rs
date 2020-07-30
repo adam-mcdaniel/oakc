@@ -1,11 +1,14 @@
 use super::Target;
 use std::{
     fs::{remove_file, write},
+    io::{Error, ErrorKind, Result},
     process::Command,
 };
 
 pub struct Go;
 impl Target for Go {
+    fn get_name(&self) -> char { 'g' }
+
     fn prelude(&self) -> String {
         String::from(include_str!("std.go"))
     }
@@ -44,6 +47,10 @@ impl Target for Go {
 
     fn divide(&self) -> String {
         String::from("vm.divide()\n")
+    }
+
+    fn sign(&self) -> String {
+        String::from("vm.sign()\n")
     }
 
     fn allocate(&self) -> String {
@@ -86,14 +93,14 @@ impl Target for Go {
         String::from("}\n")
     }
 
-    fn compile(&self, code: String) -> bool {
+    fn compile(&self, code: String) -> Result<()> {
         if let Ok(_) = write("main.go", code) {
             if let Ok(_) = Command::new("go").arg("build").arg("main.go").output() {
                 if let Ok(_) = remove_file("main.go") {
-                    return true;
+                    return Result::Ok(());
                 }
             }
         }
-        false
+        Result::Err(Error::new(ErrorKind::Other, "error compiling "))
     }
 }

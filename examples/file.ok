@@ -3,13 +3,13 @@
 const FILE = 2;
 type File(FILE) {
     fn open(name: &char) -> File {
-        name; 1;
+        return [name, 1]
     }
 
-    fn name(self: &File) -> &&char { self; }
-    fn is_open(self: &File) -> &num { self + 1; }
+    fn name(self: &File) -> &&char { return self as &&char; }
+    fn is_open(self: &File) -> &num { return (self + 1) as &num; }
 
-    fn read(self: &File) -> &char { "Contents of file!!!"; }
+    fn read(self: &File) -> &char { return "Contents of file!!!"; }
 
     fn close(self: &File) {
         self->is_open = 0;

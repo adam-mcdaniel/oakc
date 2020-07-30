@@ -1,6 +1,7 @@
 use std::{
     collections::BTreeMap,
     fmt::{Display, Error, Formatter},
+    path::PathBuf,
 };
 
 use crate::{
@@ -13,16 +14,30 @@ use crate::{
 pub enum MirError {
     /// Calling a function without defining it
     FunctionNotDefined(Identifier),
+    /// Defining a type multiple times
+    StructureRedefined(Identifier),
     /// Defining a function multiple times
     FunctionRedefined(Identifier),
-    /// Using a variable without declaring it
+    /// Using a variable without defining it
     VariableNotDefined(Identifier),
     /// Calling a method for a type where it is not defined
     MethodNotDefined(MirType, Identifier),
     /// Using a structure name as a type without defining it
+    /// If this were acceptable, the compiler would never know
+    /// the size of the variable.
     StructureNotDefined(Identifier),
-    /// Dereferencing a value without a reference type
+    /// Dereferencing a non-pointer value
     DereferenceNonPointer(MirType),
+    /// Indexing a void pointer
+    /// This is inherently bad because void pointers have size
+    /// zero. Indexing them is the same as dereferencing, but
+    /// less efficient.
+    IndexVoidPointer(MirExpression),
+    /// Auto define a void pointer
+    /// This is less of a type error itself and more of a safety net.
+    /// Variables that hold the result of `alloc` must be the proper
+    /// type for expressions like `ptr[n]` to work.
+    AutoDefineVoidPointer(String, MirExpression),
     /// Mismatched types in a `let` statement
     DefineMismatchedType(String),
     /// Mismatched types in an assignment statement
@@ -34,6 +49,9 @@ pub enum MirError {
     FreeNonPointer(MirExpression),
     /// Using a non-number for an if statement, and if-else
     /// statement, a while loop, or a for loop
+    /// This is especially bad for while loops. If a multi-cell
+    /// structure is used as a loop condition, the stack will continue
+    /// to grow until it collides with the heap.
     NonNumberCondition(MirExpression),
     /// Using a non-number for an `alloc` call
     NonNumberAllocate(MirExpression),
@@ -52,6 +70,19 @@ pub enum MirError {
     /// The return type of the function does not match the result
     /// of the function
     MismatchedReturnType(String),
+    /// A function attempts to use multiple return statements
+    MultipleReturns(String),
+    /// An expression with non-void type is pushed onto the stack
+    /// without being used by another expression or statement.
+    NonVoidExpressionNotUsed(MirExpression),
+    /// A bad typecast due to mismatched sizes in types. For example,
+    /// a value with size `3` cannot be cast to a number with size `1`
+    MismatchedCastSize(MirExpression, MirType),
+    /// Attempted to use a return statement in a conditional expression,
+    /// such as a while loop or if statement
+    ConditionalReturn(String),
+    /// A non-void function never returns
+    NonVoidNoReturn(String),
 }
 
 /// Print an MIR error on the command line
@@ -62,16 +93,27 @@ impl Display for MirError {
             Self::FunctionRedefined(name) => {
                 write!(f, "function '{}' is defined multiple times", name)
             }
+            Self::StructureNotDefined(name) => write!(f, "type '{}' is not defined", name),
+            Self::StructureRedefined(name) => {
+                write!(f, "type '{}' is defined multiple times", name)
+            }
             Self::VariableNotDefined(name) => write!(f, "variable '{}' is not defined", name),
             Self::MethodNotDefined(t, name) => {
                 write!(f, "method '{}' is not defined for type '{}'", name, t)
             }
-            Self::StructureNotDefined(name) => write!(f, "type '{}' is not defined", name),
             Self::DereferenceNonPointer(t) => write!(f, "cannot dereference type '{}'", t),
+            Self::IndexVoidPointer(expr) => write!(f, "cannot index void pointer '{}'", expr),
+            Self::AutoDefineVoidPointer(var_name, expr) => write!(
+                f,
+                "used type inference when defining '{}' with a void pointer expression '{}'",
+                var_name, expr
+            ),
 
-            Self::DefineMismatchedType(var_name) => {
-                write!(f, "mismatched types when defining variable '{}'", var_name)
-            }
+            Self::DefineMismatchedType(var_name) => write!(
+                f,
+                "mismatched types in 'let' statement when defining variable '{}'",
+                var_name
+            ),
 
             Self::AssignMismatchedType(lhs_expr) => {
                 write!(f, "mismatched types when assigning to '{}'", lhs_expr)
@@ -112,6 +154,31 @@ impl Display for MirError {
             Self::MismatchedReturnType(fn_name) => write!(
                 f,
                 "the return type of the function '{}' does not match the function's return value",
+                fn_name
+            ),
+            Self::MultipleReturns(fn_name) => write!(
+                f,
+                "the function '{}' uses multiple return statements",
+                fn_name
+            ),
+            Self::NonVoidExpressionNotUsed(expr) => write!(
+                f,
+                "the non-void expression '{}' is used but not consumed by another expression or statement",
+                expr
+            ),
+            Self::MismatchedCastSize(expr, t) => write!(
+                f,
+                "cannot cast expression '{}' to type '{}' due to mismatched sizes",
+                expr, t
+            ),
+            Self::ConditionalReturn(fn_name) => write!(
+                f,
+                "used a return statement within a conditional statement in the function '{}'",
+                fn_name
+            ),
+            Self::NonVoidNoReturn(fn_name) => write!(
+                f,
+                "the non-void function '{}' never returns an expression",
                 fn_name
             ),
         }
@@ -219,6 +286,10 @@ impl MirType {
         }
     }
 
+    fn is_void_ptr(&self) -> bool {
+        self.name == Self::VOID && self.ptr_level == 1
+    }
+
     fn method_to_function_name(&self, method_name: &Identifier) -> Identifier {
         format!("{}::{}", self.name, method_name)
     }
@@ -230,7 +301,7 @@ impl PartialEq for MirType {
         // If two types are identical, they are equal
         if self.name == other.name && self.ptr_level == other.ptr_level {
             true
-        } else if !self.is_pointer() {
+        } else if !self.is_pointer() && !other.is_pointer() {
             // (char == num) AND (num == char)
             match (self.name.as_str(), other.name.as_str()) {
                 ("char", "num") => true,
@@ -240,7 +311,7 @@ impl PartialEq for MirType {
         } else {
             // (&void == &*) AND (&* == &void)
             (self.ptr_level == 1 && self.name == "void" && other.ptr_level == 1)
-                || (other.ptr_level == 1 && other.name == "void" && other.ptr_level == 1)
+                || (other.ptr_level == 1 && other.name == "void" && self.ptr_level == 1)
         }
     }
 }
@@ -271,17 +342,29 @@ impl MirProgram {
 
     pub fn assemble(&self) -> Result<AsmProgram, MirError> {
         let Self(decls, heap_size) = self.clone();
+        let mut externs = Vec::new();
         let mut funcs = BTreeMap::new();
         let mut structs = BTreeMap::new();
         let mut result = Vec::new();
         for decl in &decls {
             match decl {
                 MirDeclaration::Function(func) => {
-                    funcs.insert(func.get_name(), func.clone());
+                    let name = func.get_name();
+                    if funcs.contains_key(&name) {
+                        return Err(MirError::FunctionRedefined(name));
+                    } else {
+                        funcs.insert(name, func.clone());
+                    }
                 }
                 MirDeclaration::Structure(structure) => {
-                    structs.insert(structure.get_name(), structure.clone());
+                    let name = structure.get_name();
+                    if structs.contains_key(&name) {
+                        return Err(MirError::StructureRedefined(name));
+                    } else {
+                        structs.insert(structure.get_name(), structure.clone());
+                    }
                 }
+                MirDeclaration::Extern(filename) => externs.push(filename.clone()),
             }
         }
 
@@ -289,7 +372,7 @@ impl MirProgram {
             result.extend(decl.assemble(&mut funcs, &mut structs)?);
         }
 
-        Ok(AsmProgram::new(result, heap_size))
+        Ok(AsmProgram::new(externs, result, heap_size))
     }
 }
 
@@ -297,6 +380,7 @@ impl MirProgram {
 pub enum MirDeclaration {
     Structure(MirStructure),
     Function(MirFunction),
+    Extern(PathBuf),
 }
 
 impl MirDeclaration {
@@ -308,6 +392,7 @@ impl MirDeclaration {
         Ok(match self {
             Self::Structure(structure) => structure.assemble(funcs, structs)?,
             Self::Function(func) => vec![func.assemble(funcs, structs)?],
+            _ => vec![],
         })
     }
 }
@@ -347,6 +432,7 @@ impl MirStructure {
     ) -> Result<Vec<AsmFunction>, MirError> {
         let mir_type = self.to_mir_type();
         let mut result = Vec::new();
+
         // Iterate over the methods and rename them
         // to their method names, such as `Date::day`
         for function in &self.methods {
@@ -419,11 +505,46 @@ impl MirFunction {
         }
 
         // Check return type
-        // if let Some(last_stmt) = self.body.last() {
-        //     if self.return_type != last_stmt.get_type(&vars, funcs, structs)? {
-        //         return Err(MirError::MismatchedReturnType(self.name.clone()))
-        //     }
-        // }
+        let mut has_returned = false;
+        for (i, stmt) in self.body.iter().enumerate() {
+            if let MirStatement::Return(exprs) = stmt {
+                // If the function has already used a return statement,
+                // throw an error.
+                if has_returned {
+                    return Err(MirError::MultipleReturns(self.name.clone()));
+                }
+                has_returned = true;
+
+                // Get the size of the return statement's stack allocation
+                let mut result_size = 0;
+                for expr in exprs {
+                    result_size += expr.get_type(&vars, funcs, structs)?.get_size(structs)?;
+                }
+
+                // If the result's size is not equal to the size of the
+                // return type, throw a type error.
+                if result_size != self.return_type.get_size(structs)? {
+                    return Err(MirError::MismatchedReturnType(self.name.clone()));
+
+                // If there is only one return argument, check the individual
+                // expression's type against the return type.
+                } else if exprs.len() == 1
+                    && self.return_type != exprs[0].get_type(&vars, funcs, structs)?
+                {
+                    return Err(MirError::MismatchedReturnType(self.name.clone()));
+                }
+            // If a statement has a return statement, but is not a return
+            // statement itself, it must be a conditional return statement
+            } else if stmt.has_return() {
+                return Err(MirError::ConditionalReturn(self.name.clone()));
+            }
+        }
+
+        // If the function is non-void and has not returned,
+        // then throw an error.
+        if !has_returned && self.return_type != MirType::void() {
+            return Err(MirError::NonVoidNoReturn(self.name.clone()));
+        }
 
         Ok(AsmFunction::new(
             self.name.clone(),
@@ -450,6 +571,7 @@ impl MirFunction {
 #[derive(Clone, Debug, PartialEq, PartialOrd)]
 pub enum MirStatement {
     Define(Identifier, MirType, MirExpression),
+    AutoDefine(Identifier, MirExpression),
     AssignVariable(Identifier, MirExpression),
     AssignAddress(MirExpression, MirExpression),
 
@@ -459,6 +581,7 @@ pub enum MirStatement {
     IfElse(MirExpression, Vec<Self>, Vec<Self>),
 
     Free(MirExpression, MirExpression),
+    Return(Vec<MirExpression>),
     Expression(MirExpression),
 }
 
@@ -476,6 +599,55 @@ impl MirStatement {
         }
     }
 
+    /// Does this statement eventually result in a return statement?
+    fn has_return(&self) -> bool {
+        match self {
+            Self::For(pre, _, post, body) => {
+                let mut result = false;
+                for stmt in body {
+                    result = result || stmt.has_return();
+                }
+                result || pre.has_return() || post.has_return()
+            }
+
+            Self::While(_, body) => {
+                for stmt in body {
+                    if stmt.has_return() {
+                        return true;
+                    }
+                }
+                false
+            }
+
+            Self::If(_, body) => {
+                for stmt in body {
+                    if stmt.has_return() {
+                        return true;
+                    }
+                }
+                false
+            }
+
+            Self::IfElse(_, then_body, else_body) => {
+                for stmt in then_body {
+                    if stmt.has_return() {
+                        return true;
+                    }
+                }
+                for stmt in else_body {
+                    if stmt.has_return() {
+                        return true;
+                    }
+                }
+                false
+            }
+
+            Self::Return(_) => true,
+            _ => false,
+        }
+    }
+
+    /// Type check the MIR before it is lowered
     fn type_check(
         &self,
         vars: &BTreeMap<Identifier, MirType>,
@@ -494,6 +666,19 @@ impl MirStatement {
                 }
             }
 
+            Self::AutoDefine(var_name, expr) => {
+                expr.type_check(vars, funcs, structs)?;
+                let t = expr.get_type(vars, funcs, structs)?;
+                // Let expressions MUST cast void pointers.
+                // This error catches code like `let ptr = alloc(10)`
+                if t.is_void_ptr() {
+                    return Err(MirError::AutoDefineVoidPointer(
+                        var_name.clone(),
+                        expr.clone(),
+                    ));
+                }
+            }
+
             Self::AssignAddress(lhs, rhs) => {
                 lhs.type_check(vars, funcs, structs)?;
                 rhs.type_check(vars, funcs, structs)?;
@@ -501,7 +686,9 @@ impl MirStatement {
                 let rhs_type = rhs.get_type(vars, funcs, structs)?;
 
                 // Compare the left hand side and right hand side
-                if lhs_type != MirType::void().refer() && lhs_type != rhs_type.refer() {
+                // If the LHS is a void pointer, allow the assignment.
+                // If the type *LHS is equal to RHS, also allow the assignment.
+                if lhs_type != MirType::void().refer() && lhs_type.deref()? != rhs_type {
                     // Return a mismatched type error
                     return Err(MirError::AssignMismatchedType(lhs.clone()));
                 }
@@ -582,6 +769,12 @@ impl MirStatement {
                 }
             }
 
+            Self::Return(exprs) => {
+                for expr in exprs {
+                    expr.type_check(vars, funcs, structs)?
+                }
+            }
+
             Self::Free(address, size) => {
                 address.type_check(vars, funcs, structs)?;
                 size.type_check(vars, funcs, structs)?;
@@ -592,11 +785,21 @@ impl MirStatement {
                 }
             }
 
-            Self::Expression(expr) => expr.type_check(vars, funcs, structs)?,
+            Self::Expression(expr) => {
+                expr.type_check(vars, funcs, structs)?;
+                if let MirExpression::ForeignCall(_, _) = expr {
+                    // If the expression is a foreign call, then we
+                    // trust that the user is calling a void foreign
+                    // function.
+                } else if expr.get_type(vars, funcs, structs)?.get_size(structs)? != 0 {
+                    return Err(MirError::NonVoidExpressionNotUsed(expr.clone()));
+                }
+            }
         }
         Ok(())
     }
 
+    /// Lower MIR into Oak's ASM
     fn assemble(
         &self,
         vars: &mut BTreeMap<Identifier, MirType>,
@@ -621,6 +824,15 @@ impl MirStatement {
                 ]);
                 result
             }
+
+            /// A let statement that automatically deduces the type
+            /// of the variable just expands to a manually defined MIR let statement.
+            Self::AutoDefine(var_name, expr) => Self::Define(
+                var_name.clone(),
+                expr.get_type(vars, funcs, structs)?,
+                expr.clone(),
+            )
+            .assemble(vars, funcs, structs)?,
 
             /// Assign an expression to a defined variable
             Self::AssignVariable(var_name, expr) => {
@@ -757,6 +969,7 @@ impl MirStatement {
                     AsmStatement::Assign(AsmType::float()),
                 ]);
 
+                // The resulting code for an if-else statement!
                 vec![
                     AsmStatement::For(
                         pre,
@@ -775,6 +988,14 @@ impl MirStatement {
                         asm_else_body,
                     ),
                 ]
+            }
+
+            Self::Return(exprs) => {
+                let mut result = Vec::new();
+                for expr in exprs {
+                    result.extend(expr.assemble(vars, funcs, structs)?)
+                }
+                result
             }
 
             /// Freeing an address does not return a value, so it is a statement.
@@ -798,6 +1019,11 @@ pub enum MirExpression {
     Multiply(Box<Self>, Box<Self>),
     Divide(Box<Self>, Box<Self>),
 
+    Greater(Box<Self>, Box<Self>),
+    Less(Box<Self>, Box<Self>),
+    GreaterEqual(Box<Self>, Box<Self>),
+    LessEqual(Box<Self>, Box<Self>),
+
     String(StringLiteral),
     Float(f64),
     Character(char),
@@ -807,6 +1033,7 @@ pub enum MirExpression {
     Refer(Identifier),
     Deref(Box<Self>),
 
+    TypeCast(Box<Self>, MirType),
     Alloc(Box<Self>),
 
     Call(Identifier, Vec<Self>),
@@ -823,13 +1050,28 @@ impl MirExpression {
         structs: &BTreeMap<Identifier, MirStructure>,
     ) -> Result<(), MirError> {
         match self {
+            // Typecheck a typecast
+            Self::TypeCast(expr, t) => {
+                expr.type_check(vars, funcs, structs)?;
+
+                // If the expression and cast type have different sizes,
+                // then the expression cannot be cast to this type.
+                if expr.get_type(vars, funcs, structs)?.get_size(structs) != t.get_size(structs) {
+                    return Err(MirError::MismatchedCastSize(*expr.clone(), t.clone()));
+                }
+            }
+
             // Typecheck binary operations
             // Currently, type checking only fails if either the left hand side
             // or the right hand side are of type `void`, or a user defined structure
             Self::Add(lhs, rhs)
             | Self::Subtract(lhs, rhs)
             | Self::Multiply(lhs, rhs)
-            | Self::Divide(lhs, rhs) => {
+            | Self::Divide(lhs, rhs)
+            | Self::Greater(lhs, rhs)
+            | Self::Less(lhs, rhs)
+            | Self::GreaterEqual(lhs, rhs)
+            | Self::LessEqual(lhs, rhs) => {
                 lhs.type_check(vars, funcs, structs)?;
                 rhs.type_check(vars, funcs, structs)?;
                 let lhs_type = lhs.get_type(vars, funcs, structs)?;
@@ -858,6 +1100,16 @@ impl MirExpression {
                 // Check if the index is a structure or of type `void`
                 if idx.get_type(vars, funcs, structs)?.get_size(structs)? != 1 {
                     return Err(MirError::NonNumberIndex(*idx.clone()));
+                }
+
+                // Check to see if the pointer being indexed is a void pointer
+                if ptr
+                    .get_type(vars, funcs, structs)?
+                    .deref()?
+                    .get_size(structs)?
+                    == 0
+                {
+                    return Err(MirError::IndexVoidPointer(*ptr.clone()));
                 }
             }
 
@@ -956,6 +1208,80 @@ impl MirExpression {
         structs: &BTreeMap<Identifier, MirStructure>,
     ) -> Result<Vec<AsmStatement>, MirError> {
         Ok(match self {
+            /// A typecast is only a way to explicitly validate
+            /// some kinds of typechecks. The typecast expression
+            /// has no change on the output code.
+            Self::TypeCast(expr, _) => expr.assemble(vars, funcs, structs)?,
+
+            /// Is the LHS greater than or equal the RHS?
+            Self::GreaterEqual(l, r) => {
+                let mut result = Vec::new();
+                result.extend(l.assemble(vars, funcs, structs)?);
+                result.extend(r.assemble(vars, funcs, structs)?);
+                result.push(AsmStatement::Expression(vec![
+                    // Subtract RHS from the LHS and check the sign
+                    AsmExpression::Subtract,
+                    AsmExpression::Sign,
+                    // If the sign was 1, then this expression is true.
+                    AsmExpression::Float(1.0),
+                    AsmExpression::Add,
+                    AsmExpression::Float(2.0),
+                    AsmExpression::Divide,
+                ]));
+                result
+            }
+            /// Is the LHS greater than the RHS?
+            Self::Greater(l, r) => {
+                let mut result = Vec::new();
+                result.extend(r.assemble(vars, funcs, structs)?);
+                result.extend(l.assemble(vars, funcs, structs)?);
+                result.push(AsmStatement::Expression(vec![
+                    // Subtract LHS from the RHS and check the sign
+                    AsmExpression::Subtract,
+                    AsmExpression::Sign,
+                    // If the sign was -1, then this expression is true.
+                    AsmExpression::Float(1.0),
+                    AsmExpression::Subtract,
+                    AsmExpression::Float(-2.0),
+                    AsmExpression::Divide,
+                ]));
+                result
+            }
+            /// Is the LHS less than or equal to the RHS?
+            Self::LessEqual(l, r) => {
+                let mut result = Vec::new();
+                result.extend(r.assemble(vars, funcs, structs)?);
+                result.extend(l.assemble(vars, funcs, structs)?);
+                result.push(AsmStatement::Expression(vec![
+                    // Subtract LHS from the RHS and check the sign
+                    AsmExpression::Subtract,
+                    AsmExpression::Sign,
+                    // If the sign was 1, then this expression is true.
+                    AsmExpression::Float(1.0),
+                    AsmExpression::Add,
+                    AsmExpression::Float(2.0),
+                    AsmExpression::Divide,
+                ]));
+                result
+            }
+            /// Is the LHS less than the RHS?
+            Self::Less(l, r) => {
+                let mut result = Vec::new();
+                result.extend(l.assemble(vars, funcs, structs)?);
+                result.extend(r.assemble(vars, funcs, structs)?);
+                result.push(AsmStatement::Expression(vec![
+                    // Subtract RHS from the LHS and check the sign
+                    AsmExpression::Subtract,
+                    AsmExpression::Sign,
+                    // If the sign was -1, then this expression is true.
+                    AsmExpression::Float(1.0),
+                    AsmExpression::Subtract,
+                    AsmExpression::Float(-2.0),
+                    AsmExpression::Divide,
+                ]));
+                result
+            }
+
             /// Add two values
             Self::Add(l, r) => {
                 let mut result = Vec::new();
@@ -1141,10 +1467,22 @@ impl MirExpression {
         structs: &BTreeMap<Identifier, MirStructure>,
     ) -> Result<MirType, MirError> {
         Ok(match self {
+            /// A typecast simply masks the type of the cast expression.
+            /// The typecast has the type of whichever type the
+            /// expression is being cast to.
+            Self::TypeCast(_, t) => t.clone(),
+
             /// Arithmetic returns the type of the left hand side
             Self::Add(l, _) | Self::Subtract(l, _) | Self::Multiply(l, _) | Self::Divide(l, _) => {
                 l.get_type(vars, funcs, structs)?
             }
+            /// Greater than, less than, greater or equal,
+            /// and less than or equal expressions ALL return
+            /// boolean values.
+            Self::Greater(_, _)
+            | Self::Less(_, _)
+            | Self::GreaterEqual(_, _)
+            | Self::LessEqual(_, _) => MirType::float(),
             /// Float literals have type `num`
             Self::Float(_) => MirType::float(),
             /// String literals have type `&char`
@@ -1221,10 +1559,16 @@ impl MirExpression {
 impl Display for MirExpression {
     fn fmt(&self, f: &mut Formatter) -> Result<(), Error> {
         match self {
+            Self::TypeCast(expr, t) => write!(f, "{} as {}", expr, t),
             Self::Add(lhs, rhs) => write!(f, "{}+{}", lhs, rhs),
             Self::Subtract(lhs, rhs) => write!(f, "{}-{}", lhs, rhs),
             Self::Multiply(lhs, rhs) => write!(f, "{}/{}", lhs, rhs),
             Self::Divide(lhs, rhs) => write!(f, "{}/{}", lhs, rhs),
+
+            Self::Greater(lhs, rhs) => write!(f, "{}>{}", lhs, rhs),
+            Self::GreaterEqual(lhs, rhs) => write!(f, "{}>={}", lhs, rhs),
+            Self::Less(lhs, rhs) => write!(f, "{}<{}", lhs, rhs),
+            Self::LessEqual(lhs, rhs) => write!(f, "{}<={}", lhs, rhs),
 
             Self::Alloc(size) => write!(f, "alloc({})", size),
 

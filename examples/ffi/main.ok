@@ -1,0 +1,5 @@
+#[include("lib/foreign.ok")]
+
+fn main() {
+	test();
+}

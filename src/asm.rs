@@ -2,11 +2,16 @@ use crate::{
     target::{Target, C},
     Identifier, StringLiteral,
 };
-use core::fmt::{Debug, Display, Error, Formatter};
-use std::collections::BTreeMap;
+use std::{
+    collections::BTreeMap,
+    fmt::{Debug, Display, Error, Formatter},
+    fs::read_to_string,
+    path::PathBuf,
+};
 
 #[derive(Clone, PartialEq, Eq, PartialOrd, Ord, Debug)]
 pub enum AsmError {
+    NonExistantExternFile(String),
     VariableNotDefined(Identifier),
     FunctionNotDefined(Identifier),
     NoEntryPoint,
@@ -15,6 +20,9 @@ pub enum AsmError {
 impl Display for AsmError {
     fn fmt(&self, f: &mut Formatter) -> Result<(), Error> {
         match self {
+            Self::NonExistantExternFile(filename) => {
+                write!(f, "could not find foreign file '{}'", filename)
+            }
             Self::FunctionNotDefined(name) => write!(f, "function '{}' is not defined", name),
             Self::VariableNotDefined(name) => write!(f, "variable '{}' is not defined", name),
             Self::NoEntryPoint => write!(f, "no entry point defined"),
@@ -78,25 +86,48 @@ impl Debug for AsmType {
 }
 
 #[derive(Clone, Debug)]
-pub struct AsmProgram(Vec<AsmFunction>, i32);
+pub struct AsmProgram {
+    externs: Vec<PathBuf>,
+    funcs: Vec<AsmFunction>,
+    heap_size: i32,
+}
 
 impl AsmProgram {
     const ENTRY_POINT: &'static str = "main";
 
-    pub fn new(funcs: Vec<AsmFunction>, heap_size: i32) -> Self {
-        Self(funcs, heap_size)
+    pub fn new(externs: Vec<PathBuf>, funcs: Vec<AsmFunction>, heap_size: i32) -> Self {
+        Self {
+            externs,
+            funcs,
+            heap_size,
+        }
     }
 
     pub fn assemble(&self, target: &impl Target) -> Result<String, AsmError> {
-        let Self(func_list, heap_size) = self;
         // Set up the output code
-        // let mut result = String::from("#include \"oak.h\"\n\n");
         let mut result = String::new();
+
+        // Iterate over the external files to include
+        for filename in &self.externs {
+            // Find them in the current working directory
+            if let Ok(contents) = read_to_string(filename.clone()) {
+                // Add the contents of the file to the result
+                result += &contents
+            } else {
+                // If the file doesn't exist, throw an error
+                if let Ok(name) = filename.clone().into_os_string().into_string() {
+                    return Err(AsmError::NonExistantExternFile(name));
+                } else {
+                    return Err(AsmError::NonExistantExternFile(String::from("")));
+                }
+            }
+        }
+
         // Store the IDs of each function
         let mut func_ids = BTreeMap::new();
         // The number of cells to preemptively allocate on the stack
         let mut var_size = 0;
-        for (id, func) in func_list.iter().enumerate() {
+        for (id, func) in self.funcs.iter().enumerate() {
             // Store the function's ID
             func_ids.insert(func.name.clone(), id as i32);
             // Add the function header to the output code
@@ -106,7 +137,7 @@ impl AsmProgram {
         // It is very important that the entry point is assembled last.
         // This is because of the way things are allocated on the stack.
         let mut entry_point = None;
-        for func in func_list {
+        for func in &self.funcs {
             // Compile the function
             if !func.is_entry_point() {
                 result += &func.assemble(&func_ids, &mut var_size, target)?;
@@ -124,7 +155,7 @@ impl AsmProgram {
                 result += &func.assemble(&func_ids, &mut var_size, target)?;
 
                 // Call the entry point
-                result += &target.begin_entry_point(var_size, *heap_size);
+                result += &target.begin_entry_point(var_size, self.heap_size);
                 result += &target.call_fn(AsmFunction::get_assembled_name(*main_id));
                 result += &target.end_entry_point();
 
@@ -297,6 +328,7 @@ pub enum AsmExpression {
     Multiply,
     Subtract,
     Add,
+    Sign,
 }
 
 impl AsmExpression {
@@ -380,6 +412,8 @@ impl AsmExpression {
             // Dereference an address
             Self::Deref(size) => target.load(*size),
 
+            // Get the absolute value of a number on the stack
+            Self::Sign => target.sign(),
             // Add two numbers on the stack
             Self::Add => target.add(),
             // Subtract two numbers on the stack

@@ -1,0 +1,7 @@
+
+
+fn main() {
+    let p: &void = alloc(10);
+
+    p[10];
+}

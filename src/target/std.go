@@ -179,6 +179,15 @@ func (vm *machine) divide() {
 	vm.push(a / b)
 }
 
+func (vm *machine) sign() {
+	x := vm.pop()
+	if x >= 0 {
+		vm.push(1.0)
+	} else {
+		vm.push(-1.0)
+	}
+}
+
 func prn(vm *machine) {
 	n := vm.pop()
 	fmt.Printf("%g", n)
@@ -207,36 +216,4 @@ func getch(vm *machine) {
 	}
 
 	vm.push(float64(ch))
-}
-
-func gt(vm *machine) {
-	if vm.pop() > vm.pop() {
-		vm.push(1.0)
-	} else {
-		vm.push(0.0)
-	}
-}
-
-func ge(vm *machine) {
-	if vm.pop() >= vm.pop() {
-		vm.push(1.0)
-	} else {
-		vm.push(0.0)
-	}
-}
-
-func lt(vm *machine) {
-	if vm.pop() < vm.pop() {
-		vm.push(1.0)
-	} else {
-		vm.push(0.0)
-	}
-}
-
-func le(vm *machine) {
-	if vm.pop() <= vm.pop() {
-		vm.push(1.0)
-	} else {
-		vm.push(0.0)
-	}
 }

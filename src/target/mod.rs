@@ -6,6 +6,8 @@ mod ts;
 pub use ts::TS;
 
 pub trait Target {
+    fn get_name(&self) -> char;
+
     fn prelude(&self) -> String;
     fn postlude(&self) -> String;
 
@@ -18,6 +20,7 @@ pub trait Target {
     fn subtract(&self) -> String;
     fn multiply(&self) -> String;
     fn divide(&self) -> String;
+    fn sign(&self) -> String;
 
     fn allocate(&self) -> String;
     fn free(&self) -> String;
@@ -32,5 +35,5 @@ pub trait Target {
     fn begin_while(&self) -> String;
     fn end_while(&self) -> String;
 
-    fn compile(&self, code: String) -> bool;
+    fn compile(&self, code: String) -> std::io::Result<()>;
 }
