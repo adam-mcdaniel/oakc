@@ -1,6 +1,4 @@
 
-var READER = bufio.NewReader(os.Stdin)
-
 func prn(vm *machine) {
 	n := vm.pop()
 	fmt.Printf("%g", n)

@@ -6,6 +6,7 @@ import (
 	"os"
 )
 
+var READER = bufio.NewReader(os.Stdin)
 
 const STACK_HEAP_COLLISION = 1
 const NO_FREE_MEMORY = 2
