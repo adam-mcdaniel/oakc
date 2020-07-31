@@ -13,6 +13,7 @@ Declaration: HirDeclaration = {
     "#" "[" "error" "(" <Str> ")" "]" => HirDeclaration::Error(<>),
     "#" "[" "if" "(" <cond:Constant> ")" "{" <code:Program> "}" "]" => HirDeclaration::If(cond, code),
     "#" "[" "if" "(" <cond:Constant> ")" "{" <then_code:Program> "}" "else" "{" <else_code:Program> "}" "]" => HirDeclaration::IfElse(cond, then_code, else_code),
+    "#" "[" "define" "(" <name:Str> "," <expr:Constant> ")" "]" => HirDeclaration::Constant(name, expr),
     "const" <name:Ident> "=" <expr:Constant> ";" => HirDeclaration::Constant(name, expr),
     <Function> => HirDeclaration::Function(<>),
     <Structure> => HirDeclaration::Structure(<>),
@@ -55,6 +56,8 @@ Constant: HirConstant = <ConstantMathBottom> => <>;
 
 ConstantAtom: HirConstant = {
     "isdef" "(" <Str> ")" => HirConstant::IsDefined(<>),
+    "true" => HirConstant::True,
+    "false" => HirConstant::False,
     <Ident> => HirConstant::Constant(<>),
     <Num> => HirConstant::Float(<>),
     <Char> => HirConstant::Character(<>),
@@ -148,6 +151,9 @@ ExpressionAtom: HirExpression = {
     "alloc" "(" <size:Expression> ")" => HirExpression::Alloc(Box::new(size)),
     <name:Ident> <args:List<"(", Expression, ",", ")">> => HirExpression::Call(name, args),
     <name:Ident> "!" <args:List<"(", Expression, ",", ")">> => HirExpression::ForeignCall(name, args),
+
+    "true" => HirExpression::True,
+    "false" => HirExpression::False,
     <Ident> => HirExpression::Variable(<>),
     <Str> => HirExpression::String(<>),
 

@@ -47,12 +47,9 @@ pub enum MirError {
     /// Use a `free` statement using an address argument
     /// of a non-pointer type
     FreeNonPointer(MirExpression),
-    /// Using a non-number for an if statement, and if-else
+    /// Using a non-boolean expression for an if statement, and if-else
     /// statement, a while loop, or a for loop
-    /// This is especially bad for while loops. If a multi-cell
-    /// structure is used as a loop condition, the stack will continue
-    /// to grow until it collides with the heap.
-    NonNumberCondition(MirExpression),
+    NonBooleanCondition(MirExpression),
     /// Using a non-number for an `alloc` call
     NonNumberAllocate(MirExpression),
     /// Indexing an array with a non-number value
@@ -124,8 +121,8 @@ impl Display for MirError {
             Self::FreeNonPointer(address_expr) => {
                 write!(f, "cannot free non-pointer '{}'", address_expr)
             }
-            Self::NonNumberCondition(cond_expr) => {
-                write!(f, "cannot use '{}' as a boolean condition", cond_expr)
+            Self::NonBooleanCondition(cond_expr) => {
+                write!(f, "cannot use non-boolean expression '{}' as a condition. try using the comparison operators, like '!=' or '=='", cond_expr)
             }
             Self::NonNumberAllocate(size_expr) => write!(
                 f,
@@ -209,10 +206,17 @@ impl MirType {
     const CHAR: &'static str = "char";
     /// The name of the unit type in the Oak code
     const VOID: &'static str = "void";
+    /// The name of the bool type in Oak code
+    const BOOLEAN: &'static str = "bool";
 
     /// A user defined type
     pub fn structure(name: Identifier) -> Self {
         Self { name, ptr_level: 0 }
+    }
+
+    /// Oak's boolean type
+    pub fn boolean() -> Self {
+        Self::structure(Identifier::from(Self::BOOLEAN))
     }
 
     /// Oak's floating-point type
@@ -266,6 +270,7 @@ impl MirType {
     ) -> Result<i32, MirError> {
         Ok(match self.name.as_str() {
             "void" => 0,
+            "bool" => 1,
             "num" => 1,
             "char" => 1,
             other => {
@@ -344,6 +349,7 @@ impl MirProgram {
     pub fn get_declarations(&self) -> Vec<MirDeclaration> {
         (self.0).clone()
     }
+
     pub fn get_heap_size(&self) -> i32 {
         self.1
     }
@@ -566,7 +572,6 @@ impl MirFunction {
         self.name.clone()
     }
 
-    /// Get the parameters
     fn get_parameters(&self) -> Vec<(Identifier, MirType)> {
         self.args.clone()
     }
@@ -725,9 +730,9 @@ impl MirStatement {
                 cond.type_check(vars, funcs, structs)?;
                 post.type_check(vars, funcs, structs)?;
 
-                // Check if the condition is a structure or of type `void`
-                if cond.get_type(vars, funcs, structs)?.get_size(structs)? != 1 {
-                    return Err(MirError::NonNumberCondition(cond.clone()));
+                // Confirm the condition is a boolean
+                if cond.get_type(vars, funcs, structs)? != MirType::boolean() {
+                    return Err(MirError::NonBooleanCondition(cond.clone()));
                 }
 
                 for stmt in body {
@@ -738,9 +743,9 @@ impl MirStatement {
             Self::While(cond, body) => {
                 cond.type_check(vars, funcs, structs)?;
 
-                // Check if the condition is a structure or of type `void`
-                if cond.get_type(vars, funcs, structs)?.get_size(structs)? != 1 {
-                    return Err(MirError::NonNumberCondition(cond.clone()));
+                // Confirm the condition is a boolean
+                if cond.get_type(vars, funcs, structs)? != MirType::boolean() {
+                    return Err(MirError::NonBooleanCondition(cond.clone()));
                 }
 
                 for stmt in body {
@@ -751,9 +756,9 @@ impl MirStatement {
             Self::If(cond, body) => {
                 cond.type_check(vars, funcs, structs)?;
 
-                // Check if the condition is a structure or of type `void`
-                if cond.get_type(vars, funcs, structs)?.get_size(structs)? != 1 {
-                    return Err(MirError::NonNumberCondition(cond.clone()));
+                // Confirm the condition is a boolean
+                if cond.get_type(vars, funcs, structs)? != MirType::boolean() {
+                    return Err(MirError::NonBooleanCondition(cond.clone()));
                 }
 
                 for stmt in body {
@@ -764,9 +769,9 @@ impl MirStatement {
             Self::IfElse(cond, then_body, else_body) => {
                 cond.type_check(vars, funcs, structs)?;
 
-                // Check if the condition is a structure or of type `void`
-                if cond.get_type(vars, funcs, structs)?.get_size(structs)? != 1 {
-                    return Err(MirError::NonNumberCondition(cond.clone()));
+                // Confirm the condition is a boolean
+                if cond.get_type(vars, funcs, structs)? != MirType::boolean() {
+                    return Err(MirError::NonBooleanCondition(cond.clone()));
                 }
 
                 for stmt in then_body {
@@ -1041,6 +1046,8 @@ pub enum MirExpression {
     String(StringLiteral),
     Float(f64),
     Character(char),
+    True,
+    False,
     Void,
 
     Variable(Identifier),
@@ -1224,7 +1231,9 @@ impl MirExpression {
             | Self::String(_)
             | Self::Float(_)
             | Self::Character(_)
-            | Self::Void => {}
+            | Self::Void
+            | Self::True
+            | Self::False => {}
         }
         Ok(())
     }
@@ -1236,6 +1245,9 @@ impl MirExpression {
         structs: &BTreeMap<Identifier, MirStructure>,
     ) -> Result<Vec<AsmStatement>, MirError> {
         Ok(match self {
+            Self::True => vec![AsmStatement::Expression(vec![AsmExpression::Float(1.0)])],
+            Self::False => vec![AsmStatement::Expression(vec![AsmExpression::Float(0.0)])],
+
             // Invert the boolean value of an expression
             Self::Not(expr) => {
                 MirStatement::IfElse(
@@ -1543,6 +1555,9 @@ impl MirExpression {
         structs: &BTreeMap<Identifier, MirStructure>,
     ) -> Result<MirType, MirError> {
         Ok(match self {
+            Self::True => MirType::boolean(),
+            Self::False => MirType::boolean(),
+
             /// A typecast simply masks the type of the cast expression.
             /// The typecast has the type of whichever type the
             /// expression is being cast to.
@@ -1563,7 +1578,7 @@ impl MirExpression {
             | Self::NotEqual(_, _)
             | Self::And(_, _)
             | Self::Or(_, _)
-            | Self::Not(_) => MirType::float(),
+            | Self::Not(_) => MirType::boolean(),
             /// Float literals have type `num`
             Self::Float(_) => MirType::float(),
             /// String literals have type `&char`
@@ -1640,6 +1655,8 @@ impl MirExpression {
 impl Display for MirExpression {
     fn fmt(&self, f: &mut Formatter) -> Result<(), Error> {
         match self {
+            Self::True => write!(f, "true"),
+            Self::False => write!(f, "false"),
             Self::TypeCast(expr, t) => write!(f, "{} as {}", expr, t),
 
             Self::Not(expr) => write!(f, "!{}", expr),
