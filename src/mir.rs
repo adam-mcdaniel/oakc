@@ -60,6 +60,9 @@ pub enum MirError {
     /// Adding, subtracting, multiplying, or dividing two
     /// values where one or more of them is not a number.
     NonNumberBinaryOperation(MirExpression, MirExpression),
+    /// Using the not operator or other unary operator
+    /// on a non-number value.
+    NonNumberUnaryOperation(MirExpression),
     /// Calling a function without enough arguments
     NotEnoughArguments(MirExpression),
     /// Calling a function with too many arguments
@@ -138,6 +141,11 @@ impl Display for MirError {
                 f,
                 "cannot use non-numbers '{}' and '{}' in binary operation",
                 lhs, rhs
+            ),
+            Self::NonNumberUnaryOperation(expr) => write!(
+                f,
+                "cannot use non-number '{}' in unary operation",
+                expr
             ),
             Self::NotEnoughArguments(call_expr) => {
                 write!(f, "too few arguments in function call '{}'", call_expr)
@@ -837,7 +845,7 @@ impl MirStatement {
             /// Assign an expression to a defined variable
             Self::AssignVariable(var_name, expr) => {
                 // Check to see if the variable has been defined
-                if let Some(t) = vars.get(var_name) {
+                if let Some(t) = vars.clone().get(var_name) {
                     let mut result = Vec::new();
                     // Push the expression to store onto the stack
                     result.extend(expr.assemble(vars, funcs, structs)?);
@@ -1019,10 +1027,16 @@ pub enum MirExpression {
     Multiply(Box<Self>, Box<Self>),
     Divide(Box<Self>, Box<Self>),
 
+    Not(Box<Self>),
+    And(Box<Self>, Box<Self>),
+    Or(Box<Self>, Box<Self>),
+
     Greater(Box<Self>, Box<Self>),
     Less(Box<Self>, Box<Self>),
     GreaterEqual(Box<Self>, Box<Self>),
     LessEqual(Box<Self>, Box<Self>),
+    Equal(Box<Self>, Box<Self>),
+    NotEqual(Box<Self>, Box<Self>),
 
     String(StringLiteral),
     Float(f64),
@@ -1061,6 +1075,16 @@ impl MirExpression {
                 }
             }
 
+            Self::Not(expr) => {
+                expr.type_check(vars, funcs, structs)?;
+                let expr_type = expr.get_type(vars, funcs, structs)?;
+                if expr_type.get_size(structs)? != 1 {
+                    return Err(MirError::NonNumberUnaryOperation(
+                        *expr.clone(),
+                    ));
+                }
+            }
+
             // Typecheck binary operations
             // Currently, type checking only fails if either the left hand side
             // or the right hand side are of type `void`, or a user defined structure
@@ -1071,7 +1095,11 @@ impl MirExpression {
             | Self::Greater(lhs, rhs)
             | Self::Less(lhs, rhs)
             | Self::GreaterEqual(lhs, rhs)
-            | Self::LessEqual(lhs, rhs) => {
+            | Self::LessEqual(lhs, rhs)
+            | Self::Equal(lhs, rhs)
+            | Self::NotEqual(lhs, rhs)
+            | Self::And(lhs, rhs)
+            | Self::Or(lhs, rhs) => {
                 lhs.type_check(vars, funcs, structs)?;
                 rhs.type_check(vars, funcs, structs)?;
                 let lhs_type = lhs.get_type(vars, funcs, structs)?;
@@ -1203,11 +1231,59 @@ impl MirExpression {
 
     fn assemble(
         &self,
-        vars: &BTreeMap<Identifier, MirType>,
+        vars: &mut BTreeMap<Identifier, MirType>,
         funcs: &BTreeMap<Identifier, MirFunction>,
         structs: &BTreeMap<Identifier, MirStructure>,
     ) -> Result<Vec<AsmStatement>, MirError> {
         Ok(match self {
+            // Invert the boolean value of an expression
+            Self::Not(expr) => {
+                MirStatement::IfElse(
+                    *expr.clone(),
+                    vec![MirStatement::Expression(MirExpression::Float(0.0))],
+                    vec![MirStatement::Expression(MirExpression::Float(1.0))],
+                ).assemble(vars, funcs, structs)?
+            }
+
+            /// And two boolean values
+            /// And is essentially boolean multiplication,
+            /// so multiply these two values and use it
+            /// as a condition for which value to use
+            Self::And(l, r) => MirStatement::IfElse(
+                MirExpression::Multiply(l.clone(), r.clone()),
+                vec![MirStatement::Expression(MirExpression::Float(1.0))],
+                vec![MirStatement::Expression(MirExpression::Float(0.0))],
+            ).assemble(vars, funcs, structs)?,
+            
+            /// Or two boolean values
+            /// Or is essentially boolean addition,
+            /// so add these two values and use it
+            /// as a condition for which value to use
+            Self::Or(l, r) => MirStatement::IfElse(
+                MirExpression::Add(l.clone(), r.clone()),
+                vec![MirStatement::Expression(MirExpression::Float(1.0))],
+                vec![MirStatement::Expression(MirExpression::Float(0.0))],
+            ).assemble(vars, funcs, structs)?,
+
+
+            /// Are two numbers equal?
+            /// I know this expression doesn't type check,
+            /// but it is correctly implemented.
+            Self::Equal(l, r) => MirStatement::IfElse(
+                MirExpression::Subtract(l.clone(), r.clone()),
+                vec![MirStatement::Expression(MirExpression::Float(0.0))],
+                vec![MirStatement::Expression(MirExpression::Float(1.0))],
+            ).assemble(vars, funcs, structs)?,
+            
+            /// Are two numbers not equal?
+            /// I know this expression doesn't type check,
+            /// but it is correctly implemented.
+            Self::NotEqual(l, r) => MirStatement::IfElse(
+                MirExpression::Subtract(l.clone(), r.clone()),
+                vec![MirStatement::Expression(MirExpression::Float(1.0))],
+                vec![MirStatement::Expression(MirExpression::Float(0.0))],
+            ).assemble(vars, funcs, structs)?,
+
             /// A typecast is only a way to explicitly validate
             /// some kinds of typechecks. The typecast expression
             /// has no change on the output code.
@@ -1482,7 +1558,12 @@ impl MirExpression {
             Self::Greater(_, _)
             | Self::Less(_, _)
             | Self::GreaterEqual(_, _)
-            | Self::LessEqual(_, _) => MirType::float(),
+            | Self::LessEqual(_, _)
+            | Self::Equal(_, _)
+            | Self::NotEqual(_, _)
+            | Self::And(_, _)
+            | Self::Or(_, _)
+            | Self::Not(_) => MirType::float(),
             /// Float literals have type `num`
             Self::Float(_) => MirType::float(),
             /// String literals have type `&char`
@@ -1560,11 +1641,18 @@ impl Display for MirExpression {
     fn fmt(&self, f: &mut Formatter) -> Result<(), Error> {
         match self {
             Self::TypeCast(expr, t) => write!(f, "{} as {}", expr, t),
+
+            Self::Not(expr) => write!(f, "!{}", expr),
+            Self::And(lhs, rhs) => write!(f, "{}&&{}", lhs, rhs),
+            Self::Or(lhs, rhs) => write!(f, "{}||{}", lhs, rhs),
+
             Self::Add(lhs, rhs) => write!(f, "{}+{}", lhs, rhs),
             Self::Subtract(lhs, rhs) => write!(f, "{}-{}", lhs, rhs),
             Self::Multiply(lhs, rhs) => write!(f, "{}/{}", lhs, rhs),
             Self::Divide(lhs, rhs) => write!(f, "{}/{}", lhs, rhs),
 
+            Self::Equal(lhs, rhs) => write!(f, "{}=={}", lhs, rhs),
+            Self::NotEqual(lhs, rhs) => write!(f, "{}!={}", lhs, rhs),
             Self::Greater(lhs, rhs) => write!(f, "{}>{}", lhs, rhs),
             Self::GreaterEqual(lhs, rhs) => write!(f, "{}>={}", lhs, rhs),
             Self::Less(lhs, rhs) => write!(f, "{}<{}", lhs, rhs),

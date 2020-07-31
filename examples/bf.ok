@@ -58,7 +58,7 @@ type Machine(MACHINE) {
 
 	fn in(self: &Machine)  { self->val = get_char() }
 	fn out(self: &Machine) {
-		if neq(self->val, EOF) {
+		if self->val != EOF {
 			putchar(self->val)
 		}
 	}
@@ -101,15 +101,15 @@ type Machine(MACHINE) {
 	}
 
 	fn run(self: &Machine) {
-		while neq(self->ins_ptr, strlen(self->code)) {
-			if eq(self->token, '+') { self.plus() }
-			if eq(self->token, '-') { self.minus() }
-			if eq(self->token, '<') { self.left() }
-			if eq(self->token, '>') { self.right() }
-			if eq(self->token, ',') { self.in() }
-			if eq(self->token, '.') { self.out() }
-			if eq(self->token, '[') { self.loop() }
-			if eq(self->token, ']') { self.end() }
+		while self->ins_ptr != strlen(self->code) {
+			if self->token == '+' { self.plus() }
+			if self->token == '-' { self.minus() }
+			if self->token == '<' { self.left() }
+			if self->token == '>' { self.right() }
+			if self->token == ',' { self.in() }
+			if self->token == '.' { self.out() }
+			if self->token == '[' { self.loop() }
+			if self->token == ']' { self.end() }
 			else {
 				self->ins_ptr = self->ins_ptr + 1;
 			}

@@ -1,0 +1,11 @@
+
+const true  = 1;
+const false = 0;
+
+fn main() {
+    if !false {
+        putstrln("Not works!")
+    } else {
+        putstrln("Not doesn't work :(")
+    }
+}

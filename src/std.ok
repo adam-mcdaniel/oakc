@@ -1,16 +1,3 @@
-fn not(x: num) -> num {
-    let result = 1;
-    if x { result = 0 }
-    return result
-}
-
-fn neq(a: num, b: num) -> num { return not(eq(a, b)); }
-fn eq(a: num, b: num) -> num {
-    let result = 1;
-    if a - b { result = 0 }
-    return result
-}
-
 fn putstr(s: &char) -> void { prs!(s); }
 fn putstrln(s: &char) -> void { putstr(s); prend!(); }
 
