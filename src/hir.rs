@@ -167,7 +167,7 @@ impl HirProgram {
 
 #[derive(Clone, Debug)]
 pub enum HirError {
-    ConstantNotDefined(Identifier),]
+    ConstantNotDefined(Identifier),
     ConflictingStdReqs,
     FailedAssertion(HirConstant),
     UserError(String),
