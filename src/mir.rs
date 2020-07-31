@@ -1028,6 +1028,9 @@ pub enum MirExpression {
     Divide(Box<Self>, Box<Self>),
 
     Not(Box<Self>),
+    And(Box<Self>, Box<Self>),
+    Or(Box<Self>, Box<Self>),
+
     Greater(Box<Self>, Box<Self>),
     Less(Box<Self>, Box<Self>),
     GreaterEqual(Box<Self>, Box<Self>),
@@ -1094,7 +1097,9 @@ impl MirExpression {
             | Self::GreaterEqual(lhs, rhs)
             | Self::LessEqual(lhs, rhs)
             | Self::Equal(lhs, rhs)
-            | Self::NotEqual(lhs, rhs) => {
+            | Self::NotEqual(lhs, rhs)
+            | Self::And(lhs, rhs)
+            | Self::Or(lhs, rhs) => {
                 lhs.type_check(vars, funcs, structs)?;
                 rhs.type_check(vars, funcs, structs)?;
                 let lhs_type = lhs.get_type(vars, funcs, structs)?;
@@ -1231,6 +1236,7 @@ impl MirExpression {
         structs: &BTreeMap<Identifier, MirStructure>,
     ) -> Result<Vec<AsmStatement>, MirError> {
         Ok(match self {
+            // Invert the boolean value of an expression
             Self::Not(expr) => {
                 MirStatement::IfElse(
                     *expr.clone(),
@@ -1238,6 +1244,27 @@ impl MirExpression {
                     vec![MirStatement::Expression(MirExpression::Float(1.0))],
                 ).assemble(vars, funcs, structs)?
             }
+
+            /// And two boolean values
+            /// And is essentially boolean multiplication,
+            /// so multiply these two values and use it
+            /// as a condition for which value to use
+            Self::And(l, r) => MirStatement::IfElse(
+                MirExpression::Multiply(l.clone(), r.clone()),
+                vec![MirStatement::Expression(MirExpression::Float(1.0))],
+                vec![MirStatement::Expression(MirExpression::Float(0.0))],
+            ).assemble(vars, funcs, structs)?,
+            
+            /// Or two boolean values
+            /// Or is essentially boolean addition,
+            /// so add these two values and use it
+            /// as a condition for which value to use
+            Self::Or(l, r) => MirStatement::IfElse(
+                MirExpression::Add(l.clone(), r.clone()),
+                vec![MirStatement::Expression(MirExpression::Float(1.0))],
+                vec![MirStatement::Expression(MirExpression::Float(0.0))],
+            ).assemble(vars, funcs, structs)?,
+
 
             /// Are two numbers equal?
             /// I know this expression doesn't type check,
@@ -1534,6 +1561,8 @@ impl MirExpression {
             | Self::LessEqual(_, _)
             | Self::Equal(_, _)
             | Self::NotEqual(_, _)
+            | Self::And(_, _)
+            | Self::Or(_, _)
             | Self::Not(_) => MirType::float(),
             /// Float literals have type `num`
             Self::Float(_) => MirType::float(),
@@ -1612,7 +1641,11 @@ impl Display for MirExpression {
     fn fmt(&self, f: &mut Formatter) -> Result<(), Error> {
         match self {
             Self::TypeCast(expr, t) => write!(f, "{} as {}", expr, t),
+
             Self::Not(expr) => write!(f, "!{}", expr),
+            Self::And(lhs, rhs) => write!(f, "{}&&{}", lhs, rhs),
+            Self::Or(lhs, rhs) => write!(f, "{}||{}", lhs, rhs),
+
             Self::Add(lhs, rhs) => write!(f, "{}+{}", lhs, rhs),
             Self::Subtract(lhs, rhs) => write!(f, "{}-{}", lhs, rhs),
             Self::Multiply(lhs, rhs) => write!(f, "{}/{}", lhs, rhs),
