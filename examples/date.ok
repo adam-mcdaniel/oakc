@@ -29,9 +29,7 @@ type Date(DATE) {
             prn!(self->month); prc!('/');
             prn!(self->day); prc!('/');
             prn!(self->year); 
-        }
-
-        if not(is_american) {
+        } else {
             prn!(self->day); prc!('/');
             prn!(self->month); prc!('/');
             prn!(self->year); 

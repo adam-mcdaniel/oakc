@@ -106,6 +106,7 @@ Body: Vec<HirStatement> = "{" <head: Statement*> <tail: SmallStatement?> "}" => 
 
 Type: HirType = {
     "&" <t:Type> => HirType::Pointer(Box::new(t)),
+    "&&" <t:Type> => HirType::Pointer(Box::new(HirType::Pointer(Box::new(t)))),
     "void" => HirType::Void,
     "num"  => HirType::Float,
     "char" => HirType::Character,
