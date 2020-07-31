@@ -42,7 +42,8 @@ pub fn compile(cwd: &PathBuf, input: impl ToString, target: impl Target) -> Resu
 }
 
 pub fn parse(input: impl ToString) -> HirProgram {
-    match parser::ProgramParser::new().parse(&strip(input.to_string()).unwrap()) {
+    let code = &strip(input.to_string()).unwrap();
+    match parser::ProgramParser::new().parse(code) {
         // if the parser succeeds, build will succeed
         Ok(parsed) => parsed,
         // if the parser succeeds, annotate code with comments
