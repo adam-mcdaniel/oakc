@@ -1,0 +1,18 @@
+
+
+
+fn ref_one(ptr: &void) -> &&void {
+    return &ptr;
+}
+
+fn ref_two(ptr: &&void) -> &&&void {
+    return &ptr;
+}
+
+fn ref_three(ptr: &&&void) -> &&&&void {
+    return &ptr;
+}
+
+fn main() {
+    let _ = ref_three(ref_two(ref_one(alloc(32))));
+}
