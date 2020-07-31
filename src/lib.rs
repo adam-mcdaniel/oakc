@@ -48,7 +48,7 @@ pub fn parse(input: impl ToString) -> HirProgram {
         Ok(parsed) => parsed,
         // if the parser succeeds, annotate code with comments
         Err(e) => {
-            eprintln!("{}", format_error(&code, e));
+            eprintln!("{}", format_error(&code, e.clone()));
             exit(1);
         }
     }

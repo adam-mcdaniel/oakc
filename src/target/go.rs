@@ -103,6 +103,6 @@ impl Target for Go {
                 }
             }
         }
-        Result::Err(Error::new(ErrorKind::Other, "error compiling "))
+        Result::Err(Error::new(ErrorKind::Other, "could not compile output golang code. is golang installed?"))
     }
 }
