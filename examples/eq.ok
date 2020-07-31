@@ -1,5 +1,4 @@
-
-
+#[std]
 
 fn main() {
     putstr("0 == 0 -> "); putboolln(0 == 0);

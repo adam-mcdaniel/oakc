@@ -1,5 +1,4 @@
 
-
 // Does &&void parse correctly?
 fn ref_one(ptr: &void) -> &&void {
     return &ptr;
