@@ -161,6 +161,7 @@ pub enum HirType {
     Pointer(Box<Self>),
     Void,
     Float,
+    Boolean,
     Character,
     Structure(Identifier),
 }
@@ -171,6 +172,7 @@ impl HirType {
             Self::Pointer(inner) => inner.to_mir_type().refer(),
             Self::Void => MirType::void(),
             Self::Float => MirType::float(),
+            Self::Boolean => MirType::boolean(),
             Self::Character => MirType::character(),
             Self::Structure(name) => MirType::structure(name.clone()),
         }
@@ -276,6 +278,8 @@ impl HirFunction {
 pub enum HirConstant {
     Float(f64),
     Character(char),
+    True,
+    False,
 
     Add(Box<Self>, Box<Self>),
     Subtract(Box<Self>, Box<Self>),
@@ -301,6 +305,8 @@ pub enum HirConstant {
 impl Display for HirConstant {
     fn fmt(&self, f: &mut Formatter) -> Result<(), Error> {
         match self {
+            Self::True => write!(f, "true"),
+            Self::False => write!(f, "false"),
             Self::Float(n) => write!(f, "{}", n),
             Self::Character(ch) => write!(f, "'{}'", ch),
             Self::Add(l, r) => write!(f, "{}+{}", l, r),
@@ -329,6 +335,9 @@ impl HirConstant {
         target: &impl Target,
     ) -> Result<f64, HirError> {
         Ok(match self {
+            Self::True => 1.0,
+            Self::False => 0.0,
+            
             Self::Float(n) => *n,
             Self::Character(ch) => *ch as u8 as f64,
 
@@ -573,6 +582,9 @@ pub enum HirExpression {
     Deref(Box<Self>),
 
     Void,
+    True,
+    False,
+    Character(char),
     String(StringLiteral),
     Variable(Identifier),
 
@@ -599,6 +611,9 @@ impl HirExpression {
                 Box::new(l.to_mir_expr(constants, target)?),
                 Box::new(r.to_mir_expr(constants, target)?),
             ),
+
+            Self::True => MirExpression::True,
+            Self::False => MirExpression::False,
 
             Self::Not(expr) => MirExpression::Not(
                 Box::new(expr.to_mir_expr(constants, target)?),
@@ -663,6 +678,7 @@ impl HirExpression {
             }
 
             Self::Void => MirExpression::Void,
+            Self::Character(ch) => MirExpression::Character(*ch),
             Self::String(string) => MirExpression::String(string.clone()),
 
             /// If a variable is actually a constant,
