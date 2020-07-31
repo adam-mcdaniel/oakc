@@ -189,6 +189,7 @@ pub enum HirType {
     Pointer(Box<Self>),
     Void,
     Float,
+    Boolean,
     Character,
     Structure(Identifier),
 }
@@ -199,6 +200,7 @@ impl HirType {
             Self::Pointer(inner) => inner.to_mir_type().refer(),
             Self::Void => MirType::void(),
             Self::Float => MirType::float(),
+            Self::Boolean => MirType::boolean(),
             Self::Character => MirType::character(),
             Self::Structure(name) => MirType::structure(name.clone()),
         }
@@ -306,11 +308,16 @@ impl HirFunction {
 pub enum HirConstant {
     Float(f64),
     Character(char),
+    True,
+    False,
 
     Add(Box<Self>, Box<Self>),
     Subtract(Box<Self>, Box<Self>),
     Multiply(Box<Self>, Box<Self>),
     Divide(Box<Self>, Box<Self>),
+
+    And(Box<Self>, Box<Self>),
+    Or(Box<Self>, Box<Self>),
 
     Greater(Box<Self>, Box<Self>),
     Less(Box<Self>, Box<Self>),
@@ -328,12 +335,16 @@ pub enum HirConstant {
 impl Display for HirConstant {
     fn fmt(&self, f: &mut Formatter) -> Result<(), Error> {
         match self {
+            Self::True => write!(f, "true"),
+            Self::False => write!(f, "false"),
             Self::Float(n) => write!(f, "{}", n),
             Self::Character(ch) => write!(f, "'{}'", ch),
             Self::Add(l, r) => write!(f, "{}+{}", l, r),
             Self::Subtract(l, r) => write!(f, "{}-{}", l, r),
             Self::Multiply(l, r) => write!(f, "{}*{}", l, r),
             Self::Divide(l, r) => write!(f, "{}/{}", l, r),
+            Self::And(l, r) => write!(f, "{}&&{}", l, r),
+            Self::Or(l, r) => write!(f, "{}||{}", l, r),
             Self::Greater(l, r) => write!(f, "{}>{}", l, r),
             Self::Less(l, r) => write!(f, "{}<{}", l, r),
             Self::GreaterEqual(l, r) => write!(f, "{}>={}", l, r),
@@ -354,8 +365,26 @@ impl HirConstant {
         target: &impl Target,
     ) -> Result<f64, HirError> {
         Ok(match self {
+            Self::True => 1.0,
+            Self::False => 0.0,
+            
             Self::Float(n) => *n,
             Self::Character(ch) => *ch as u8 as f64,
+
+            Self::And(l, r) => {
+                if l.to_value(constants, target)? != 0.0 && r.to_value(constants, target)? != 0.0 {
+                    1.0
+                } else {
+                    0.0
+                }
+            }
+            Self::Or(l, r) => {
+                if l.to_value(constants, target)? != 0.0 || r.to_value(constants, target)? != 0.0 {
+                    1.0
+                } else {
+                    0.0
+                }
+            }
 
             Self::Equal(l, r) => {
                 if l.to_value(constants, target)? == r.to_value(constants, target)? {
@@ -569,6 +598,9 @@ pub enum HirExpression {
     Divide(Box<Self>, Box<Self>),
 
     Not(Box<Self>),
+    And(Box<Self>, Box<Self>),
+    Or(Box<Self>, Box<Self>),
+
     Greater(Box<Self>, Box<Self>),
     Less(Box<Self>, Box<Self>),
     GreaterEqual(Box<Self>, Box<Self>),
@@ -580,6 +612,9 @@ pub enum HirExpression {
     Deref(Box<Self>),
 
     Void,
+    True,
+    False,
+    Character(char),
     String(StringLiteral),
     Variable(Identifier),
 
@@ -607,8 +642,19 @@ impl HirExpression {
                 Box::new(r.to_mir_expr(constants, target)?),
             ),
 
+            Self::True => MirExpression::True,
+            Self::False => MirExpression::False,
+
             Self::Not(expr) => MirExpression::Not(
                 Box::new(expr.to_mir_expr(constants, target)?),
+            ),
+            Self::And(l, r) => MirExpression::And(
+                Box::new(l.to_mir_expr(constants, target)?),
+                Box::new(r.to_mir_expr(constants, target)?),
+            ),
+            Self::Or(l, r) => MirExpression::Or(
+                Box::new(l.to_mir_expr(constants, target)?),
+                Box::new(r.to_mir_expr(constants, target)?),
             ),
 
             Self::Greater(l, r) => MirExpression::Greater(
@@ -662,6 +708,7 @@ impl HirExpression {
             }
 
             Self::Void => MirExpression::Void,
+            Self::Character(ch) => MirExpression::Character(*ch),
             Self::String(string) => MirExpression::String(string.clone()),
 
             /// If a variable is actually a constant,

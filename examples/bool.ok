@@ -1,0 +1,19 @@
+
+const TEST = 0;
+#[if(TEST) {
+    fn bad_fn() {
+        if 1 {
+            putstrln("This function definition should error")
+        }
+    }
+}]
+
+
+fn main() {
+    let a = true;
+    while a {
+        if 1 != 0 {
+            a = false;
+        }
+    }
+}

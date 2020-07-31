@@ -7,7 +7,7 @@
 
 // Copy a char array
 fn strcpy(dst: &char, src: &char) {
-	for (let i=0; src[i]; i=i+1) {
+	for (let i=0; src[i] != '\0'; i=i+1) {
 		dst[i] = src[i];
 	}
 	dst[i] = 0;
@@ -15,7 +15,7 @@ fn strcpy(dst: &char, src: &char) {
 
 // Get the length of a char array
 fn strlen(str: &char) -> num {
-	for (let i=0; str[i]; i=i+1) {}
+	for (let i=0; str[i] != '\0'; i=i+1) {}
 	return i
 }
 
@@ -59,8 +59,8 @@ type Machine(MACHINE) {
 
 	fn in(self: &Machine)  { self->val = get_char() }
 	fn out(self: &Machine) {
-		if neq(self->val, EOF) {
-			putchar(self->val)
+		if self->val != EOF {
+			putchar((self->val) as char)
 		}
 	}
 
@@ -72,7 +72,7 @@ type Machine(MACHINE) {
 	}
 
 	fn end(self: &Machine) {
-		if self->val {
+		if self->val != 0.0 {
 			self->jmp_counter = self->jmp_counter - 1;
 			self->ins_ptr = (self->jmp_stack)[self->jmp_counter];
 			(self->jmp_stack)[self->jmp_counter] = 0;
@@ -102,15 +102,15 @@ type Machine(MACHINE) {
 	}
 
 	fn run(self: &Machine) {
-		while neq(self->ins_ptr, strlen(self->code)) {
-			if eq(self->token, '+') { self.plus() }
-			if eq(self->token, '-') { self.minus() }
-			if eq(self->token, '<') { self.left() }
-			if eq(self->token, '>') { self.right() }
-			if eq(self->token, ',') { self.in() }
-			if eq(self->token, '.') { self.out() }
-			if eq(self->token, '[') { self.loop() }
-			if eq(self->token, ']') { self.end() }
+		while self->ins_ptr != strlen(self->code) {
+			if self->token == '+' { self.plus() }
+			if self->token == '-' { self.minus() }
+			if self->token == '<' { self.left() }
+			if self->token == '>' { self.right() }
+			if self->token == ',' { self.in() }
+			if self->token == '.' { self.out() }
+			if self->token == '[' { self.loop() }
+			if self->token == ']' { self.end() }
 			else {
 				self->ins_ptr = self->ins_ptr + 1;
 			}
