@@ -1,4 +1,4 @@
-
+#[std]
 
 // Assertion fails on Go target
 #[assert(TARGET == 'c')]
