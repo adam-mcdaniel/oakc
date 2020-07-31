@@ -112,6 +112,7 @@ Type: HirType = {
     "&&" <t:Type> => HirType::Pointer(Box::new(HirType::Pointer(Box::new(t)))),
     "void" => HirType::Void,
     "num"  => HirType::Float,
+    "bool" => HirType::Boolean,
     "char" => HirType::Character,
     <Ident> => HirType::Structure(<>)
 }

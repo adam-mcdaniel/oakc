@@ -16,6 +16,8 @@ pub enum MirError {
     FunctionNotDefined(Identifier),
     /// Defining a type multiple times
     StructureRedefined(Identifier),
+    /// Defining a structure with the name of a primitive type
+    PrimitiveTypeRedefined(Identifier),
     /// Defining a function multiple times
     FunctionRedefined(Identifier),
     /// Using a variable without defining it
@@ -96,6 +98,9 @@ impl Display for MirError {
             Self::StructureNotDefined(name) => write!(f, "type '{}' is not defined", name),
             Self::StructureRedefined(name) => {
                 write!(f, "type '{}' is defined multiple times", name)
+            }
+            Self::PrimitiveTypeRedefined(name) => {
+                write!(f, "attempted to define structure with the primitive type name '{}'", name)
             }
             Self::VariableNotDefined(name) => write!(f, "variable '{}' is not defined", name),
             Self::MethodNotDefined(t, name) => {
@@ -269,10 +274,8 @@ impl MirType {
         structs: &BTreeMap<Identifier, MirStructure>,
     ) -> Result<i32, MirError> {
         Ok(match self.name.as_str() {
-            "void" => 0,
-            "bool" => 1,
-            "num" => 1,
-            "char" => 1,
+            Self::VOID => 0,
+            Self::BOOLEAN | Self::FLOAT | Self::CHAR => 1,
             other => {
                 if let Some(structure) = structs.get(other) {
                     structure.get_size()
@@ -437,6 +440,14 @@ impl MirStructure {
         funcs: &mut BTreeMap<Identifier, MirFunction>,
         structs: &BTreeMap<Identifier, MirStructure>,
     ) -> Result<Vec<AsmFunction>, MirError> {
+        // Check to see if this type redefines a primitive type
+        match self.name.as_str() {
+            MirType::BOOLEAN | MirType::CHAR | MirType::FLOAT | MirType::VOID => {
+                return Err(MirError::PrimitiveTypeRedefined(self.name.clone()))
+            }
+            _ => {}
+        }
+
         let mir_type = self.to_mir_type();
         let mut result = Vec::new();
 
