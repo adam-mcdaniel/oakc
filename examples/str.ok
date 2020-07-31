@@ -1,3 +1,4 @@
+#[std]
 
 fn strlen(str: &char) -> num {
     for (let i=0; str[i] != '\0'; i=i+1) {}

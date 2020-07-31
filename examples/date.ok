@@ -1,4 +1,4 @@
-
+#[std]
 
 // The number of memory cells the `Date` type consumes
 const DATE = 3;

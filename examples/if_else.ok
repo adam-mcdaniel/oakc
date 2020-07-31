@@ -1,3 +1,4 @@
+#[std]
 
 fn not(x: bool) -> num {
     let result = 0;

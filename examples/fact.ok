@@ -1,3 +1,4 @@
+#[std]
 #[heap(512)]
 
 fn fact(n: num) -> num {

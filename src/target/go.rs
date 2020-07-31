@@ -11,11 +11,15 @@ impl Target for Go {
         'g'
     }
 
-    fn prelude(&self) -> String {
-        String::from(include_str!("std.go"))
+    fn std(&self) -> String {
+        String::from(include_str!("std/std.go"))
     }
 
-    fn postlude(&self) -> String {
+    fn core_prelude(&self) -> String {
+        String::from(include_str!("core/core.go"))
+    }
+
+    fn core_postlude(&self) -> String {
         String::new()
     }
 

@@ -1,4 +1,4 @@
-
+#[std]
 // An optional flag to set the exact number of memory cells to use for the heap.
 // This makes Oak an extremely suitable language for embedded development!
 #[heap(128)]

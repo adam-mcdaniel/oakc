@@ -18,12 +18,20 @@ use lalrpop_util::{lalrpop_mod, ParseError};
 lalrpop_mod!(pub parser);
 
 pub fn compile(cwd: &PathBuf, input: impl ToString, target: impl Target) -> Result<()> {
-    match parse(input).compile(cwd, &target, &mut BTreeMap::new()) {
+    let mut hir = parse(input);
+    hir.extend_declarations(parse(include_str!("core.ok")).get_declarations());
+    if hir.use_std() {
+        hir.extend_declarations(parse(include_str!("std.ok")).get_declarations())
+    }
+
+    match hir.compile(cwd, &target, &mut BTreeMap::new()) {
         Ok(mir) => match mir.assemble() {
             Ok(asm) => match asm.assemble(&target) {
-                // Add the target's prelude, the FFI code from the user,
-                // the compiled Oak code, and the target's postlude
-                Ok(result) => target.compile(target.prelude() + &result + &target.postlude()),
+                Ok(result) => target.compile(if hir.use_std() {
+                    target.core_prelude() + &target.std() + &result + &target.core_postlude()
+                } else {
+                    target.core_prelude() + &result + &target.core_postlude()
+                }),
                 Err(e) => {
                     eprintln!("compilation error: {}", e.bright_red().underline());
                     exit(1);
