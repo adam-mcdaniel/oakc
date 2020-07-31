@@ -21,14 +21,14 @@ impl Target for TS {
 
     fn begin_entry_point(&self, var_size: i32, heap_size: i32) -> String {
         format!(
-            "async function main():Promise<void> {{\nlet vm = machine_new({}, {});\n",
+            "async function OAKmain():Promise<void> {{\nlet vm = machine_new({}, {});\n",
             var_size,
             var_size + heap_size,
         )
     }
 
     fn end_entry_point(&self) -> String {
-        String::from("\nmachine_drop(vm);\n}\nmain();")
+        String::from("\nmachine_drop(vm);\n}\nOAKmain();")
     }
 
     fn push(&self, n: f64) -> String {
