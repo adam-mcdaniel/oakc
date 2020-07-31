@@ -63,16 +63,22 @@ ConstantAtom: HirConstant = {
 }
 
 ConstantMathBottom: HirConstant = {
-    <l:ConstantMathLow> "==" <r:ConstantMathLow> => HirConstant::Equal(Box::new(l), Box::new(r)),
-    <l:ConstantMathLow> "!=" <r:ConstantMathLow> => HirConstant::NotEqual(Box::new(l), Box::new(r)),
-    <l:ConstantMathLow> ">=" <r:ConstantMathLow> => HirConstant::GreaterEqual(Box::new(l), Box::new(r)),
-    <l:ConstantMathLow> ">" <r:ConstantMathLow> => HirConstant::Greater(Box::new(l), Box::new(r)),
-    <l:ConstantMathLow> "<=" <r:ConstantMathLow> => HirConstant::LessEqual(Box::new(l), Box::new(r)),
-    <l:ConstantMathLow> "<" <r:ConstantMathLow> => HirConstant::Less(Box::new(l), Box::new(r)),
+    <l:ConstantMathLow> "&&" <r:ConstantMathLow> => HirConstant::And(Box::new(l), Box::new(r)),
+    <l:ConstantMathLow> "||" <r:ConstantMathLow> => HirConstant::Or(Box::new(l), Box::new(r)),
     <ConstantMathLow> => <>
 }
 
 ConstantMathLow: HirConstant = {
+    <l:ConstantMathMiddle> "==" <r:ConstantMathMiddle> => HirConstant::Equal(Box::new(l), Box::new(r)),
+    <l:ConstantMathMiddle> "!=" <r:ConstantMathMiddle> => HirConstant::NotEqual(Box::new(l), Box::new(r)),
+    <l:ConstantMathMiddle> ">=" <r:ConstantMathMiddle> => HirConstant::GreaterEqual(Box::new(l), Box::new(r)),
+    <l:ConstantMathMiddle> ">" <r:ConstantMathMiddle> => HirConstant::Greater(Box::new(l), Box::new(r)),
+    <l:ConstantMathMiddle> "<=" <r:ConstantMathMiddle> => HirConstant::LessEqual(Box::new(l), Box::new(r)),
+    <l:ConstantMathMiddle> "<" <r:ConstantMathMiddle> => HirConstant::Less(Box::new(l), Box::new(r)),
+    <ConstantMathMiddle> => <>
+}
+
+ConstantMathMiddle: HirConstant = {
     <l:ConstantMathHigh> "+" <r:ConstantMathHigh> => HirConstant::Add(Box::new(l), Box::new(r)),
     <l:ConstantMathHigh> "-" <r:ConstantMathHigh> => HirConstant::Subtract(Box::new(l), Box::new(r)),
     <ConstantMathHigh> => <>
@@ -156,16 +162,22 @@ ExpressionAtom: HirExpression = {
 }
 
 ExpressionBottom: HirExpression = {
-    <l:ExpressionLow> "==" <r:ExpressionLow> => HirExpression::Equal(Box::new(l), Box::new(r)),
-    <l:ExpressionLow> "!=" <r:ExpressionLow> => HirExpression::NotEqual(Box::new(l), Box::new(r)),
-    <l:ExpressionLow> ">=" <r:ExpressionLow> => HirExpression::GreaterEqual(Box::new(l), Box::new(r)),
-    <l:ExpressionLow> ">" <r:ExpressionLow> => HirExpression::Greater(Box::new(l), Box::new(r)),
-    <l:ExpressionLow> "<=" <r:ExpressionLow> => HirExpression::LessEqual(Box::new(l), Box::new(r)),
-    <l:ExpressionLow> "<" <r:ExpressionLow> => HirExpression::Less(Box::new(l), Box::new(r)),
+    <l:ExpressionLow> "&&" <r:ExpressionLow> => HirExpression::And(Box::new(l), Box::new(r)),
+    <l:ExpressionLow> "||" <r:ExpressionLow> => HirExpression::Or(Box::new(l), Box::new(r)),
     <ExpressionLow> => <>
 }
 
 ExpressionLow: HirExpression = {
+    <l:ExpressionMiddle> "==" <r:ExpressionMiddle> => HirExpression::Equal(Box::new(l), Box::new(r)),
+    <l:ExpressionMiddle> "!=" <r:ExpressionMiddle> => HirExpression::NotEqual(Box::new(l), Box::new(r)),
+    <l:ExpressionMiddle> ">=" <r:ExpressionMiddle> => HirExpression::GreaterEqual(Box::new(l), Box::new(r)),
+    <l:ExpressionMiddle> ">" <r:ExpressionMiddle> => HirExpression::Greater(Box::new(l), Box::new(r)),
+    <l:ExpressionMiddle> "<=" <r:ExpressionMiddle> => HirExpression::LessEqual(Box::new(l), Box::new(r)),
+    <l:ExpressionMiddle> "<" <r:ExpressionMiddle> => HirExpression::Less(Box::new(l), Box::new(r)),
+    <ExpressionMiddle> => <>
+}
+
+ExpressionMiddle: HirExpression = {
     <l:ExpressionHigh> "+" <r:ExpressionHigh> => HirExpression::Add(Box::new(l), Box::new(r)),
     <l:ExpressionHigh> "-" <r:ExpressionHigh> => HirExpression::Subtract(Box::new(l), Box::new(r)),
     <ExpressionHigh> => <>
