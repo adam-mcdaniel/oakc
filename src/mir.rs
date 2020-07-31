@@ -311,18 +311,11 @@ impl MirType {
 /// This implementation solely governs the rules for type-checking.
 impl PartialEq for MirType {
     fn eq(&self, other: &Self) -> bool {
-        // If two types are identical, they are equal
+        // If two types are EXACTLY identical, they are equal
         if self.name == other.name && self.ptr_level == other.ptr_level {
             true
-        } else if !self.is_pointer() && !other.is_pointer() {
-            // (char == num) AND (num == char)
-            match (self.name.as_str(), other.name.as_str()) {
-                ("char", "num") => true,
-                ("num", "char") => true,
-                _ => false,
-            }
         } else {
-            // (&void == &*) AND (&* == &void)
+            // (&void == &T) AND (&T == &void)
             (self.ptr_level == 1 && self.name == "void" && other.ptr_level == 1)
                 || (other.ptr_level == 1 && other.name == "void" && self.ptr_level == 1)
         }
@@ -1686,7 +1679,7 @@ impl Display for MirExpression {
             Self::Method(expr, method, args) => {
                 write!(f, "{}.{}(", expr, method)?;
                 for arg in args {
-                    write!(f, "{},", arg)?;
+                    write!(f, "{}, ", arg)?;
                 }
                 write!(f, ")")
             }

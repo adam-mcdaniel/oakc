@@ -160,7 +160,7 @@ ExpressionAtom: HirExpression = {
 
     "@" => HirExpression::Void,
     <Num> => HirExpression::Constant(HirConstant::Float(<>)),
-    <Char> => HirExpression::Constant(HirConstant::Character(<>)),
+    <Char> => HirExpression::Character(<>),
 
     "!" <ExpressionAtom> => HirExpression::Not(Box::new(<>)),
     "&" <name:Ident> => HirExpression::Refer(name),

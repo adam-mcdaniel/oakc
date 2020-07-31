@@ -584,6 +584,7 @@ pub enum HirExpression {
     Void,
     True,
     False,
+    Character(char),
     String(StringLiteral),
     Variable(Identifier),
 
@@ -677,6 +678,7 @@ impl HirExpression {
             }
 
             Self::Void => MirExpression::Void,
+            Self::Character(ch) => MirExpression::Character(*ch),
             Self::String(string) => MirExpression::String(string.clone()),
 
             /// If a variable is actually a constant,

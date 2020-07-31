@@ -1,5 +1,5 @@
 
-const TEST = 1;
+const TEST = 0;
 #[if(TEST) {
     fn bad_fn() {
         if 1 {
