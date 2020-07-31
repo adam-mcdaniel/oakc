@@ -1,7 +1,0 @@
-// compile this file with the following command:
-// `oak -c foreign.ok -f foreign.c`
-
-
-fn main() -> void {
-    test!();
-}

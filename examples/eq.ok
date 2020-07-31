@@ -1,0 +1,11 @@
+
+
+
+fn main() {
+    putstr("0 == 0 -> "); putnumln(0 == 0);
+    putstr("0 != 0 -> "); putnumln(0 != 0);
+    putstr("1 == 0 -> "); putnumln(1 == 0);
+    putstr("1 != 0 -> "); putnumln(1 != 0);
+    putstr("0 == 1 -> "); putnumln(0 == 1);
+    putstr("0 != 1 -> "); putnumln(0 != 1);
+}

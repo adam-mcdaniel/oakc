@@ -6,8 +6,13 @@ grammar;
 pub Program: HirProgram = <(Declaration)*> => HirProgram::new(<>, 512);
 
 Declaration: HirDeclaration = {
+    "#" "[" "assert" "(" <Constant> ")" "]" => HirDeclaration::Assert(<>),
+    "#" "[" "extern" "(" <Str> ")" "]" => HirDeclaration::Extern(<>),
     "#" "[" "include" "(" <Str> ")" "]" => HirDeclaration::Include(<>),
     "#" "[" "heap" "(" <Num> ")" "]" => HirDeclaration::HeapSize(<> as i32),
+    "#" "[" "error" "(" <Str> ")" "]" => HirDeclaration::Error(<>),
+    "#" "[" "if" "(" <cond:Constant> ")" "{" <code:Program> "}" "]" => HirDeclaration::If(cond, code),
+    "#" "[" "if" "(" <cond:Constant> ")" "{" <then_code:Program> "}" "else" "{" <else_code:Program> "}" "]" => HirDeclaration::IfElse(cond, then_code, else_code),
     "const" <name:Ident> "=" <expr:Constant> ";" => HirDeclaration::Constant(name, expr),
     <Function> => HirDeclaration::Function(<>),
     <Structure> => HirDeclaration::Structure(<>),
@@ -46,13 +51,25 @@ List<Begin, T, Sep, End>: Vec<T> = {
     }
 }
 
-Constant: HirConstant = <ConstantMathLow> => <>;
+Constant: HirConstant = <ConstantMathBottom> => <>;
 
 ConstantAtom: HirConstant = {
+    "isdef" "(" <Str> ")" => HirConstant::IsDefined(<>),
     <Ident> => HirConstant::Constant(<>),
     <Num> => HirConstant::Float(<>),
     <Char> => HirConstant::Character(<>),
-    "-" <ConstantAtom> => HirConstant::Subtract(Box::new(HirConstant::Float(0.0)), Box::new(<>))
+    "-" <ConstantAtom> => HirConstant::Subtract(Box::new(HirConstant::Float(0.0)), Box::new(<>)),
+    "!" <ConstantAtom> => HirConstant::Not(Box::new(<>))
+}
+
+ConstantMathBottom: HirConstant = {
+    <l:ConstantMathLow> "==" <r:ConstantMathLow> => HirConstant::Equal(Box::new(l), Box::new(r)),
+    <l:ConstantMathLow> "!=" <r:ConstantMathLow> => HirConstant::NotEqual(Box::new(l), Box::new(r)),
+    <l:ConstantMathLow> ">=" <r:ConstantMathLow> => HirConstant::GreaterEqual(Box::new(l), Box::new(r)),
+    <l:ConstantMathLow> ">" <r:ConstantMathLow> => HirConstant::Greater(Box::new(l), Box::new(r)),
+    <l:ConstantMathLow> "<=" <r:ConstantMathLow> => HirConstant::LessEqual(Box::new(l), Box::new(r)),
+    <l:ConstantMathLow> "<" <r:ConstantMathLow> => HirConstant::Less(Box::new(l), Box::new(r)),
+    <ConstantMathLow> => <>
 }
 
 ConstantMathLow: HirConstant = {
@@ -132,12 +149,15 @@ ExpressionAtom: HirExpression = {
     <Num> => HirExpression::Constant(HirConstant::Float(<>)),
     <Char> => HirExpression::Constant(HirConstant::Character(<>)),
 
+    "!" <ExpressionAtom> => HirExpression::Not(Box::new(<>)),
     "(" <Expression> ")" => <>,
     "-" <ExpressionAtom> => HirExpression::Subtract(Box::new(HirExpression::Constant(HirConstant::Float(0.0))), Box::new(<>)),
 }
 
 
 ExpressionBottom: HirExpression = {
+    <l:ExpressionLow> "==" <r:ExpressionLow> => HirExpression::Equal(Box::new(l), Box::new(r)),
+    <l:ExpressionLow> "!=" <r:ExpressionLow> => HirExpression::NotEqual(Box::new(l), Box::new(r)),
     <l:ExpressionLow> ">=" <r:ExpressionLow> => HirExpression::GreaterEqual(Box::new(l), Box::new(r)),
     <l:ExpressionLow> ">" <r:ExpressionLow> => HirExpression::Greater(Box::new(l), Box::new(r)),
     <l:ExpressionLow> "<=" <r:ExpressionLow> => HirExpression::LessEqual(Box::new(l), Box::new(r)),

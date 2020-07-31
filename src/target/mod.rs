@@ -4,6 +4,8 @@ mod go;
 pub use go::Go;
 
 pub trait Target {
+    fn get_name(&self) -> char;
+
     fn prelude(&self) -> String;
     fn postlude(&self) -> String;
 
