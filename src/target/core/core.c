@@ -7,6 +7,7 @@ typedef struct machine {
     bool*   allocated;
     int     capacity;
     int     stack_ptr;
+    int     base_ptr;
 } machine;
 
 
@@ -20,6 +21,11 @@ void panic(int code);
 machine *machine_new(int vars, int capacity);
 // Free the virtual machine's memory. This is called at the end of the program.
 void machine_drop(machine *vm);
+
+void machine_load_base_ptr(machine *vm);
+void machine_load_stack_ptr(machine *vm);
+void machine_store_base_ptr(machine *vm);
+
 
 /////////////////////////////////////////////////////////////////////////
 ///////////////////// Stack manipulation operations /////////////////////
@@ -92,33 +98,76 @@ machine *machine_new(int vars, int capacity) {
     for (i=0; i<vars; i++)
         machine_push(result, 0);
 
+    result->base_ptr = result->stack_ptr+1;
+
     return result;
 }
 
-void machine_drop(machine *vm) {
-    // int i;
-    // printf("stack: [ ");
-    // for (i=0; i<vm->stack_ptr; i++)
-    //     printf("%g ", vm->memory[i]);
-    // for (i=vm->stack_ptr; i<vm->capacity; i++)
-    //     printf("  ");
-    // printf("]\nheap:  [ ");
-    // for (i=0; i<vm->stack_ptr; i++)
-    //     printf("  ");
-    // for (i=vm->stack_ptr; i<vm->capacity; i++)
-    //     printf("%g ", vm->memory[i]);
-    // printf("]\nalloc: [ ");
-    // for (i=0; i<vm->capacity; i++)
-    //     printf("%d ", vm->allocated[i]);
-    // printf("]\n");
-    // int total = 0;
-    // for (i=0; i<vm->capacity; i++)
-    //     total += vm->allocated[i];
-    // printf("STACK SIZE    %d\n", vm->stack_ptr);
-    // printf("TOTAL ALLOC'D %d\n", total);
+void machine_dump(machine *vm) {
+    int i;
+    printf("stack: [ ");
+    for (i=0; i<vm->stack_ptr; i++)
+        printf("%g ", vm->memory[i]);
+    for (i=vm->stack_ptr; i<vm->capacity; i++)
+        printf("  ");
+    printf("]\nheap:  [ ");
+    for (i=0; i<vm->stack_ptr; i++)
+        printf("  ");
+    for (i=vm->stack_ptr; i<vm->capacity; i++)
+        printf("%g ", vm->memory[i]);
+    printf("]\nalloc: [ ");
+    for (i=0; i<vm->capacity; i++)
+        printf("%d ", vm->allocated[i]);
+    printf("]\n");
+    int total = 0;
+    for (i=0; i<vm->capacity; i++)
+        total += vm->allocated[i];
+    printf("STACK SIZE    %d\n", vm->stack_ptr);
+    printf("TOTAL ALLOC'D %d\n", total);
+}
 
+void machine_drop(machine *vm) {
+    // machine_dump(vm);
     free(vm->memory);
     free(vm->allocated);
+}
+
+void machine_load_base_ptr(machine *vm) {
+    machine_push(vm, vm->base_ptr);
+}
+
+void machine_establish_stack_frame(machine *vm, int arg_size, int local_scope_size) {
+    // printf("\nBEGIN 1 => BASE_PTR %d\n", vm->base_ptr);
+    // machine_dump(vm);
+    int base_ptr_save = vm->base_ptr, original_stack_ptr = vm->stack_ptr;
+    vm->base_ptr = vm->stack_ptr+1;
+
+    machine_push(vm, base_ptr_save);
+    for (int i=0; i<local_scope_size; i++) {
+        machine_push(vm, 0);
+    }
+    for (int i=0; i<arg_size; i++) {
+        machine_push(vm, vm->memory[original_stack_ptr-arg_size+i]);
+    }
+    // printf("\nBEGIN 2 => BASE_PTR %d\n", vm->base_ptr);
+    // machine_dump(vm);
+}
+
+void machine_end_stack_frame(machine *vm, int arg_size, int local_scope_size, int return_size) {
+    // printf("\nEND 1 => BASE_PTR %d\n", vm->base_ptr);
+    // machine_dump(vm);
+    int i, return_val_ptr = vm->stack_ptr - return_size;
+    vm->stack_ptr -= local_scope_size;
+    vm->base_ptr = machine_pop(vm);
+    vm->stack_ptr -= arg_size;
+
+    machine_push(vm, return_val_ptr);
+    machine_load(vm, return_size);
+
+    for (i=0; i<local_scope_size + arg_size; i++)
+        vm->memory[vm->stack_ptr + i] = 0;
+    // printf("\nEND 2 => BASE_PTR %d\n", vm->base_ptr);
+    // machine_dump(vm);
 }
 
 void machine_push(machine *vm, double n) {
@@ -133,7 +182,6 @@ double machine_pop(machine *vm) {
     }
     double result = vm->memory[vm->stack_ptr-1];
     vm->memory[--vm->stack_ptr] = 0;
-    // --vm->stack_ptr;
     return result;
 }
 

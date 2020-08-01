@@ -36,6 +36,18 @@ impl Target for C {
         String::from("\nmachine_drop(vm);\nreturn 0;\n}")
     }
 
+    fn establish_stack_frame(&self, arg_size: i32, local_scope_size: i32) -> String {
+        format!("machine_establish_stack_frame(vm, {}, {});\n", arg_size, local_scope_size)
+    }
+
+    fn end_stack_frame(&self, arg_size: i32, local_scope_size: i32, return_size: i32) -> String {
+        format!("machine_end_stack_frame(vm, {}, {}, {});\n", arg_size, local_scope_size, return_size)
+    }
+
+    fn load_base_ptr(&self) -> String {
+        String::from("machine_load_base_ptr(vm);\n")
+    }
+
     fn push(&self, n: f64) -> String {
         format!("machine_push(vm, {});\n", n)
     }
@@ -101,6 +113,7 @@ impl Target for C {
     }
 
     fn compile(&self, code: String) -> Result<()> {
+        // println!("CODE: \n{}", code);
         let mut child = Command::new("gcc")
             .arg("-O2")
             .args(&["-o", &format!("main{}", EXE_SUFFIX)[..]])

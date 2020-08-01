@@ -1,0 +1,14 @@
+#[heap(512)]
+#[extern("help.c")]
+
+fn rec(a: num) -> num {
+    let result = 0;
+    if a > 0 {
+        result = a + rec(a-1)
+    }
+    return result
+}
+
+fn main() {
+    prn!(rec(5)); prend!();
+}

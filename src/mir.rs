@@ -1450,8 +1450,6 @@ impl MirExpression {
             Self::Call(func_name, args) => {
                 let mut result = Vec::new();
                 // Push arguments onto the stack in reverse order
-                let mut args = args.clone();
-                args.reverse();
                 for arg in args {
                     result.extend(arg.assemble(vars, funcs, structs)?);
                 }
@@ -1465,8 +1463,6 @@ impl MirExpression {
             /// Call a foreign function
             Self::ForeignCall(func_name, args) => {
                 let mut result = Vec::new();
-                let mut args = args.clone();
-                args.reverse();
                 for arg in args {
                     result.extend(arg.assemble(vars, funcs, structs)?);
                 }
