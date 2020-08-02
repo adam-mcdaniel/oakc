@@ -89,17 +89,17 @@ impl Debug for AsmType {
 pub struct AsmProgram {
     externs: Vec<PathBuf>,
     funcs: Vec<AsmFunction>,
-    heap_size: i32,
+    memory_size: i32,
 }
 
 impl AsmProgram {
     const ENTRY_POINT: &'static str = "main";
 
-    pub fn new(externs: Vec<PathBuf>, funcs: Vec<AsmFunction>, heap_size: i32) -> Self {
+    pub fn new(externs: Vec<PathBuf>, funcs: Vec<AsmFunction>, memory_size: i32) -> Self {
         Self {
             externs,
             funcs,
-            heap_size,
+            memory_size,
         }
     }
 
@@ -155,7 +155,7 @@ impl AsmProgram {
                 result += &func.assemble(&func_ids, &mut var_size, target)?;
 
                 // Call the entry point
-                result += &target.begin_entry_point(var_size, self.heap_size);
+                result += &target.begin_entry_point(var_size, self.memory_size);
                 result += &target.call_fn(AsmFunction::get_assembled_name(*main_id));
                 result += &target.end_entry_point();
 

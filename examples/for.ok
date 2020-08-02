@@ -1,5 +1,5 @@
 #[std]
-#[heap(128)]
+#[memory(128)]
 
 fn inc(n: &num) -> void {
     *n = (*n) + 1;

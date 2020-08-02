@@ -1,5 +1,5 @@
 #[std]
-#[heap(32)]
+#[memory(32)]
 
 fn main() {
     if !false {

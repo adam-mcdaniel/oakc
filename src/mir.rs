@@ -338,20 +338,20 @@ impl Display for MirType {
 pub struct MirProgram(Vec<MirDeclaration>, i32);
 
 impl MirProgram {
-    pub fn new(decls: Vec<MirDeclaration>, heap_size: i32) -> Self {
-        Self(decls, heap_size)
+    pub fn new(decls: Vec<MirDeclaration>, memory_size: i32) -> Self {
+        Self(decls, memory_size)
     }
 
     pub fn get_declarations(&self) -> Vec<MirDeclaration> {
         (self.0).clone()
     }
 
-    pub fn get_heap_size(&self) -> i32 {
+    pub fn get_memory_size(&self) -> i32 {
         self.1
     }
 
     pub fn assemble(&self) -> Result<AsmProgram, MirError> {
-        let Self(decls, heap_size) = self.clone();
+        let Self(decls, memory_size) = self.clone();
         let mut externs = Vec::new();
         let mut funcs = BTreeMap::new();
         let mut structs = BTreeMap::new();
@@ -382,7 +382,7 @@ impl MirProgram {
             result.extend(decl.assemble(&mut funcs, &mut structs)?);
         }
 
-        Ok(AsmProgram::new(externs, result, heap_size))
+        Ok(AsmProgram::new(externs, result, memory_size))
     }
 }
 
