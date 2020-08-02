@@ -15,7 +15,5 @@ fn ref_three(ptr: &&&void) -> &&&&void {
 }
 
 fn main() {
-    let p: &void = alloc(32);
-    let _ = ref_three(ref_two(ref_one(p)));
-    free p: 32;
+    let _ = ref_three(ref_two(ref_one(alloc(32))));
 }
