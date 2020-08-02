@@ -295,7 +295,7 @@ impl HirStructure {
 
     pub fn generate_docs(&self) -> String {
         let mut result = format!(
-            "## _type_ **{}** with size **{}**\n---\n",
+            "## _type_ **{}** with size **{}**\n",
             self.name, self.size
         );
         if let Some(doc) = &self.doc {
