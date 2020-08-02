@@ -39,8 +39,8 @@ impl Target for Go {
         format!("vm.establish_stack_frame({}, {})\n", arg_size, local_scope_size)
     }
 
-    fn end_stack_frame(&self, arg_size: i32, local_scope_size: i32, return_size: i32) -> String {
-        format!("vm.end_stack_frame({}, {}, {})\n", arg_size, local_scope_size, return_size)
+    fn end_stack_frame(&self, local_scope_size: i32, return_size: i32) -> String {
+        format!("vm.end_stack_frame({}, {})\n", local_scope_size, return_size)
     }
 
     fn load_base_ptr(&self) -> String {

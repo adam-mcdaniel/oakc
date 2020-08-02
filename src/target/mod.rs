@@ -14,7 +14,7 @@ pub trait Target {
     fn end_entry_point(&self) -> String;
 
     fn establish_stack_frame(&self, arg_size: i32, local_scope_size: i32) -> String;
-    fn end_stack_frame(&self, arg_size: i32, local_scope_size: i32, return_size: i32) -> String;
+    fn end_stack_frame(&self, local_scope_size: i32, return_size: i32) -> String;
     fn load_base_ptr(&self) -> String;
 
     fn push(&self, n: f64) -> String;

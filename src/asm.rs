@@ -214,7 +214,7 @@ impl AsmFunction {
     ) -> Result<String, AsmError> {
         let mut result = String::new();
         let mut arg_size = 0;
-        let mut local_scope_size = 0;
+        let mut local_scope_size = 1;
         // Store the variables's addresses and types in the scope
         let mut vars = BTreeMap::new();
         for (arg_name, arg_type) in &self.args {
@@ -232,7 +232,7 @@ impl AsmFunction {
         }
 
         let start = target.establish_stack_frame(arg_size, local_scope_size);
-        result += &target.end_stack_frame(arg_size, local_scope_size, self.return_type.get_size());
+        result += &target.end_stack_frame(local_scope_size, self.return_type.get_size());
 
         println!("STACK FRAME SIZE OF {} => {}", self.name, local_scope_size);
 
@@ -356,6 +356,7 @@ impl AsmExpression {
                 // The size of the string is the length of the characters,
                 // plus 1 for the zero terminated character.
                 let size = s.len() as i32 + 1;
+                println!("GS {:?} {}:{}", s, address, size);
 
                 // Push each character of the string onto the stack
                 let mut result = String::new();
@@ -413,7 +414,7 @@ impl AsmExpression {
             // Get the address of a variable on the stack
             Self::Refer(name) => {
                 if let Some((addr, _)) = vars.get(name) {
-                    target.push(*addr as f64)
+                    target.push(*addr as f64) + &target.load_base_ptr() + &target.add()
                 } else {
                     return Err(AsmError::VariableNotDefined(name.clone()));
                 }

@@ -1,9 +1,11 @@
-#[std]
+// #[std]
+#[extern("test/help.c")]
+#[heap(32)]
 
 fn main() {
     if !false {
-        putstrln("Not works!")
+        prs!("Not works!")
     } else {
-        putstrln("Not doesn't work :(")
+        prs!("Not doesn't work :(")
     }
 }

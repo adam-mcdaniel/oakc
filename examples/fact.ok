@@ -1,5 +1,5 @@
 #[std]
-#[heap(512)]
+#[heap(1024)]
 
 fn fact(n: num) -> num {
     let result = 1;

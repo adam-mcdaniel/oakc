@@ -129,8 +129,12 @@ void machine_dump(machine *vm) {
 
 void machine_drop(machine *vm) {
     machine_dump(vm);
+    printf("TRY FREED MEM\n");
     free(vm->memory);
+    printf("FREED MEM\n");
+    printf("TRY FREED ALLOC %p\n", (void*)vm->allocated);
     free(vm->allocated);
+    printf("FREED ALLOC\n");
 }
 
 void machine_load_base_ptr(machine *vm) {
@@ -259,4 +263,282 @@ void machine_sign(machine *vm) {
     } else {
         machine_push(vm, -1);
     }
+}
+void prn(machine *vm) {
+    double n = machine_pop(vm);
+    printf("%g", n);
+}
+
+void prs(machine *vm) {
+    double addr = machine_pop(vm);
+    int i;
+    for (i=addr; vm->memory[i]; i++) {
+        printf("%c", (char)vm->memory[i]);
+    }
+}
+
+void prc(machine *vm) {
+    double n = machine_pop(vm);
+    printf("%c", (char)n);
+}
+
+void prend(machine *vm) {
+    printf("\n");
+}
+
+void getch(machine *vm) {
+    char ch = getchar();
+    if (ch == '\r') {
+        ch = getchar();
+    }
+    machine_push(vm, ch);
+}
+
+void fn0(machine* vm);
+void fn1(machine* vm);
+void fn2(machine* vm);
+void fn3(machine* vm);
+void fn4(machine* vm);
+void fn5(machine* vm);
+void fn6(machine* vm);
+void fn7(machine* vm);
+void fn8(machine* vm);
+void fn9(machine* vm);
+void fn10(machine* vm);
+void fn0(machine* vm) { machine_establish_stack_frame(vm, 1, 2);
+machine_push(vm, 1);
+machine_load_base_ptr(vm);
+machine_add(vm);
+machine_store(vm, 1);
+machine_push(vm, 1);
+machine_load_base_ptr(vm);
+machine_add(vm);
+machine_load(vm, 1);
+machine_load(vm, 1);
+machine_push(vm, 1);
+machine_add(vm);
+machine_push(vm, 1);
+machine_load_base_ptr(vm);
+machine_add(vm);
+machine_load(vm, 1);
+machine_store(vm, 1);
+machine_end_stack_frame(vm, 2, 0);
+}
+void fn2(machine* vm) { machine_establish_stack_frame(vm, 1, 2);
+machine_push(vm, 1);
+machine_load_base_ptr(vm);
+machine_add(vm);
+machine_store(vm, 1);
+machine_push(vm, 1);
+machine_load_base_ptr(vm);
+machine_add(vm);
+machine_load(vm, 1);
+prs(vm);
+machine_end_stack_frame(vm, 2, 0);
+}
+void fn3(machine* vm) { machine_establish_stack_frame(vm, 1, 2);
+machine_push(vm, 1);
+machine_load_base_ptr(vm);
+machine_add(vm);
+machine_store(vm, 1);
+machine_push(vm, 1);
+machine_load_base_ptr(vm);
+machine_add(vm);
+machine_load(vm, 1);
+fn2(vm);
+prend(vm);
+machine_end_stack_frame(vm, 2, 0);
+}
+void fn4(machine* vm) { machine_establish_stack_frame(vm, 1, 2);
+machine_push(vm, 1);
+machine_load_base_ptr(vm);
+machine_add(vm);
+machine_store(vm, 1);
+machine_push(vm, 1);
+machine_load_base_ptr(vm);
+machine_add(vm);
+machine_load(vm, 1);
+prn(vm);
+machine_end_stack_frame(vm, 2, 0);
+}
+void fn5(machine* vm) { machine_establish_stack_frame(vm, 1, 2);
+machine_push(vm, 1);
+machine_load_base_ptr(vm);
+machine_add(vm);
+machine_store(vm, 1);
+machine_push(vm, 1);
+machine_load_base_ptr(vm);
+machine_add(vm);
+machine_load(vm, 1);
+fn4(vm);
+prend(vm);
+machine_end_stack_frame(vm, 2, 0);
+}
+void fn6(machine* vm) { machine_establish_stack_frame(vm, 1, 2);
+machine_push(vm, 1);
+machine_load_base_ptr(vm);
+machine_add(vm);
+machine_store(vm, 1);
+machine_push(vm, 1);
+machine_load_base_ptr(vm);
+machine_add(vm);
+machine_load(vm, 1);
+prc(vm);
+machine_end_stack_frame(vm, 2, 0);
+}
+void fn7(machine* vm) { machine_establish_stack_frame(vm, 1, 2);
+machine_push(vm, 1);
+machine_load_base_ptr(vm);
+machine_add(vm);
+machine_store(vm, 1);
+machine_push(vm, 1);
+machine_load_base_ptr(vm);
+machine_add(vm);
+machine_load(vm, 1);
+fn6(vm);
+prend(vm);
+machine_end_stack_frame(vm, 2, 0);
+}
+void fn8(machine* vm) { machine_establish_stack_frame(vm, 1, 4);
+machine_push(vm, 1);
+machine_load_base_ptr(vm);
+machine_add(vm);
+machine_store(vm, 1);
+machine_push(vm, 1);
+machine_load_base_ptr(vm);
+machine_add(vm);
+machine_load(vm, 1);
+machine_push(vm, 2);
+machine_load_base_ptr(vm);
+machine_add(vm);
+machine_store(vm, 1);
+machine_push(vm, 1);
+machine_push(vm, 3);
+machine_load_base_ptr(vm);
+machine_add(vm);
+machine_store(vm, 1);
+machine_push(vm, 2);
+machine_load_base_ptr(vm);
+machine_add(vm);
+machine_load(vm, 1);
+while (machine_pop(vm)) {
+machine_push(vm, 116);
+fn6(vm);
+machine_push(vm, 114);
+fn6(vm);
+machine_push(vm, 117);
+fn6(vm);
+machine_push(vm, 101);
+fn6(vm);
+machine_push(vm, 0);
+machine_push(vm, 2);
+machine_load_base_ptr(vm);
+machine_add(vm);
+machine_store(vm, 1);
+machine_push(vm, 0);
+machine_push(vm, 3);
+machine_load_base_ptr(vm);
+machine_add(vm);
+machine_store(vm, 1);
+machine_push(vm, 2);
+machine_load_base_ptr(vm);
+machine_add(vm);
+machine_load(vm, 1);
+}
+machine_push(vm, 3);
+machine_load_base_ptr(vm);
+machine_add(vm);
+machine_load(vm, 1);
+while (machine_pop(vm)) {
+machine_push(vm, 102);
+fn6(vm);
+machine_push(vm, 97);
+fn6(vm);
+machine_push(vm, 108);
+fn6(vm);
+machine_push(vm, 115);
+fn6(vm);
+machine_push(vm, 101);
+fn6(vm);
+machine_push(vm, 0);
+machine_push(vm, 2);
+machine_load_base_ptr(vm);
+machine_add(vm);
+machine_store(vm, 1);
+machine_push(vm, 0);
+machine_push(vm, 3);
+machine_load_base_ptr(vm);
+machine_add(vm);
+machine_store(vm, 1);
+machine_push(vm, 3);
+machine_load_base_ptr(vm);
+machine_add(vm);
+machine_load(vm, 1);
+}
+machine_end_stack_frame(vm, 4, 0);
+}
+void fn9(machine* vm) { machine_establish_stack_frame(vm, 1, 2);
+machine_push(vm, 1);
+machine_load_base_ptr(vm);
+machine_add(vm);
+machine_store(vm, 1);
+machine_push(vm, 1);
+machine_load_base_ptr(vm);
+machine_add(vm);
+machine_load(vm, 1);
+fn8(vm);
+prend(vm);
+machine_end_stack_frame(vm, 2, 0);
+}
+void fn10(machine* vm) { machine_establish_stack_frame(vm, 0, 1);
+getch(vm);
+machine_end_stack_frame(vm, 1, 1);
+}
+void fn1(machine* vm) { machine_establish_stack_frame(vm, 0, 2);
+machine_push(vm, 0);
+machine_push(vm, 1);
+machine_load_base_ptr(vm);
+machine_add(vm);
+machine_store(vm, 1);
+machine_push(vm, 1);
+machine_load_base_ptr(vm);
+machine_add(vm);
+machine_load(vm, 1);
+machine_push(vm, 10);
+machine_subtract(vm);
+machine_sign(vm);
+machine_push(vm, 1);
+machine_subtract(vm);
+machine_push(vm, -2);
+machine_divide(vm);
+while (machine_pop(vm)) {
+machine_push(vm, 1);
+machine_load_base_ptr(vm);
+machine_add(vm);
+machine_load(vm, 1);
+fn5(vm);
+machine_push(vm, 1);
+machine_load_base_ptr(vm);
+machine_add(vm);
+fn0(vm);
+machine_push(vm, 1);
+machine_load_base_ptr(vm);
+machine_add(vm);
+machine_load(vm, 1);
+machine_push(vm, 10);
+machine_subtract(vm);
+machine_sign(vm);
+machine_push(vm, 1);
+machine_subtract(vm);
+machine_push(vm, -2);
+machine_divide(vm);
+}
+machine_end_stack_frame(vm, 2, 0);
+}
+int main() {
+machine *vm = machine_new(0, 128);
+fn1(vm);
+
+machine_drop(vm);
+return 0;
 }
