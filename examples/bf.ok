@@ -30,7 +30,7 @@ type Machine(MACHINE) {
 		let jmp_counter = 0;
 		let val_ptr = 0;
 		let ins_ptr = 0;
-		let code = alloc(strlen(source_code) + 1) as &char;
+		let code = alloc(strlen(source_code)) as &char;
 		strcpy(code, source_code);
 		let tape = alloc(TAPE_SIZE) as &num;
 
@@ -116,6 +116,12 @@ type Machine(MACHINE) {
 			}
 		}
 	}
+
+	fn drop(self: &Machine) {
+		free self->jmp_stack: MAX_LOOP_DEPTH;
+		free self->code: strlen(self->code);
+		free self->tape: TAPE_SIZE;
+	}
 }
 
 fn main() {
@@ -124,4 +130,5 @@ fn main() {
     );
     m.run();
     m.dump();
+    m.drop();
 }

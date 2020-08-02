@@ -1,5 +1,5 @@
 #[std]
-#[heap(512)]
+#[heap(2048)]
 
 const ARRAY = 3;
 type Array(ARRAY) {

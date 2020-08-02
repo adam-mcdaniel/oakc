@@ -16,7 +16,7 @@ I'm a freshly minted highschool graduate and freshman in college looking for wor
 
 ## Intermediate Representation
 
-The key to oak's insane portability is its incredibly compact backend implementation. _The code for Oak's backend can be expressed in under 100 lines of C._ Such a small implementation is only possible because of the tiny instruction set of the intermediate representation. Oak's IR is only composed of **_14 different instructions_**. That's on par with [brainfuck](https://esolangs.org/wiki/Brainfuck)!
+The key to oak's insane portability is its incredibly compact backend implementation. _The code for Oak's backend can be expressed in under 100 lines of C._ Such a small implementation is only possible because of the tiny instruction set of the intermediate representation. Oak's IR is only composed of **_17 different instructions_**. That's on par with [brainfuck](https://esolangs.org/wiki/Brainfuck)!
 
 The backend of oak functions very simply. Every instruction operates on a _memory tape_. This tape is essentially a static array of double-precision floats.
 
@@ -30,7 +30,7 @@ The backend of oak functions very simply. Every instruction operates on a _memor
                           `current location of the stack pointer`
 ```
 
-When a variable is defined, it's given a static location on the memory tape. Then, the compiler just replaces the variable with its address in the rest of the code!
+When a variable is defined in a function, it's given a static position relative to the virtual machine's current base pointer. So, when a function is called, space for the function's variables is allocated on the stack, and the base pointer is incremented to use this new space. Then, the compiler just replaces the variable with its address added to the base pointer offset in the rest of the code!
 
 Additionally, the memory tape functions as a **_stack_** and a **_heap_**. After space for all of the program's variables is assigned, the memory used for the stack begins. The stack _grows_ and _shrinks_ with data throughout the program: when two numbers are summed, for example, they are popped off of the stack and replaced with the result. Similarly, the heap grows and shrinks throughout the program. The heap, however, is used for _dynamically allocated_ data: information with a memory footprint **unknown at compile time**.
 
@@ -52,6 +52,9 @@ Now that you understand how oak's backend fundamentally operates, here's the com
 | `call_foreign_fn(name: String);` | Call a foreign function by its name in source. |
 | `begin_while();` | Start a while loop. For each iteration, pop a number off of the stack. If the number is not zero, continue the loop. |
 | `end_while();` | Mark the end of a while loop. |
+| `load_base_ptr();` | Load the base pointer of the established stack frame, which is always less than or equal to the stack pointer. Variables are stored relative to the base pointer for each function. So, a function that defines `x: num` and `y: num`, `x` might be stored at `base_ptr + 1`, and `y` might be stored at `base_ptr + 2`. This allows functions to store variables in memory dynamically and as needed, rather than using static memory locations. |
+| `establish_stack_frame(arg_size: i32, local_scope_size: i32);` | Pop off `arg_size` number of cells off of the stack and store them away. Then, call `load_base_ptr` to resume the parent stack frame when this function ends. Push `local_scope_size` number of zeroes onto the stack to make room for the function's variables. Finally, push the stored argument cells back onto the stack as they were originally ordered. |
+| `end_stack_frame(return_size: i32, local_scope_size: i32);` | Pop off `return_size` number of cells off of the stack and store them away. Then, pop `local_scope_size` number of cells off of the stack to discard the stack frame's memory. Pop a value off of the stack and store it in the base pointer to resume the parent stack frame. Finally, push the stored return value cells back onto the stack as they were originally ordered. |
 
 Using only these instructions, oak is able to implement _**even higher level abstractions than C can offer**_!!! That might not sound like much, but it's very powerful for a language this small.
 
@@ -79,7 +82,7 @@ fn main() -> 0 {
 ```
 
 3. Statically compute the program's memory footprint
-    - After totalling all the statically allocated data, such as the overall memory size of variables and string literals, the program preemptively sets aside the proper amount of memory on the stack. This essentially means that the stack pointer is _immediately_ moved to make room for all the data at the start of the program.
+    - After totalling all the statically allocated data, such as the overall memory size of static variables and string literals, the program preemptively sets aside the proper amount of memory on the stack. This essentially means that the stack pointer is _immediately_ moved to make room for all the data at the start of the program.
 
 4. Convert Oak expressions and statements into equivalent IR instructions
     - Most expressions are pretty straightforward: function calls simply push their arguments onto the stack in reverse order and call a function by it's ID, references to a variable just push their assigned location on the stack as a number, and so on. Method calls, _however_, are a bit tricky.

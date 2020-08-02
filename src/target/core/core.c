@@ -7,6 +7,7 @@ typedef struct machine {
     bool*   allocated;
     int     capacity;
     int     stack_ptr;
+    int     base_ptr;
 } machine;
 
 
@@ -20,6 +21,19 @@ void panic(int code);
 machine *machine_new(int vars, int capacity);
 // Free the virtual machine's memory. This is called at the end of the program.
 void machine_drop(machine *vm);
+
+////////////////////////////////////////////////////////////////////////
+////////////////////// Function memory management //////////////////////
+////////////////////////////////////////////////////////////////////////
+// Push the base pointer onto the stack
+void machine_load_base_ptr(machine *vm);
+// Establish a new stack frame for a function with `arg_size`
+// number of cells as arguments.
+void machine_establish_stack_frame(machine *vm, int arg_size, int local_scope_size);
+// End a stack frame for a function with `return_size` number of cells
+// to return, and resume the parent stack frame.
+void machine_end_stack_frame(machine *vm, int return_size, int local_scope_size);
+
 
 /////////////////////////////////////////////////////////////////////////
 ///////////////////// Stack manipulation operations /////////////////////
@@ -92,76 +106,171 @@ machine *machine_new(int vars, int capacity) {
     for (i=0; i<vars; i++)
         machine_push(result, 0);
 
+    result->base_ptr = 0;
+
     return result;
 }
 
-void machine_drop(machine *vm) {
-    // int i;
-    // printf("stack: [ ");
-    // for (i=0; i<vm->stack_ptr; i++)
-    //     printf("%g ", vm->memory[i]);
-    // for (i=vm->stack_ptr; i<vm->capacity; i++)
-    //     printf("  ");
-    // printf("]\nheap:  [ ");
-    // for (i=0; i<vm->stack_ptr; i++)
-    //     printf("  ");
-    // for (i=vm->stack_ptr; i<vm->capacity; i++)
-    //     printf("%g ", vm->memory[i]);
-    // printf("]\nalloc: [ ");
-    // for (i=0; i<vm->capacity; i++)
-    //     printf("%d ", vm->allocated[i]);
-    // printf("]\n");
-    // int total = 0;
-    // for (i=0; i<vm->capacity; i++)
-    //     total += vm->allocated[i];
-    // printf("STACK SIZE    %d\n", vm->stack_ptr);
-    // printf("TOTAL ALLOC'D %d\n", total);
+// Print out the state of the virtual machine's stack and heap
+void machine_dump(machine *vm) {
+    int i;
+    printf("stack: [ ");
+    for (i=0; i<vm->stack_ptr; i++)
+        printf("%g ", vm->memory[i]);
+    for (i=vm->stack_ptr; i<vm->capacity; i++)
+        printf("  ");
+    printf("]\nheap:  [ ");
+    for (i=0; i<vm->stack_ptr; i++)
+        printf("  ");
+    for (i=vm->stack_ptr; i<vm->capacity; i++)
+        printf("%g ", vm->memory[i]);
+    printf("]\nalloc: [ ");
+    for (i=0; i<vm->capacity; i++)
+        printf("%d ", vm->allocated[i]);
+    printf("]\n");
+    int total = 0;
+    for (i=0; i<vm->capacity; i++)
+        total += vm->allocated[i];
+    printf("STACK SIZE    %d\n", vm->stack_ptr);
+    printf("TOTAL ALLOC'D %d\n", total);
+}
 
+void machine_drop(machine *vm) {
+    // machine_dump(vm);
     free(vm->memory);
     free(vm->allocated);
 }
 
+void machine_load_base_ptr(machine *vm) {
+    // Get the virtual machine's current base pointer value,
+    // and push it onto the stack.
+    machine_push(vm, vm->base_ptr);
+}
+
+void machine_establish_stack_frame(machine *vm, int arg_size, int local_scope_size) {
+    // Allocate some space to store the arguments' cells for later
+    double *args = malloc(arg_size * sizeof(double));
+    int i;
+    // Pop the arguments' values off of the stack
+    for (i=arg_size-1; i>=0; i--)
+        args[i] = machine_pop(vm);
+
+    // Push the current base pointer onto the stack so that
+    // when this function returns, it will be able to resume
+    // the current stack frame
+    machine_load_base_ptr(vm);
+
+    // Set the base pointer to the current stack pointer to 
+    // begin the stack frame at the current position on the stack.
+    vm->base_ptr = vm->stack_ptr;
+
+    // Allocate space for all the variables used in the local scope on the stack
+    for (i=0; i<local_scope_size; i++)
+        machine_push(vm, 0);
+
+    // Push the arguments back onto the stack for use by the current function
+    for (i=0; i<arg_size; i++)
+        machine_push(vm, args[i]);
+
+    // Free the space used to temporarily store the supplied arguments.
+    free(args);
+}
+
+void machine_end_stack_frame(machine *vm, int return_size, int local_scope_size) {
+    // Allocate some space to store the returned cells for later
+    double *return_val = malloc(return_size * sizeof(double));
+    int i;
+    // Pop the returned values off of the stack
+    for (i=return_size-1; i>=0; i--)
+        return_val[i] = machine_pop(vm);
+
+    // Discard the memory setup by the stack frame
+    for (i=0; i<local_scope_size; i++)
+        machine_pop(vm);
+    
+    // Retrieve the parent function's base pointer to resume the function
+    vm->base_ptr = machine_pop(vm);
+
+    // Finally, push the returned value back onto the stack for use by
+    // the parent function.
+    for (i=0; i<return_size; i++)
+        machine_push(vm, return_val[i]);
+
+    // Free the space used to temporarily store the returned value.
+    free(return_val);
+}
+
 void machine_push(machine *vm, double n) {
+    // If the memory at the stack pointer is allocated on the heap,
+    // then the stack pointer has collided with the heap.
+    // The program cannot continue without undefined behaviour,
+    // so the program must panic.
     if (vm->allocated[vm->stack_ptr])
         panic(STACK_HEAP_COLLISION);
+    
+    // If the memory isn't allocated, simply push the value onto the stack.
     vm->memory[vm->stack_ptr++] = n;
 }
 
 double machine_pop(machine *vm) {
+    // If the stack pointer can't decrement any further,
+    // the stack has underflowed.
+
+    // It is not possible for pure Oak to generate code that will
+    // cause a stack underflow. Foreign functions, or errors in
+    // the virtual machine implementation are SOLELY responsible
+    // for a stack underflow.
     if (vm->stack_ptr == 0) {
         panic(STACK_UNDERFLOW);
     }
-    double result = vm->memory[vm->stack_ptr-1];
-    vm->memory[--vm->stack_ptr] = 0;
-    // --vm->stack_ptr;
+    // Get the popped value
+    double result = vm->memory[--vm->stack_ptr];
+    // Overwrite the position on the stack with a zero
+    vm->memory[vm->stack_ptr] = 0;
     return result;
 }
 
 int machine_allocate(machine *vm) {    
+    // Get the size of the memory to allocate on the heap
     int i, size=machine_pop(vm), addr=0, consecutive_free_cells=0;
+
+    // Starting at the end of the memory tape, find `size`
+    // number of consecutive cells that have not yet been
+    // allocated.
     for (i=vm->capacity-1; i>vm->stack_ptr; i--) {
+        // If the memory hasn't been allocated, increment the counter.
+        // Otherwise, reset the counter.
         if (!vm->allocated[i]) consecutive_free_cells++;
         else consecutive_free_cells = 0;
 
+        // After we've found an address with the proper amount of memory left,
+        // return the address.
         if (consecutive_free_cells == size) {
             addr = i;
             break;
         }
     }
 
+    // If the address is less than the stack pointer,
+    // the the heap must be full.
+    // The program cannot continue without undefined behavior in this state.
     if (addr <= vm->stack_ptr)
         panic(NO_FREE_MEMORY);
     
+    // Mark the address as allocated
     for (i=0; i<size; i++)
         vm->allocated[addr+i] = true;
 
+    // Push the address onto the stack
     machine_push(vm, addr);
     return addr;
 }
 
 void machine_free(machine *vm) {
+    // Get the address and size to free from the stack
     int i, addr=machine_pop(vm), size=machine_pop(vm);
 
+    // Mark the memory as unallocated, and zero each of the cells
     for (i=0; i<size; i++) {
         vm->allocated[addr+i] = false;
         vm->memory[addr+i] = 0;
@@ -169,14 +278,17 @@ void machine_free(machine *vm) {
 }
 
 void machine_store(machine *vm, int size) {
+    // Pop an address off of the stack
     int i, addr=machine_pop(vm);
 
+    // Pop `size` number of cells from the stack,
+    // and store them at the address in the same order they were
+    // pushed onto the stack.
     for (i=size-1; i>=0; i--) vm->memory[addr+i] = machine_pop(vm);
 }
 
 void machine_load(machine *vm, int size) {
     int i, addr=machine_pop(vm);
-
     for (i=0; i<size; i++) machine_push(vm, vm->memory[addr+i]);
 }
 
