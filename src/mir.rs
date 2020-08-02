@@ -206,13 +206,13 @@ pub struct MirType {
 
 impl MirType {
     /// The name of the float type in Oak code
-    const FLOAT: &'static str = "num";
+    pub const FLOAT: &'static str = "num";
     /// The name of the character type in the Oak code
-    const CHAR: &'static str = "char";
+    pub const CHAR: &'static str = "char";
     /// The name of the unit type in the Oak code
-    const VOID: &'static str = "void";
+    pub const VOID: &'static str = "void";
     /// The name of the bool type in Oak code
-    const BOOLEAN: &'static str = "bool";
+    pub const BOOLEAN: &'static str = "bool";
 
     /// A user defined type
     pub fn structure(name: Identifier) -> Self {
@@ -1090,9 +1090,7 @@ impl MirExpression {
                 expr.type_check(vars, funcs, structs)?;
                 let expr_type = expr.get_type(vars, funcs, structs)?;
                 if expr_type.get_size(structs)? != 1 {
-                    return Err(MirError::NonNumberUnaryOperation(
-                        *expr.clone(),
-                    ));
+                    return Err(MirError::NonNumberUnaryOperation(*expr.clone()));
                 }
             }
 
@@ -1253,13 +1251,12 @@ impl MirExpression {
             Self::False => vec![AsmStatement::Expression(vec![AsmExpression::Float(0.0)])],
 
             // Invert the boolean value of an expression
-            Self::Not(expr) => {
-                MirStatement::IfElse(
-                    *expr.clone(),
-                    vec![MirStatement::Expression(MirExpression::Float(0.0))],
-                    vec![MirStatement::Expression(MirExpression::Float(1.0))],
-                ).assemble(vars, funcs, structs)?
-            }
+            Self::Not(expr) => MirStatement::IfElse(
+                *expr.clone(),
+                vec![MirStatement::Expression(MirExpression::Float(0.0))],
+                vec![MirStatement::Expression(MirExpression::Float(1.0))],
+            )
+            .assemble(vars, funcs, structs)?,
 
             /// And two boolean values
             /// And is essentially boolean multiplication,
@@ -1269,8 +1266,9 @@ impl MirExpression {
                 MirExpression::Multiply(l.clone(), r.clone()),
                 vec![MirStatement::Expression(MirExpression::Float(1.0))],
                 vec![MirStatement::Expression(MirExpression::Float(0.0))],
-            ).assemble(vars, funcs, structs)?,
-            
+            )
+            .assemble(vars, funcs, structs)?,
+
             /// Or two boolean values
             /// Or is essentially boolean addition,
             /// so add these two values and use it
@@ -1279,8 +1277,8 @@ impl MirExpression {
                 MirExpression::Add(l.clone(), r.clone()),
                 vec![MirStatement::Expression(MirExpression::Float(1.0))],
                 vec![MirStatement::Expression(MirExpression::Float(0.0))],
-            ).assemble(vars, funcs, structs)?,
-
+            )
+            .assemble(vars, funcs, structs)?,
 
             /// Are two numbers equal?
             /// I know this expression doesn't type check,
@@ -1289,8 +1287,9 @@ impl MirExpression {
                 MirExpression::Subtract(l.clone(), r.clone()),
                 vec![MirStatement::Expression(MirExpression::Float(0.0))],
                 vec![MirStatement::Expression(MirExpression::Float(1.0))],
-            ).assemble(vars, funcs, structs)?,
-            
+            )
+            .assemble(vars, funcs, structs)?,
+
             /// Are two numbers not equal?
             /// I know this expression doesn't type check,
             /// but it is correctly implemented.
@@ -1298,7 +1297,8 @@ impl MirExpression {
                 MirExpression::Subtract(l.clone(), r.clone()),
                 vec![MirStatement::Expression(MirExpression::Float(1.0))],
                 vec![MirStatement::Expression(MirExpression::Float(0.0))],
-            ).assemble(vars, funcs, structs)?,
+            )
+            .assemble(vars, funcs, structs)?,
 
             /// A typecast is only a way to explicitly validate
             /// some kinds of typechecks. The typecast expression

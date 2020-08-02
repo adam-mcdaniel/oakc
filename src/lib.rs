@@ -17,6 +17,10 @@ use comment::cpp::strip;
 use lalrpop_util::{lalrpop_mod, ParseError};
 lalrpop_mod!(pub parser);
 
+pub fn generate_docs(input: impl ToString, filename: impl ToString) -> String {
+    parse(input).generate_docs(filename.to_string())
+}
+
 pub fn compile(cwd: &PathBuf, input: impl ToString, target: impl Target) -> Result<()> {
     let mut hir = parse(input);
     hir.extend_declarations(parse(include_str!("core.ok")).get_declarations());

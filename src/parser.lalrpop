@@ -6,6 +6,7 @@ grammar;
 pub Program: HirProgram = <(Declaration)*> => HirProgram::new(<>, 512);
 
 Declaration: HirDeclaration = {
+    "#" "[" "header" "(" <Str> ")" "]" => HirDeclaration::DocumentHeader(<>),
     "#" "[" "std" "]" => HirDeclaration::RequireStd,
     "#" "[" "no_std" "]" => HirDeclaration::NoStd,
     "#" "[" "assert" "(" <Constant> ")" "]" => HirDeclaration::Assert(<>),
@@ -15,8 +16,9 @@ Declaration: HirDeclaration = {
     "#" "[" "error" "(" <Str> ")" "]" => HirDeclaration::Error(<>),
     "#" "[" "if" "(" <cond:Constant> ")" "{" <code:Program> "}" "]" => HirDeclaration::If(cond, code),
     "#" "[" "if" "(" <cond:Constant> ")" "{" <then_code:Program> "}" "else" "{" <else_code:Program> "}" "]" => HirDeclaration::IfElse(cond, then_code, else_code),
-    "#" "[" "define" "(" <name:Str> "," <expr:Constant> ")" "]" => HirDeclaration::Constant(name, expr),
-    "const" <name:Ident> "=" <expr:Constant> ";" => HirDeclaration::Constant(name, expr),
+    "#" "[" "define" "(" <name:Str> "," <constant:Constant> ")" "]" => HirDeclaration::Constant(None, name, constant),
+    "#" "[" "doc" "(" <doc:Str> ")" "]" "const" <name:Ident> "=" <constant:Constant> ";" => HirDeclaration::Constant(Some(doc), name, constant),
+    "const" <name:Ident> "=" <constant:Constant> ";" => HirDeclaration::Constant(None, name, constant),
     <Function> => HirDeclaration::Function(<>),
     <Structure> => HirDeclaration::Structure(<>),
 }
@@ -96,11 +98,16 @@ ConstantMathHigh: HirConstant = {
 }
 
 Function: HirFunction = {
-    "fn" <name:Ident> <args:List<"(", (Ident ":" Type), ",", ")">> <body:Body> => HirFunction::new(name, args.iter().map(|(a, _, t)| (a.clone(), t.clone())).collect(), HirType::Void, body),
-    "fn" <name:Ident> <args:List<"(", (Ident ":" Type), ",", ")">> "->" <return_type:Type> <body:Body> => HirFunction::new(name, args.iter().map(|(a, _, t)| (a.clone(), t.clone())).collect(), return_type, body),
+    "#" "[" "doc" "(" <doc:Str> ")" "]" "fn" <name:Ident> <args:List<"(", (Ident ":" Type), ",", ")">> <body:Body> => HirFunction::new(Some(doc), name, args.iter().map(|(a, _, t)| (a.clone(), t.clone())).collect(), HirType::Void, body),
+    "#" "[" "doc" "(" <doc:Str> ")" "]" "fn" <name:Ident> <args:List<"(", (Ident ":" Type), ",", ")">> "->" <return_type:Type> <body:Body> => HirFunction::new(Some(doc), name, args.iter().map(|(a, _, t)| (a.clone(), t.clone())).collect(), return_type, body),
+    "fn" <name:Ident> <args:List<"(", (Ident ":" Type), ",", ")">> <body:Body> => HirFunction::new(None, name, args.iter().map(|(a, _, t)| (a.clone(), t.clone())).collect(), HirType::Void, body),
+    "fn" <name:Ident> <args:List<"(", (Ident ":" Type), ",", ")">> "->" <return_type:Type> <body:Body> => HirFunction::new(None, name, args.iter().map(|(a, _, t)| (a.clone(), t.clone())).collect(), return_type, body),
 }
 
-Structure: HirStructure = "type" <name:Ident> "(" <size:Constant> ")" "{" <methods:Function*> "}" => HirStructure::new(name, size, methods);
+Structure: HirStructure = {
+    "#" "[" "doc" "(" <doc:Str> ")" "]" "type" <name:Ident> "(" <size:Constant> ")" "{" <methods:Function*> "}" => HirStructure::new(Some(doc), name, size, methods),
+    "type" <name:Ident> "(" <size:Constant> ")" "{" <methods:Function*> "}" => HirStructure::new(None, name, size, methods),
+}
 
 Body: Vec<HirStatement> = "{" <head: Statement*> <tail: SmallStatement?> "}" => {
     let mut result = Vec::new();
