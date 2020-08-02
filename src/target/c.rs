@@ -40,8 +40,8 @@ impl Target for C {
         format!("machine_establish_stack_frame(vm, {}, {});\n", arg_size, local_scope_size)
     }
 
-    fn end_stack_frame(&self, local_scope_size: i32, return_size: i32) -> String {
-        format!("machine_end_stack_frame(vm, {}, {});\n", local_scope_size, return_size)
+    fn end_stack_frame(&self, return_size: i32, local_scope_size: i32) -> String {
+        format!("machine_end_stack_frame(vm, {}, {});\n", return_size, local_scope_size)
     }
 
     fn load_base_ptr(&self) -> String {
@@ -113,8 +113,6 @@ impl Target for C {
     }
 
     fn compile(&self, code: String) -> Result<()> {
-        write("output.c", &code)?;
-        // println!("CODE: \n{}", code);
         let mut child = Command::new("gcc")
             .arg("-O2")
             .args(&["-o", &format!("main{}", EXE_SUFFIX)[..]])

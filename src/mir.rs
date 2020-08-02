@@ -1450,7 +1450,7 @@ impl MirExpression {
             Self::Call(func_name, args) => {
                 let mut result = Vec::new();
                 // Push arguments onto the stack in reverse order
-                for arg in args {
+                for arg in args.iter().rev() {
                     result.extend(arg.assemble(vars, funcs, structs)?);
                 }
                 // Call the function
@@ -1463,7 +1463,7 @@ impl MirExpression {
             /// Call a foreign function
             Self::ForeignCall(func_name, args) => {
                 let mut result = Vec::new();
-                for arg in args {
+                for arg in args.iter().rev() {
                     result.extend(arg.assemble(vars, funcs, structs)?);
                 }
                 result.push(AsmStatement::Expression(vec![AsmExpression::ForeignCall(

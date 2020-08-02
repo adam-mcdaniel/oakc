@@ -159,9 +159,6 @@ impl AsmProgram {
                 result += &target.call_fn(AsmFunction::get_assembled_name(*main_id));
                 result += &target.end_entry_point();
 
-                // FOR DEBUGGING
-                println!("STACK SIZE: {}", var_size);
-
                 Ok(result)
             } else {
                 Err(AsmError::NoEntryPoint)
@@ -214,11 +211,19 @@ impl AsmFunction {
     ) -> Result<String, AsmError> {
         let mut result = String::new();
         let mut arg_size = 0;
+
+        // The local scope size starts at one. This is VERY important.
+        // The reason the local scope size starts at one is to make room for
+        // the virtual machine's base pointer on the stack before the stack
+        // frame actually begins. 
         let mut local_scope_size = 1;
+
         // Store the variables's addresses and types in the scope
         let mut vars = BTreeMap::new();
         for (arg_name, arg_type) in &self.args {
+            // Add together the total size of all the arguments supplied to the function
             arg_size += arg_type.get_size();
+
             // Define each argument of the function
             result += &AsmStatement::Define(arg_name.clone(), *arg_type)
                 .assemble(func_ids, &mut vars, global_scope_size, &mut local_scope_size, target)?;
@@ -232,9 +237,7 @@ impl AsmFunction {
         }
 
         let start = target.establish_stack_frame(arg_size, local_scope_size);
-        result += &target.end_stack_frame(local_scope_size, self.return_type.get_size());
-
-        println!("STACK FRAME SIZE OF {} => {}", self.name, local_scope_size);
+        result += &target.end_stack_frame(self.return_type.get_size(), local_scope_size);
 
         // Write the function as output code
         if let Some(id) = func_ids.get(&self.name) {
@@ -356,7 +359,6 @@ impl AsmExpression {
                 // The size of the string is the length of the characters,
                 // plus 1 for the zero terminated character.
                 let size = s.len() as i32 + 1;
-                println!("GS {:?} {}:{}", s, address, size);
 
                 // Push each character of the string onto the stack
                 let mut result = String::new();

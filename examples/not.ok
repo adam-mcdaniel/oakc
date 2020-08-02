@@ -1,5 +1,4 @@
-// #[std]
-#[extern("test/help.c")]
+#[std]
 #[heap(32)]
 
 fn main() {
