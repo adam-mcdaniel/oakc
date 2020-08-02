@@ -1,0 +1,13 @@
+#[std]
+
+fn recursive(a: num) {
+	let number: num = a + 1;
+	if number < 5 {
+		recursive(number);
+	}
+	putnumln(number);
+}
+
+fn main() {
+	recursive(0);
+}

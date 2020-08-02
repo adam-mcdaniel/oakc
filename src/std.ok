@@ -9,8 +9,19 @@ fn putchar(ch: char) -> void { prc!(ch); }
 fn putcharln(ch: char) -> void { putchar(ch); prend!(); }
 
 fn putbool(b: bool) -> void {
-    if b { putstr("true") }
-    else { putstr("false") }
+    if b {
+        putchar('t');
+        putchar('r');
+        putchar('u');
+        putchar('e');
+    }
+    else {
+        putchar('f');
+        putchar('a');
+        putchar('l');
+        putchar('s');
+        putchar('e');
+    }
 }
 
 fn putboolln(b: bool) -> void { putbool(b); prend!(); }

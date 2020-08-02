@@ -166,10 +166,10 @@ ExpressionAtom: HirExpression = {
     <Char> => HirExpression::Character(<>),
 
     "!" <ExpressionAtom> => HirExpression::Not(Box::new(<>)),
-    "&" <name:Ident> => HirExpression::Refer(name),
     "(" <Expression> ")" => <>,
     "-" <ExpressionAtom> => HirExpression::Subtract(Box::new(HirExpression::Constant(HirConstant::Float(0.0))), Box::new(<>)),
 }
+
 
 ExpressionBottom: HirExpression = {
     <l:ExpressionLow> "&&" <r:ExpressionLow> => HirExpression::And(Box::new(l), Box::new(r)),
@@ -194,6 +194,10 @@ ExpressionMiddle: HirExpression = {
 }
 
 ExpressionHigh: HirExpression = {
+    "&" <ptr:ExpressionAtom> "[" <idx:Expression> "]" => HirExpression::Index(Box::new(ptr), Box::new(idx)),
+    "&" <instance:ExpressionAtom> "->" <name:Ident> <args:List<"(", Expression, ",", ")">> => HirExpression::Method(Box::new(instance), name, args),
+    "&" <instance:ExpressionAtom> "->" <name:Ident> => HirExpression::Method(Box::new(instance), name, vec![]),
+    "&" <name:Ident> => HirExpression::Refer(name),
     <ptr:ExpressionAtom> "[" <idx:Expression> "]" => HirExpression::Deref(Box::new(HirExpression::Index(Box::new(ptr), Box::new(idx)))),
     <instance:ExpressionAtom> "." <name:Ident> <args:List<"(", Expression, ",", ")">> => HirExpression::Method(Box::new(instance), name, args),
     <instance:ExpressionAtom> "." <name:Ident> => HirExpression::Method(Box::new(instance), name, vec![]),

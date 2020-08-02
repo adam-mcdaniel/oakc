@@ -35,6 +35,18 @@ impl Target for Go {
         String::from("\nvm.drop()\n}")
     }
 
+    fn establish_stack_frame(&self, arg_size: i32, local_scope_size: i32) -> String {
+        format!("vm.establish_stack_frame({}, {})\n", arg_size, local_scope_size)
+    }
+
+    fn end_stack_frame(&self, return_size: i32, local_scope_size: i32) -> String {
+        format!("vm.end_stack_frame({}, {})\n", return_size, local_scope_size)
+    }
+
+    fn load_base_ptr(&self) -> String {
+        String::from("vm.load_base_ptr()\n")
+    }
+
     fn push(&self, n: f64) -> String {
         format!("vm.push({})\n", n)
     }

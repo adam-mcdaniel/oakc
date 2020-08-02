@@ -1,0 +1,20 @@
+#[std]
+
+type Thing(1) {
+    fn new(n: num) -> Thing {
+        return n as Thing;
+    }
+    fn member(self: &Thing) -> &num { return self as &num }
+}
+
+fn main() {
+    let t = Thing::new(197);
+    putstr("Address of t->member: ");
+    putnumln((&t->member) as num);
+
+    let arr = alloc(32) as &num;
+    putstr("Address of arr[0]: ");
+    putnumln((&arr[0]) as num); // same as `putnumln(arr)`
+    putstr("Address of arr[2]: ");
+    putnumln((&arr[2]) as num); // same as `putnumln(arr + 2 * sizeof(num))`
+}

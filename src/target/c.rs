@@ -36,6 +36,18 @@ impl Target for C {
         String::from("\nmachine_drop(vm);\nreturn 0;\n}")
     }
 
+    fn establish_stack_frame(&self, arg_size: i32, local_scope_size: i32) -> String {
+        format!("machine_establish_stack_frame(vm, {}, {});\n", arg_size, local_scope_size)
+    }
+
+    fn end_stack_frame(&self, return_size: i32, local_scope_size: i32) -> String {
+        format!("machine_end_stack_frame(vm, {}, {});\n", return_size, local_scope_size)
+    }
+
+    fn load_base_ptr(&self) -> String {
+        String::from("machine_load_base_ptr(vm);\n")
+    }
+
     fn push(&self, n: f64) -> String {
         format!("machine_push(vm, {});\n", n)
     }
