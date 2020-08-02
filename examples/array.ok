@@ -20,7 +20,7 @@ type Array(ARRAY) {
     }
 
     fn idx(self: &Array, n: num) -> &void {
-        return self->contents + (n * (self->elem_size))
+        return self->contents + n * (self->elem_size)
     }
 
     fn print(self: &Array) -> void {
