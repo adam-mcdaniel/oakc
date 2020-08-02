@@ -1,6 +1,12 @@
 #[std]
 #[header("This file tests Oak's doc subcommand.")]
 
+
+#[doc("This constant is a constant.")]
+const CONSTANT = 3;
+
+const TEST = CONSTANT + 5;
+
 #[doc("This structure represents a given date in time.
 A Date object has three members:
 |||

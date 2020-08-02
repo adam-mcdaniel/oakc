@@ -59,9 +59,9 @@ impl HirProgram {
                 HirDeclaration::Structure(structure) => content += &structure.generate_docs(),
                 HirDeclaration::Function(function) => content += &function.generate_docs(false),
                 HirDeclaration::Constant(doc, name, constant) => {
-                    content += &format!("## _const_ **{}** = {}", name, constant);
+                    content += &format!("### _const_ **{}** = {}", name, constant);
                     if let Some(s) = doc {
-                        content += "\n";
+                        content += "\n---\n";
                         content += &s.trim();
                     }
                 }
