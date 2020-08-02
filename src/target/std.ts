@@ -85,7 +85,7 @@ function machine_push(vm: machine, n: number): void {
 
 // Pop a number from the stack
 function machine_pop(vm: machine): number {
-	if (vm.stack_ptr == 0) {
+	if (vm.stack_ptr === 0) {
 		panic(STACK_UNDERFLOW);
 	}
 	let result: number = vm.memory[vm.stack_ptr-1];
@@ -104,7 +104,7 @@ function machine_allocate(vm: machine): number {
 		if (!vm.allocated[i]) consecutive_free_cells++;
 		else consecutive_free_cells = 0;
 
-		if (consecutive_free_cells == size) {
+		if (consecutive_free_cells === size) {
 			addr = i;
 			break;
 		}
@@ -170,24 +170,32 @@ function machine_divide(vm: machine): void {
 	machine_push(vm, a/b);
 }
 
+//print a number
 function prn(vm: machine): void {
 	let n = machine_pop(vm);
 	console.log(n);
 }
 
+//print a null-terminated string
 function prs(vm: machine): void {
 	let addr = machine_pop(vm);
+	//console.log always inserts a newline, so build the string first and then print
+	let out = "";
 	for (let i=addr; vm.memory[i]; i++) {
-		console.log(String.fromCharCode(vm.memory[i]));
+		out += String.fromCharCode(vm.memory[i]);
 	}
+	console.log(out);
 }
 
+//print a char
 function prc(vm: machine): void {
 	let n = machine_pop(vm);
 	console.log(String.fromCharCode(n));
 }
 
+//print a newline
 function prend(vm: machine): void {
+	//console.log always inserts a newline
 	console.log("");
 }
 
