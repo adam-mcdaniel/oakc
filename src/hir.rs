@@ -59,9 +59,9 @@ impl HirProgram {
                 HirDeclaration::Structure(structure) => content += &structure.generate_docs(),
                 HirDeclaration::Function(function) => content += &function.generate_docs(false),
                 HirDeclaration::Constant(doc, name, constant) => {
-                    content += &format!("### *const* **{}** = {}", name, constant);
+                    content += &format!("### *const* **{}** = {}\n---", name, constant);
                     if let Some(s) = doc {
-                        content += "\n---\n";
+                        content += "\n";
                         content += &s.trim();
                     }
                 }
@@ -295,7 +295,7 @@ impl HirStructure {
 
     pub fn generate_docs(&self) -> String {
         let mut result = format!(
-            "## *type* **{}** with size **{}**\n",
+            "## *type* **{}** *with size* **{}**\n",
             self.name, self.size
         );
         if let Some(doc) = &self.doc {
@@ -353,7 +353,7 @@ impl HirFunction {
 
     pub fn generate_docs(&self, is_method: bool) -> String {
         let mut result = if is_method {
-            format!(" - *fn* **{}**(", self.name)
+            format!("* *fn* **{}**(", self.name)
         } else {
             format!("### *fn* **{}**(", self.name)
         };
@@ -368,14 +368,14 @@ impl HirFunction {
         result += ")";
 
         if self.return_type != HirType::Void {
-            result += " -> ";
+            result += " *->* ";
             result += &self.return_type.to_string();
         }
 
         result += "\n";
 
         if let Some(doc) = &self.doc {
-            result += if is_method { "   - " } else { "---\n" };
+            result += if is_method { "  - " } else { "---\n" };
             result += &(doc.trim().to_string() + "\n");
         }
         result

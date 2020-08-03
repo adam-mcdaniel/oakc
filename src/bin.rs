@@ -71,7 +71,7 @@ fn main() {
                         eprintln!("error: could not write to file \"{}\"", output_file);
                     }
                 } else {
-                    print_text(&docs)
+                    println!("{}", make_skin().term_text(&docs));
                 }
             } else {
                 eprintln!("error: input file \"{}\" doesn't exist", input_file);
@@ -80,4 +80,16 @@ fn main() {
             eprintln!("error: no input file given");
         }
     }
+}
+
+fn make_skin() -> MadSkin {
+    let mut skin = MadSkin::default();
+    // Pink
+    skin.bold.set_fg(rgb(80, 250, 123));
+    // Green
+    skin.italic.set_fg(rgb(255, 121, 198));
+    // Cyan
+    skin.bullet = StyledChar::from_fg_char(rgb(139, 233, 253), '»');
+    skin.code_block.align = Alignment::Center;
+    skin
 }
