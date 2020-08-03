@@ -372,7 +372,7 @@ cargo install -f oakc
 Then, oak files can be compiled with the oakc binary.
 
 ```bash
-oak -c examples/hello_world.ok
+oak c examples/hello_world.ok -c
 main.exe
 ```
 
