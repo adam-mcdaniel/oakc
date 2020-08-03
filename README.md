@@ -94,6 +94,13 @@ fn main() -> 0 {
 5. Assemble the IR instructions for a target
     - Because oak's IR is so small, it can support several targets. Even better, adding a target is incredibly easy. In oak's crate, there's a trait named `Target`. If you implement each of the IR's instructions for your language using the `Target` trait, then oak can automatically compile all the way down to your new programming or assembly language! _Yes, it's as easy as it sounds!_
 
+## Documentation Tool
+
+To allow users to read documentation of libraries and files without access to the internet, Oak provides the `doc` subcommand. This allows authors to add documentation attributes to their code to help other users understand their code or API without having to sift through the source and read comments.
+
+![Documentation Example](assets/doc.png)
+
+
 ## Syntax and Flags
 
 The syntax of oak is heavily inspired by the Rust programming language.
@@ -103,7 +110,6 @@ Functions are declared with the `fn` keyword, and are syntactically identical to
 Similar to Rust's outer attributes, Oak introduces many compile time flags. Some of these are demonstrated below along with other Oak features.
 
 ![Syntax Example](assets/syntax.png)
-
 
 ## Installation
 
