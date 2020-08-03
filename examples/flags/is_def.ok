@@ -1,4 +1,4 @@
-
+#[std]
 #[if(isdef("TEST_H")) {
     fn test1() {
         putstrln("isdef doesn't work :(");

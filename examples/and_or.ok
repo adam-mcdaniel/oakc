@@ -1,0 +1,54 @@
+#[std]
+const TRUE = 1 || 0;
+const FALSE = 0 && 1;
+
+
+fn main() {
+    if (true && true) {
+        putstrln("true && true is true! :)")
+    } else {
+        putstrln("true && true is false :(")
+    }
+
+    if (true && false) {
+        putstrln("true && false is true :(")
+    } else {
+        putstrln("true && false is false! :)")
+    }
+
+    if (false && true) {
+        putstrln("false && true is true :(")
+    } else {
+        putstrln("false && true is false! :)")
+    }
+
+    if (false && false) {
+        putstrln("false && false is true :(")
+    } else {
+        putstrln("false && false is false! :)")
+    }
+
+    if (true || true) {
+        putstrln("true || true is true! :)")
+    } else {
+        putstrln("true || true is false :(")
+    }
+
+    if (true || false) {
+        putstrln("true || false is true! :)")
+    } else {
+        putstrln("true || false is false :(")
+    }
+
+    if (false || true) {
+        putstrln("false || true is true! :)")
+    } else {
+        putstrln("false || true is false :(")
+    }
+
+    if (false || false) {
+        putstrln("false || false is true :(")
+    } else {
+        putstrln("false || false is false! :)")
+    }
+}

@@ -1,4 +1,4 @@
-
+#[std]
 
 const FILE = 2;
 type File(FILE) {

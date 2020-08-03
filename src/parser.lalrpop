@@ -6,13 +6,19 @@ grammar;
 pub Program: HirProgram = <(Declaration)*> => HirProgram::new(<>, 512);
 
 Declaration: HirDeclaration = {
+    "#" "[" "header" "(" <Str> ")" "]" => HirDeclaration::DocumentHeader(<>),
+    "#" "[" "std" "]" => HirDeclaration::RequireStd,
+    "#" "[" "no_std" "]" => HirDeclaration::NoStd,
+    "#" "[" "assert" "(" <Constant> ")" "]" => HirDeclaration::Assert(<>),
     "#" "[" "extern" "(" <Str> ")" "]" => HirDeclaration::Extern(<>),
     "#" "[" "include" "(" <Str> ")" "]" => HirDeclaration::Include(<>),
-    "#" "[" "heap" "(" <Num> ")" "]" => HirDeclaration::HeapSize(<> as i32),
+    "#" "[" "memory" "(" <Num> ")" "]" => HirDeclaration::Memory(<> as i32),
     "#" "[" "error" "(" <Str> ")" "]" => HirDeclaration::Error(<>),
     "#" "[" "if" "(" <cond:Constant> ")" "{" <code:Program> "}" "]" => HirDeclaration::If(cond, code),
     "#" "[" "if" "(" <cond:Constant> ")" "{" <then_code:Program> "}" "else" "{" <else_code:Program> "}" "]" => HirDeclaration::IfElse(cond, then_code, else_code),
-    "const" <name:Ident> "=" <expr:Constant> ";" => HirDeclaration::Constant(name, expr),
+    "#" "[" "define" "(" <name:Str> "," <constant:Constant> ")" "]" => HirDeclaration::Constant(None, name, constant),
+    "#" "[" "doc" "(" <doc:Str> ")" "]" "const" <name:Ident> "=" <constant:Constant> ";" => HirDeclaration::Constant(Some(doc), name, constant),
+    "const" <name:Ident> "=" <constant:Constant> ";" => HirDeclaration::Constant(None, name, constant),
     <Function> => HirDeclaration::Function(<>),
     <Structure> => HirDeclaration::Structure(<>),
 }
@@ -54,6 +60,8 @@ Constant: HirConstant = <ConstantMathBottom> => <>;
 
 ConstantAtom: HirConstant = {
     "isdef" "(" <Str> ")" => HirConstant::IsDefined(<>),
+    "true" => HirConstant::True,
+    "false" => HirConstant::False,
     <Ident> => HirConstant::Constant(<>),
     <Num> => HirConstant::Float(<>),
     <Char> => HirConstant::Character(<>),
@@ -62,16 +70,22 @@ ConstantAtom: HirConstant = {
 }
 
 ConstantMathBottom: HirConstant = {
-    <l:ConstantMathLow> "==" <r:ConstantMathLow> => HirConstant::Equal(Box::new(l), Box::new(r)),
-    <l:ConstantMathLow> "!=" <r:ConstantMathLow> => HirConstant::NotEqual(Box::new(l), Box::new(r)),
-    <l:ConstantMathLow> ">=" <r:ConstantMathLow> => HirConstant::GreaterEqual(Box::new(l), Box::new(r)),
-    <l:ConstantMathLow> ">" <r:ConstantMathLow> => HirConstant::Greater(Box::new(l), Box::new(r)),
-    <l:ConstantMathLow> "<=" <r:ConstantMathLow> => HirConstant::LessEqual(Box::new(l), Box::new(r)),
-    <l:ConstantMathLow> "<" <r:ConstantMathLow> => HirConstant::Less(Box::new(l), Box::new(r)),
+    <l:ConstantMathLow> "&&" <r:ConstantMathLow> => HirConstant::And(Box::new(l), Box::new(r)),
+    <l:ConstantMathLow> "||" <r:ConstantMathLow> => HirConstant::Or(Box::new(l), Box::new(r)),
     <ConstantMathLow> => <>
 }
 
 ConstantMathLow: HirConstant = {
+    <l:ConstantMathMiddle> "==" <r:ConstantMathMiddle> => HirConstant::Equal(Box::new(l), Box::new(r)),
+    <l:ConstantMathMiddle> "!=" <r:ConstantMathMiddle> => HirConstant::NotEqual(Box::new(l), Box::new(r)),
+    <l:ConstantMathMiddle> ">=" <r:ConstantMathMiddle> => HirConstant::GreaterEqual(Box::new(l), Box::new(r)),
+    <l:ConstantMathMiddle> ">" <r:ConstantMathMiddle> => HirConstant::Greater(Box::new(l), Box::new(r)),
+    <l:ConstantMathMiddle> "<=" <r:ConstantMathMiddle> => HirConstant::LessEqual(Box::new(l), Box::new(r)),
+    <l:ConstantMathMiddle> "<" <r:ConstantMathMiddle> => HirConstant::Less(Box::new(l), Box::new(r)),
+    <ConstantMathMiddle> => <>
+}
+
+ConstantMathMiddle: HirConstant = {
     <l:ConstantMathHigh> "+" <r:ConstantMathHigh> => HirConstant::Add(Box::new(l), Box::new(r)),
     <l:ConstantMathHigh> "-" <r:ConstantMathHigh> => HirConstant::Subtract(Box::new(l), Box::new(r)),
     <ConstantMathHigh> => <>
@@ -84,11 +98,16 @@ ConstantMathHigh: HirConstant = {
 }
 
 Function: HirFunction = {
-    "fn" <name:Ident> <args:List<"(", (Ident ":" Type), ",", ")">> <body:Body> => HirFunction::new(name, args.iter().map(|(a, _, t)| (a.clone(), t.clone())).collect(), HirType::Void, body),
-    "fn" <name:Ident> <args:List<"(", (Ident ":" Type), ",", ")">> "->" <return_type:Type> <body:Body> => HirFunction::new(name, args.iter().map(|(a, _, t)| (a.clone(), t.clone())).collect(), return_type, body),
+    "#" "[" "doc" "(" <doc:Str> ")" "]" "fn" <name:Ident> <args:List<"(", (Ident ":" Type), ",", ")">> <body:Body> => HirFunction::new(Some(doc), name, args.iter().map(|(a, _, t)| (a.clone(), t.clone())).collect(), HirType::Void, body),
+    "#" "[" "doc" "(" <doc:Str> ")" "]" "fn" <name:Ident> <args:List<"(", (Ident ":" Type), ",", ")">> "->" <return_type:Type> <body:Body> => HirFunction::new(Some(doc), name, args.iter().map(|(a, _, t)| (a.clone(), t.clone())).collect(), return_type, body),
+    "fn" <name:Ident> <args:List<"(", (Ident ":" Type), ",", ")">> <body:Body> => HirFunction::new(None, name, args.iter().map(|(a, _, t)| (a.clone(), t.clone())).collect(), HirType::Void, body),
+    "fn" <name:Ident> <args:List<"(", (Ident ":" Type), ",", ")">> "->" <return_type:Type> <body:Body> => HirFunction::new(None, name, args.iter().map(|(a, _, t)| (a.clone(), t.clone())).collect(), return_type, body),
 }
 
-Structure: HirStructure = "type" <name:Ident> "(" <size:Constant> ")" "{" <methods:Function*> "}" => HirStructure::new(name, size, methods);
+Structure: HirStructure = {
+    "#" "[" "doc" "(" <doc:Str> ")" "]" "type" <name:Ident> "(" <size:Constant> ")" "{" <methods:Function*> "}" => HirStructure::new(Some(doc), name, size, methods),
+    "type" <name:Ident> "(" <size:Constant> ")" "{" <methods:Function*> "}" => HirStructure::new(None, name, size, methods),
+}
 
 Body: Vec<HirStatement> = "{" <head: Statement*> <tail: SmallStatement?> "}" => {
     let mut result = Vec::new();
@@ -99,8 +118,10 @@ Body: Vec<HirStatement> = "{" <head: Statement*> <tail: SmallStatement?> "}" => 
 
 Type: HirType = {
     "&" <t:Type> => HirType::Pointer(Box::new(t)),
+    "&&" <t:Type> => HirType::Pointer(Box::new(HirType::Pointer(Box::new(t)))),
     "void" => HirType::Void,
     "num"  => HirType::Float,
+    "bool" => HirType::Boolean,
     "char" => HirType::Character,
     <Ident> => HirType::Structure(<>)
 }
@@ -141,33 +162,49 @@ ExpressionAtom: HirExpression = {
     "alloc" "(" <size:Expression> ")" => HirExpression::Alloc(Box::new(size)),
     <name:Ident> <args:List<"(", Expression, ",", ")">> => HirExpression::Call(name, args),
     <name:Ident> "!" <args:List<"(", Expression, ",", ")">> => HirExpression::ForeignCall(name, args),
+
+    "true" => HirExpression::True,
+    "false" => HirExpression::False,
     <Ident> => HirExpression::Variable(<>),
     <Str> => HirExpression::String(<>),
 
     "@" => HirExpression::Void,
     <Num> => HirExpression::Constant(HirConstant::Float(<>)),
-    <Char> => HirExpression::Constant(HirConstant::Character(<>)),
+    <Char> => HirExpression::Character(<>),
 
-    "&" <name:Ident> => HirExpression::Refer(name),
+    "!" <ExpressionAtom> => HirExpression::Not(Box::new(<>)),
     "(" <Expression> ")" => <>,
     "-" <ExpressionAtom> => HirExpression::Subtract(Box::new(HirExpression::Constant(HirConstant::Float(0.0))), Box::new(<>)),
 }
 
+
 ExpressionBottom: HirExpression = {
-    <l:ExpressionLow> ">=" <r:ExpressionLow> => HirExpression::GreaterEqual(Box::new(l), Box::new(r)),
-    <l:ExpressionLow> ">" <r:ExpressionLow> => HirExpression::Greater(Box::new(l), Box::new(r)),
-    <l:ExpressionLow> "<=" <r:ExpressionLow> => HirExpression::LessEqual(Box::new(l), Box::new(r)),
-    <l:ExpressionLow> "<" <r:ExpressionLow> => HirExpression::Less(Box::new(l), Box::new(r)),
+    <l:ExpressionLow> "&&" <r:ExpressionLow> => HirExpression::And(Box::new(l), Box::new(r)),
+    <l:ExpressionLow> "||" <r:ExpressionLow> => HirExpression::Or(Box::new(l), Box::new(r)),
     <ExpressionLow> => <>
 }
 
 ExpressionLow: HirExpression = {
+    <l:ExpressionMiddle> "==" <r:ExpressionMiddle> => HirExpression::Equal(Box::new(l), Box::new(r)),
+    <l:ExpressionMiddle> "!=" <r:ExpressionMiddle> => HirExpression::NotEqual(Box::new(l), Box::new(r)),
+    <l:ExpressionMiddle> ">=" <r:ExpressionMiddle> => HirExpression::GreaterEqual(Box::new(l), Box::new(r)),
+    <l:ExpressionMiddle> ">" <r:ExpressionMiddle> => HirExpression::Greater(Box::new(l), Box::new(r)),
+    <l:ExpressionMiddle> "<=" <r:ExpressionMiddle> => HirExpression::LessEqual(Box::new(l), Box::new(r)),
+    <l:ExpressionMiddle> "<" <r:ExpressionMiddle> => HirExpression::Less(Box::new(l), Box::new(r)),
+    <ExpressionMiddle> => <>
+}
+
+ExpressionMiddle: HirExpression = {
     <l:ExpressionHigh> "+" <r:ExpressionHigh> => HirExpression::Add(Box::new(l), Box::new(r)),
     <l:ExpressionHigh> "-" <r:ExpressionHigh> => HirExpression::Subtract(Box::new(l), Box::new(r)),
     <ExpressionHigh> => <>
 }
 
 ExpressionHigh: HirExpression = {
+    "&" <ptr:ExpressionAtom> "[" <idx:Expression> "]" => HirExpression::Index(Box::new(ptr), Box::new(idx)),
+    "&" <instance:ExpressionAtom> "->" <name:Ident> <args:List<"(", Expression, ",", ")">> => HirExpression::Method(Box::new(instance), name, args),
+    "&" <instance:ExpressionAtom> "->" <name:Ident> => HirExpression::Method(Box::new(instance), name, vec![]),
+    "&" <name:Ident> => HirExpression::Refer(name),
     <ptr:ExpressionAtom> "[" <idx:Expression> "]" => HirExpression::Deref(Box::new(HirExpression::Index(Box::new(ptr), Box::new(idx)))),
     <instance:ExpressionAtom> "." <name:Ident> <args:List<"(", Expression, ",", ")">> => HirExpression::Method(Box::new(instance), name, args),
     <instance:ExpressionAtom> "." <name:Ident> => HirExpression::Method(Box::new(instance), name, vec![]),

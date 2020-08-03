@@ -19,15 +19,3 @@ fn strcat(dst: &char, src: &char) {
     }
     dst[offset+i] = 0;
 }
-
-
-fn main() {
-    let size = 32;
-    let s = alloc(size) as &char;
-    strcpy(s, "test");
-    putstrln(s);
-    strcat(s, "ing");
-    putstrln(s);
-
-    free s: size;
-}

@@ -16,6 +16,8 @@ pub enum MirError {
     FunctionNotDefined(Identifier),
     /// Defining a type multiple times
     StructureRedefined(Identifier),
+    /// Defining a structure with the name of a primitive type
+    PrimitiveTypeRedefined(Identifier),
     /// Defining a function multiple times
     FunctionRedefined(Identifier),
     /// Using a variable without defining it
@@ -47,12 +49,9 @@ pub enum MirError {
     /// Use a `free` statement using an address argument
     /// of a non-pointer type
     FreeNonPointer(MirExpression),
-    /// Using a non-number for an if statement, and if-else
+    /// Using a non-boolean expression for an if statement, and if-else
     /// statement, a while loop, or a for loop
-    /// This is especially bad for while loops. If a multi-cell
-    /// structure is used as a loop condition, the stack will continue
-    /// to grow until it collides with the heap.
-    NonNumberCondition(MirExpression),
+    NonBooleanCondition(MirExpression),
     /// Using a non-number for an `alloc` call
     NonNumberAllocate(MirExpression),
     /// Indexing an array with a non-number value
@@ -60,6 +59,9 @@ pub enum MirError {
     /// Adding, subtracting, multiplying, or dividing two
     /// values where one or more of them is not a number.
     NonNumberBinaryOperation(MirExpression, MirExpression),
+    /// Using the not operator or other unary operator
+    /// on a non-number value.
+    NonNumberUnaryOperation(MirExpression),
     /// Calling a function without enough arguments
     NotEnoughArguments(MirExpression),
     /// Calling a function with too many arguments
@@ -97,6 +99,9 @@ impl Display for MirError {
             Self::StructureRedefined(name) => {
                 write!(f, "type '{}' is defined multiple times", name)
             }
+            Self::PrimitiveTypeRedefined(name) => {
+                write!(f, "attempted to define structure with the primitive type name '{}'", name)
+            }
             Self::VariableNotDefined(name) => write!(f, "variable '{}' is not defined", name),
             Self::MethodNotDefined(t, name) => {
                 write!(f, "method '{}' is not defined for type '{}'", name, t)
@@ -121,8 +126,8 @@ impl Display for MirError {
             Self::FreeNonPointer(address_expr) => {
                 write!(f, "cannot free non-pointer '{}'", address_expr)
             }
-            Self::NonNumberCondition(cond_expr) => {
-                write!(f, "cannot use '{}' as a boolean condition", cond_expr)
+            Self::NonBooleanCondition(cond_expr) => {
+                write!(f, "cannot use non-boolean expression '{}' as a condition. try using the comparison operators, like '!=' or '=='", cond_expr)
             }
             Self::NonNumberAllocate(size_expr) => write!(
                 f,
@@ -138,6 +143,11 @@ impl Display for MirError {
                 f,
                 "cannot use non-numbers '{}' and '{}' in binary operation",
                 lhs, rhs
+            ),
+            Self::NonNumberUnaryOperation(expr) => write!(
+                f,
+                "cannot use non-number '{}' in unary operation",
+                expr
             ),
             Self::NotEnoughArguments(call_expr) => {
                 write!(f, "too few arguments in function call '{}'", call_expr)
@@ -196,15 +206,22 @@ pub struct MirType {
 
 impl MirType {
     /// The name of the float type in Oak code
-    const FLOAT: &'static str = "num";
+    pub const FLOAT: &'static str = "num";
     /// The name of the character type in the Oak code
-    const CHAR: &'static str = "char";
+    pub const CHAR: &'static str = "char";
     /// The name of the unit type in the Oak code
-    const VOID: &'static str = "void";
+    pub const VOID: &'static str = "void";
+    /// The name of the bool type in Oak code
+    pub const BOOLEAN: &'static str = "bool";
 
     /// A user defined type
     pub fn structure(name: Identifier) -> Self {
         Self { name, ptr_level: 0 }
+    }
+
+    /// Oak's boolean type
+    pub fn boolean() -> Self {
+        Self::structure(Identifier::from(Self::BOOLEAN))
     }
 
     /// Oak's floating-point type
@@ -257,9 +274,8 @@ impl MirType {
         structs: &BTreeMap<Identifier, MirStructure>,
     ) -> Result<i32, MirError> {
         Ok(match self.name.as_str() {
-            "void" => 0,
-            "num" => 1,
-            "char" => 1,
+            Self::VOID => 0,
+            Self::BOOLEAN | Self::FLOAT | Self::CHAR => 1,
             other => {
                 if let Some(structure) = structs.get(other) {
                     structure.get_size()
@@ -298,18 +314,11 @@ impl MirType {
 /// This implementation solely governs the rules for type-checking.
 impl PartialEq for MirType {
     fn eq(&self, other: &Self) -> bool {
-        // If two types are identical, they are equal
+        // If two types are EXACTLY identical, they are equal
         if self.name == other.name && self.ptr_level == other.ptr_level {
             true
-        } else if !self.is_pointer() && !other.is_pointer() {
-            // (char == num) AND (num == char)
-            match (self.name.as_str(), other.name.as_str()) {
-                ("char", "num") => true,
-                ("num", "char") => true,
-                _ => false,
-            }
         } else {
-            // (&void == &*) AND (&* == &void)
+            // (&void == &T) AND (&T == &void)
             (self.ptr_level == 1 && self.name == "void" && other.ptr_level == 1)
                 || (other.ptr_level == 1 && other.name == "void" && self.ptr_level == 1)
         }
@@ -329,19 +338,20 @@ impl Display for MirType {
 pub struct MirProgram(Vec<MirDeclaration>, i32);
 
 impl MirProgram {
-    pub fn new(decls: Vec<MirDeclaration>, heap_size: i32) -> Self {
-        Self(decls, heap_size)
+    pub fn new(decls: Vec<MirDeclaration>, memory_size: i32) -> Self {
+        Self(decls, memory_size)
     }
 
     pub fn get_declarations(&self) -> Vec<MirDeclaration> {
         (self.0).clone()
     }
-    pub fn get_heap_size(&self) -> i32 {
+
+    pub fn get_memory_size(&self) -> i32 {
         self.1
     }
 
     pub fn assemble(&self) -> Result<AsmProgram, MirError> {
-        let Self(decls, heap_size) = self.clone();
+        let Self(decls, memory_size) = self.clone();
         let mut externs = Vec::new();
         let mut funcs = BTreeMap::new();
         let mut structs = BTreeMap::new();
@@ -372,7 +382,7 @@ impl MirProgram {
             result.extend(decl.assemble(&mut funcs, &mut structs)?);
         }
 
-        Ok(AsmProgram::new(externs, result, heap_size))
+        Ok(AsmProgram::new(externs, result, memory_size))
     }
 }
 
@@ -430,6 +440,14 @@ impl MirStructure {
         funcs: &mut BTreeMap<Identifier, MirFunction>,
         structs: &BTreeMap<Identifier, MirStructure>,
     ) -> Result<Vec<AsmFunction>, MirError> {
+        // Check to see if this type redefines a primitive type
+        match self.name.as_str() {
+            MirType::BOOLEAN | MirType::CHAR | MirType::FLOAT | MirType::VOID => {
+                return Err(MirError::PrimitiveTypeRedefined(self.name.clone()))
+            }
+            _ => {}
+        }
+
         let mir_type = self.to_mir_type();
         let mut result = Vec::new();
 
@@ -558,7 +576,6 @@ impl MirFunction {
         self.name.clone()
     }
 
-    /// Get the parameters
     fn get_parameters(&self) -> Vec<(Identifier, MirType)> {
         self.args.clone()
     }
@@ -717,9 +734,9 @@ impl MirStatement {
                 cond.type_check(vars, funcs, structs)?;
                 post.type_check(vars, funcs, structs)?;
 
-                // Check if the condition is a structure or of type `void`
-                if cond.get_type(vars, funcs, structs)?.get_size(structs)? != 1 {
-                    return Err(MirError::NonNumberCondition(cond.clone()));
+                // Confirm the condition is a boolean
+                if cond.get_type(vars, funcs, structs)? != MirType::boolean() {
+                    return Err(MirError::NonBooleanCondition(cond.clone()));
                 }
 
                 for stmt in body {
@@ -730,9 +747,9 @@ impl MirStatement {
             Self::While(cond, body) => {
                 cond.type_check(vars, funcs, structs)?;
 
-                // Check if the condition is a structure or of type `void`
-                if cond.get_type(vars, funcs, structs)?.get_size(structs)? != 1 {
-                    return Err(MirError::NonNumberCondition(cond.clone()));
+                // Confirm the condition is a boolean
+                if cond.get_type(vars, funcs, structs)? != MirType::boolean() {
+                    return Err(MirError::NonBooleanCondition(cond.clone()));
                 }
 
                 for stmt in body {
@@ -743,9 +760,9 @@ impl MirStatement {
             Self::If(cond, body) => {
                 cond.type_check(vars, funcs, structs)?;
 
-                // Check if the condition is a structure or of type `void`
-                if cond.get_type(vars, funcs, structs)?.get_size(structs)? != 1 {
-                    return Err(MirError::NonNumberCondition(cond.clone()));
+                // Confirm the condition is a boolean
+                if cond.get_type(vars, funcs, structs)? != MirType::boolean() {
+                    return Err(MirError::NonBooleanCondition(cond.clone()));
                 }
 
                 for stmt in body {
@@ -756,9 +773,9 @@ impl MirStatement {
             Self::IfElse(cond, then_body, else_body) => {
                 cond.type_check(vars, funcs, structs)?;
 
-                // Check if the condition is a structure or of type `void`
-                if cond.get_type(vars, funcs, structs)?.get_size(structs)? != 1 {
-                    return Err(MirError::NonNumberCondition(cond.clone()));
+                // Confirm the condition is a boolean
+                if cond.get_type(vars, funcs, structs)? != MirType::boolean() {
+                    return Err(MirError::NonBooleanCondition(cond.clone()));
                 }
 
                 for stmt in then_body {
@@ -837,7 +854,7 @@ impl MirStatement {
             /// Assign an expression to a defined variable
             Self::AssignVariable(var_name, expr) => {
                 // Check to see if the variable has been defined
-                if let Some(t) = vars.get(var_name) {
+                if let Some(t) = vars.clone().get(var_name) {
                     let mut result = Vec::new();
                     // Push the expression to store onto the stack
                     result.extend(expr.assemble(vars, funcs, structs)?);
@@ -1019,14 +1036,22 @@ pub enum MirExpression {
     Multiply(Box<Self>, Box<Self>),
     Divide(Box<Self>, Box<Self>),
 
+    Not(Box<Self>),
+    And(Box<Self>, Box<Self>),
+    Or(Box<Self>, Box<Self>),
+
     Greater(Box<Self>, Box<Self>),
     Less(Box<Self>, Box<Self>),
     GreaterEqual(Box<Self>, Box<Self>),
     LessEqual(Box<Self>, Box<Self>),
+    Equal(Box<Self>, Box<Self>),
+    NotEqual(Box<Self>, Box<Self>),
 
     String(StringLiteral),
     Float(f64),
     Character(char),
+    True,
+    False,
     Void,
 
     Variable(Identifier),
@@ -1061,6 +1086,14 @@ impl MirExpression {
                 }
             }
 
+            Self::Not(expr) => {
+                expr.type_check(vars, funcs, structs)?;
+                let expr_type = expr.get_type(vars, funcs, structs)?;
+                if expr_type.get_size(structs)? != 1 {
+                    return Err(MirError::NonNumberUnaryOperation(*expr.clone()));
+                }
+            }
+
             // Typecheck binary operations
             // Currently, type checking only fails if either the left hand side
             // or the right hand side are of type `void`, or a user defined structure
@@ -1071,7 +1104,11 @@ impl MirExpression {
             | Self::Greater(lhs, rhs)
             | Self::Less(lhs, rhs)
             | Self::GreaterEqual(lhs, rhs)
-            | Self::LessEqual(lhs, rhs) => {
+            | Self::LessEqual(lhs, rhs)
+            | Self::Equal(lhs, rhs)
+            | Self::NotEqual(lhs, rhs)
+            | Self::And(lhs, rhs)
+            | Self::Or(lhs, rhs) => {
                 lhs.type_check(vars, funcs, structs)?;
                 rhs.type_check(vars, funcs, structs)?;
                 let lhs_type = lhs.get_type(vars, funcs, structs)?;
@@ -1196,18 +1233,73 @@ impl MirExpression {
             | Self::String(_)
             | Self::Float(_)
             | Self::Character(_)
-            | Self::Void => {}
+            | Self::Void
+            | Self::True
+            | Self::False => {}
         }
         Ok(())
     }
 
     fn assemble(
         &self,
-        vars: &BTreeMap<Identifier, MirType>,
+        vars: &mut BTreeMap<Identifier, MirType>,
         funcs: &BTreeMap<Identifier, MirFunction>,
         structs: &BTreeMap<Identifier, MirStructure>,
     ) -> Result<Vec<AsmStatement>, MirError> {
         Ok(match self {
+            Self::True => vec![AsmStatement::Expression(vec![AsmExpression::Float(1.0)])],
+            Self::False => vec![AsmStatement::Expression(vec![AsmExpression::Float(0.0)])],
+
+            // Invert the boolean value of an expression
+            Self::Not(expr) => MirStatement::IfElse(
+                *expr.clone(),
+                vec![MirStatement::Expression(MirExpression::Float(0.0))],
+                vec![MirStatement::Expression(MirExpression::Float(1.0))],
+            )
+            .assemble(vars, funcs, structs)?,
+
+            /// And two boolean values
+            /// And is essentially boolean multiplication,
+            /// so multiply these two values and use it
+            /// as a condition for which value to use
+            Self::And(l, r) => MirStatement::IfElse(
+                MirExpression::Multiply(l.clone(), r.clone()),
+                vec![MirStatement::Expression(MirExpression::Float(1.0))],
+                vec![MirStatement::Expression(MirExpression::Float(0.0))],
+            )
+            .assemble(vars, funcs, structs)?,
+
+            /// Or two boolean values
+            /// Or is essentially boolean addition,
+            /// so add these two values and use it
+            /// as a condition for which value to use
+            Self::Or(l, r) => MirStatement::IfElse(
+                MirExpression::Add(l.clone(), r.clone()),
+                vec![MirStatement::Expression(MirExpression::Float(1.0))],
+                vec![MirStatement::Expression(MirExpression::Float(0.0))],
+            )
+            .assemble(vars, funcs, structs)?,
+
+            /// Are two numbers equal?
+            /// I know this expression doesn't type check,
+            /// but it is correctly implemented.
+            Self::Equal(l, r) => MirStatement::IfElse(
+                MirExpression::Subtract(l.clone(), r.clone()),
+                vec![MirStatement::Expression(MirExpression::Float(0.0))],
+                vec![MirStatement::Expression(MirExpression::Float(1.0))],
+            )
+            .assemble(vars, funcs, structs)?,
+
+            /// Are two numbers not equal?
+            /// I know this expression doesn't type check,
+            /// but it is correctly implemented.
+            Self::NotEqual(l, r) => MirStatement::IfElse(
+                MirExpression::Subtract(l.clone(), r.clone()),
+                vec![MirStatement::Expression(MirExpression::Float(1.0))],
+                vec![MirStatement::Expression(MirExpression::Float(0.0))],
+            )
+            .assemble(vars, funcs, structs)?,
+
             /// A typecast is only a way to explicitly validate
             /// some kinds of typechecks. The typecast expression
             /// has no change on the output code.
@@ -1358,9 +1450,7 @@ impl MirExpression {
             Self::Call(func_name, args) => {
                 let mut result = Vec::new();
                 // Push arguments onto the stack in reverse order
-                let mut args = args.clone();
-                args.reverse();
-                for arg in args {
+                for arg in args.iter().rev() {
                     result.extend(arg.assemble(vars, funcs, structs)?);
                 }
                 // Call the function
@@ -1373,9 +1463,7 @@ impl MirExpression {
             /// Call a foreign function
             Self::ForeignCall(func_name, args) => {
                 let mut result = Vec::new();
-                let mut args = args.clone();
-                args.reverse();
-                for arg in args {
+                for arg in args.iter().rev() {
                     result.extend(arg.assemble(vars, funcs, structs)?);
                 }
                 result.push(AsmStatement::Expression(vec![AsmExpression::ForeignCall(
@@ -1467,6 +1555,9 @@ impl MirExpression {
         structs: &BTreeMap<Identifier, MirStructure>,
     ) -> Result<MirType, MirError> {
         Ok(match self {
+            Self::True => MirType::boolean(),
+            Self::False => MirType::boolean(),
+
             /// A typecast simply masks the type of the cast expression.
             /// The typecast has the type of whichever type the
             /// expression is being cast to.
@@ -1482,7 +1573,12 @@ impl MirExpression {
             Self::Greater(_, _)
             | Self::Less(_, _)
             | Self::GreaterEqual(_, _)
-            | Self::LessEqual(_, _) => MirType::float(),
+            | Self::LessEqual(_, _)
+            | Self::Equal(_, _)
+            | Self::NotEqual(_, _)
+            | Self::And(_, _)
+            | Self::Or(_, _)
+            | Self::Not(_) => MirType::boolean(),
             /// Float literals have type `num`
             Self::Float(_) => MirType::float(),
             /// String literals have type `&char`
@@ -1559,12 +1655,21 @@ impl MirExpression {
 impl Display for MirExpression {
     fn fmt(&self, f: &mut Formatter) -> Result<(), Error> {
         match self {
+            Self::True => write!(f, "true"),
+            Self::False => write!(f, "false"),
             Self::TypeCast(expr, t) => write!(f, "{} as {}", expr, t),
+
+            Self::Not(expr) => write!(f, "!{}", expr),
+            Self::And(lhs, rhs) => write!(f, "{}&&{}", lhs, rhs),
+            Self::Or(lhs, rhs) => write!(f, "{}||{}", lhs, rhs),
+
             Self::Add(lhs, rhs) => write!(f, "{}+{}", lhs, rhs),
             Self::Subtract(lhs, rhs) => write!(f, "{}-{}", lhs, rhs),
             Self::Multiply(lhs, rhs) => write!(f, "{}/{}", lhs, rhs),
             Self::Divide(lhs, rhs) => write!(f, "{}/{}", lhs, rhs),
 
+            Self::Equal(lhs, rhs) => write!(f, "{}=={}", lhs, rhs),
+            Self::NotEqual(lhs, rhs) => write!(f, "{}!={}", lhs, rhs),
             Self::Greater(lhs, rhs) => write!(f, "{}>{}", lhs, rhs),
             Self::GreaterEqual(lhs, rhs) => write!(f, "{}>={}", lhs, rhs),
             Self::Less(lhs, rhs) => write!(f, "{}<{}", lhs, rhs),
@@ -1573,7 +1678,7 @@ impl Display for MirExpression {
             Self::Alloc(size) => write!(f, "alloc({})", size),
 
             Self::Void => write!(f, "@"),
-            Self::Character(ch) => write!(f, "{}", ch),
+            Self::Character(ch) => write!(f, "'{}'", ch),
             Self::Float(n) => write!(f, "{}", n),
             Self::String(s) => write!(f, "{:?}", s),
 
@@ -1581,7 +1686,7 @@ impl Display for MirExpression {
             Self::Method(expr, method, args) => {
                 write!(f, "{}.{}(", expr, method)?;
                 for arg in args {
-                    write!(f, "{},", arg)?;
+                    write!(f, "{}, ", arg)?;
                 }
                 write!(f, ")")
             }

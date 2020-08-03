@@ -1,0 +1,10 @@
+#[std]
+
+fn main() {
+    putstr("0 == 0 -> "); putboolln(0 == 0);
+    putstr("0 != 0 -> "); putboolln(0 != 0);
+    putstr("1 == 0 -> "); putboolln(1 == 0);
+    putstr("1 != 0 -> "); putboolln(1 != 0);
+    putstr("0 == 1 -> "); putboolln(0 == 1);
+    putstr("0 != 1 -> "); putboolln(0 != 1);
+}

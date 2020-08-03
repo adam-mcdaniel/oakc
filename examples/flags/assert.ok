@@ -1,0 +1,9 @@
+#[std]
+
+// Assertion fails on Go target
+#[assert(TARGET == 'c')]
+
+fn main() {
+    putstrln("Hello assertion flag!");
+}
+

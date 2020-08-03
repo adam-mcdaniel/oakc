@@ -1,4 +1,6 @@
-#[heap(512)]
+#[std]
+#[memory(2048)]
+
 const ARRAY = 3;
 type Array(ARRAY) {
     fn new(len: num, elem_size: num) -> Array {
@@ -18,7 +20,7 @@ type Array(ARRAY) {
     }
 
     fn idx(self: &Array, n: num) -> &void {
-        return self->contents + (n * (self->elem_size))
+        return self->contents + n * (self->elem_size)
     }
 
     fn print(self: &Array) -> void {
@@ -68,7 +70,7 @@ type Date(DATE) {
 
     fn next_week(self: &Date) -> Date {
         let result: Date = *self;
-        for (let i:num=0; i<10; i=i+1) {
+        for (let i:num=0; i<7; i=i+1) {
             result = result.tomorrow();
         }
         return result

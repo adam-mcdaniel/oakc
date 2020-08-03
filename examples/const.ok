@@ -1,10 +1,9 @@
-
-
+#[std]
 
 const Y = X + 1;
 const X = 1;
 
 
 fn main() {
-    putnumln(Y);
+    putstr("this should print 2 => "); putnumln(Y);
 }

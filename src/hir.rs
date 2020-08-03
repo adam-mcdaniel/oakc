@@ -16,22 +16,96 @@ use std::{
 pub struct HirProgram(Vec<HirDeclaration>, i32);
 
 impl HirProgram {
-    pub fn new(decls: Vec<HirDeclaration>, heap_size: i32) -> Self {
-        Self(decls, heap_size)
+    pub const MINIMUM_MEMORY_SIZE: i32 = 128;
+
+    pub fn new(decls: Vec<HirDeclaration>, memory_size: i32) -> Self {
+        Self(decls, memory_size)
     }
 
-    pub fn get_declarations(&self) -> &[HirDeclaration] {
+    pub fn get_declarations(&self) -> &Vec<HirDeclaration> {
         let Self(decls, _) = self;
         decls
     }
 
-    pub fn get_heap_size(&self) -> i32 {
-        let Self(_, heap_size) = self;
-        *heap_size
+    pub fn extend_declarations(&mut self, decls: &Vec<HirDeclaration>) {
+        self.0.extend(decls.clone())
     }
 
-    fn set_heap_size(&mut self, size: i32) {
+    pub fn get_memory_size(&self) -> i32 {
+        let Self(_, memory_size) = self;
+        *memory_size
+    }
+
+    fn set_memory_size(&mut self, size: i32) {
         self.1 = size;
+    }
+
+    pub fn use_std(&self) -> bool {
+        for decl in self.get_declarations() {
+            match decl {
+                HirDeclaration::NoStd => return false,
+                HirDeclaration::RequireStd => return true,
+                _ => {}
+            }
+        }
+        false
+    }
+
+    pub fn generate_docs(
+        &self,
+        filename: String,
+        target: &impl Target,
+        constants: &mut BTreeMap<String, HirConstant>,
+        ignore_header: bool,
+    ) -> String {
+        let mut header = String::new();
+        if !ignore_header {
+            header = format!("# {}\n", filename.trim())
+        }
+        
+        let mut content = String::new();
+        for decl in self.get_declarations() {
+            match decl {
+                HirDeclaration::DocumentHeader(s) => {
+                    if !ignore_header {
+                        header += s;
+                        header += "\n";
+                    }
+                    continue;
+                }
+                HirDeclaration::Structure(structure) => content += &structure.generate_docs(),
+                HirDeclaration::Function(function) => content += &function.generate_docs(false),
+                HirDeclaration::Constant(doc, name, constant) => {
+                    content += &format!("### *const* **{}** = {}\n---", name, constant);
+                    if let Some(s) = doc {
+                        content += "\n";
+                        content += &s.trim();
+                    }
+                }
+
+                HirDeclaration::If(cond, code) => {
+                    if let Ok(val) = cond.to_value(constants, target) {
+                        if val != 0.0 {
+                            content += &code.generate_docs(filename.clone(), target, constants, true);
+                        }
+                    }
+                }
+
+                HirDeclaration::IfElse(cond, then_code, else_code) => {
+                    if let Ok(val) = cond.to_value(constants, target) {
+                        if val != 0.0 {
+                            content += &then_code.generate_docs(filename.clone(), target, constants, true);
+                        } else {
+                            content += &else_code.generate_docs(filename.clone(), target, constants, true);
+                        }
+                    }
+                }
+                _ => continue,
+            }
+
+            content += "\n";
+        }
+        header + &content
     }
 
     pub fn compile(
@@ -41,11 +115,12 @@ impl HirProgram {
         constants: &mut BTreeMap<String, HirConstant>,
     ) -> Result<MirProgram, HirError> {
         let mut mir_decls = Vec::new();
-        let mut heap_size = self.get_heap_size();
+        let mut memory_size = self.get_memory_size();
+        let mut std_required = None;
 
         // Iterate over the declarations and retreive the constants
         for decl in self.get_declarations() {
-            if let HirDeclaration::Constant(name, constant) = decl {
+            if let HirDeclaration::Constant(_, name, constant) = decl {
                 constants.insert(name.clone(), constant.clone());
             }
         }
@@ -61,6 +136,25 @@ impl HirProgram {
                 HirDeclaration::Structure(structure) => mir_decls.push(MirDeclaration::Structure(
                     structure.to_mir_struct(&constants, target)?,
                 )),
+                HirDeclaration::RequireStd => {
+                    if let Some(false) = std_required {
+                        return Err(HirError::ConflictingStdReqs);
+                    } else {
+                        std_required = Some(true)
+                    }
+                }
+                HirDeclaration::NoStd => {
+                    if let Some(true) = std_required {
+                        return Err(HirError::ConflictingStdReqs);
+                    } else {
+                        std_required = Some(false)
+                    }
+                }
+                HirDeclaration::Assert(constant) => {
+                    if constant.to_value(constants, target)? == 0.0 {
+                        return Err(HirError::FailedAssertion(constant.clone()));
+                    }
+                }
                 HirDeclaration::Extern(filename) => {
                     let file_path = cwd.join(filename.clone());
                     mir_decls.push(MirDeclaration::Extern(file_path))
@@ -126,39 +220,70 @@ impl HirProgram {
                     }
                 }
 
-                HirDeclaration::HeapSize(size) => {
-                    heap_size = *size;
+                HirDeclaration::Memory(size) => {
+                    if *size >= Self::MINIMUM_MEMORY_SIZE {
+                        memory_size = *size;
+                    } else {
+                        return Err(HirError::MemorySizeTooSmall(*size));
+                    }
                 }
                 _ => {}
             }
         }
 
-        Ok(MirProgram::new(mir_decls, heap_size))
+        Ok(MirProgram::new(mir_decls, memory_size))
     }
 }
 
 #[derive(Clone, Debug)]
 pub enum HirError {
+    MemorySizeTooSmall(i32),
     ConstantNotDefined(Identifier),
+    ConflictingStdReqs,
+    FailedAssertion(HirConstant),
     UserError(String),
 }
 
 impl Display for HirError {
     fn fmt(&self, f: &mut Formatter) -> Result<(), Error> {
         match self {
+            Self::MemorySizeTooSmall(n) => write!(
+                f,
+                "specified stack + heap memory size '{}' is too small. use '{}' or greater",
+                n,
+                HirProgram::MINIMUM_MEMORY_SIZE
+            ),
             Self::ConstantNotDefined(name) => write!(f, "constant '{}' is not defined", name),
             Self::UserError(err) => write!(f, "{}", err),
+            Self::ConflictingStdReqs => {
+                write!(f, "conflicting 'require_std' and 'no_std' flags present")
+            }
+            Self::FailedAssertion(assertion) => write!(f, "failed assertion '{}'", assertion),
         }
     }
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq)]
 pub enum HirType {
     Pointer(Box<Self>),
     Void,
     Float,
+    Boolean,
     Character,
     Structure(Identifier),
+}
+
+impl Display for HirType {
+    fn fmt(&self, f: &mut Formatter) -> Result<(), Error> {
+        match self {
+            Self::Pointer(t) => write!(f, "&{}", t),
+            Self::Void => write!(f, "{}", MirType::VOID),
+            Self::Float => write!(f, "{}", MirType::FLOAT),
+            Self::Boolean => write!(f, "{}", MirType::BOOLEAN),
+            Self::Character => write!(f, "{}", MirType::CHAR),
+            Self::Structure(name) => write!(f, "{}", name),
+        }
+    }
 }
 
 impl HirType {
@@ -167,6 +292,7 @@ impl HirType {
             Self::Pointer(inner) => inner.to_mir_type().refer(),
             Self::Void => MirType::void(),
             Self::Float => MirType::float(),
+            Self::Boolean => MirType::boolean(),
             Self::Character => MirType::character(),
             Self::Structure(name) => MirType::structure(name.clone()),
         }
@@ -175,31 +301,56 @@ impl HirType {
 
 #[derive(Clone, Debug)]
 pub enum HirDeclaration {
-    Constant(Identifier, HirConstant),
+    DocumentHeader(String),
+    Constant(Option<String>, Identifier, HirConstant),
     Function(HirFunction),
     Structure(HirStructure),
+    Assert(HirConstant),
     If(HirConstant, HirProgram),
     IfElse(HirConstant, HirProgram, HirProgram),
     Error(String),
     Extern(String),
     Include(String),
-    HeapSize(i32),
+    Memory(i32),
+    RequireStd,
+    NoStd,
 }
 
 #[derive(Clone, Debug)]
 pub struct HirStructure {
+    doc: Option<String>,
     name: Identifier,
     size: HirConstant,
     methods: Vec<HirFunction>,
 }
 
 impl HirStructure {
-    pub fn new(name: Identifier, size: HirConstant, methods: Vec<HirFunction>) -> Self {
+    pub fn new(
+        doc: Option<String>,
+        name: Identifier,
+        size: HirConstant,
+        methods: Vec<HirFunction>,
+    ) -> Self {
         Self {
+            doc,
             name,
             size,
             methods,
         }
+    }
+
+    pub fn generate_docs(&self) -> String {
+        let mut result = format!(
+            "## *type* **{}** *with size* **{}**\n",
+            self.name, self.size
+        );
+        if let Some(doc) = &self.doc {
+            result += &(doc.trim().to_string() + "\n");
+        }
+        for method in &self.methods {
+            result += &method.generate_docs(true)
+        }
+        result
     }
 
     pub fn to_mir_struct(
@@ -222,6 +373,7 @@ impl HirStructure {
 
 #[derive(Clone, Debug)]
 pub struct HirFunction {
+    doc: Option<String>,
     name: Identifier,
     args: Vec<(Identifier, HirType)>,
     return_type: HirType,
@@ -230,17 +382,49 @@ pub struct HirFunction {
 
 impl HirFunction {
     pub fn new(
+        doc: Option<String>,
         name: Identifier,
         args: Vec<(Identifier, HirType)>,
         return_type: HirType,
         body: Vec<HirStatement>,
     ) -> Self {
         Self {
+            doc,
             name,
             args,
             return_type,
             body,
         }
+    }
+
+    pub fn generate_docs(&self, is_method: bool) -> String {
+        let mut result = if is_method {
+            format!("* *fn* **{}**(", self.name)
+        } else {
+            format!("### *fn* **{}**(", self.name)
+        };
+        for (i, (arg_name, arg_type)) in self.args.iter().enumerate() {
+            if i < self.args.len() - 1 {
+                result += &format!("*{}*: {}, ", arg_name, arg_type)
+            } else {
+                result += &format!("*{}*: {}", arg_name, arg_type)
+            }
+        }
+
+        result += ")";
+
+        if self.return_type != HirType::Void {
+            result += " *->* ";
+            result += &self.return_type.to_string();
+        }
+
+        result += "\n";
+
+        if let Some(doc) = &self.doc {
+            result += if is_method { "  - " } else { "---\n" };
+            result += &(doc.trim().to_string() + "\n");
+        }
+        result
     }
 
     pub fn to_mir_fn(
@@ -271,12 +455,20 @@ impl HirFunction {
 pub enum HirConstant {
     Float(f64),
     Character(char),
+    True,
+    False,
 
     Add(Box<Self>, Box<Self>),
     Subtract(Box<Self>, Box<Self>),
     Multiply(Box<Self>, Box<Self>),
     Divide(Box<Self>, Box<Self>),
 
+<<<<<<< HEAD
+=======
+    And(Box<Self>, Box<Self>),
+    Or(Box<Self>, Box<Self>),
+
+>>>>>>> 16b5c9baeff853ce5ef182653e08498f08b774a2
     Greater(Box<Self>, Box<Self>),
     Less(Box<Self>, Box<Self>),
     GreaterEqual(Box<Self>, Box<Self>),
@@ -289,6 +481,32 @@ pub enum HirConstant {
     Not(Box<Self>),
 }
 
+impl Display for HirConstant {
+    fn fmt(&self, f: &mut Formatter) -> Result<(), Error> {
+        match self {
+            Self::True => write!(f, "true"),
+            Self::False => write!(f, "false"),
+            Self::Float(n) => write!(f, "{}", n),
+            Self::Character(ch) => write!(f, "'{}'", ch),
+            Self::Add(l, r) => write!(f, "{}+{}", l, r),
+            Self::Subtract(l, r) => write!(f, "{}-{}", l, r),
+            Self::Multiply(l, r) => write!(f, "{}*{}", l, r),
+            Self::Divide(l, r) => write!(f, "{}/{}", l, r),
+            Self::And(l, r) => write!(f, "{}&&{}", l, r),
+            Self::Or(l, r) => write!(f, "{}||{}", l, r),
+            Self::Greater(l, r) => write!(f, "{}>{}", l, r),
+            Self::Less(l, r) => write!(f, "{}<{}", l, r),
+            Self::GreaterEqual(l, r) => write!(f, "{}>={}", l, r),
+            Self::LessEqual(l, r) => write!(f, "{}<={}", l, r),
+            Self::Equal(l, r) => write!(f, "{}=={}", l, r),
+            Self::NotEqual(l, r) => write!(f, "{}!={}", l, r),
+            Self::Constant(name) => write!(f, "{}", name),
+            Self::IsDefined(name) => write!(f, "isdef(\"{}\")", name),
+            Self::Not(expr) => write!(f, "!{}", expr),
+        }
+    }
+}
+
 impl HirConstant {
     pub fn to_value(
         &self,
@@ -296,9 +514,30 @@ impl HirConstant {
         target: &impl Target,
     ) -> Result<f64, HirError> {
         Ok(match self {
+            Self::True => 1.0,
+            Self::False => 0.0,
+
             Self::Float(n) => *n,
             Self::Character(ch) => *ch as u8 as f64,
 
+<<<<<<< HEAD
+=======
+            Self::And(l, r) => {
+                if l.to_value(constants, target)? != 0.0 && r.to_value(constants, target)? != 0.0 {
+                    1.0
+                } else {
+                    0.0
+                }
+            }
+            Self::Or(l, r) => {
+                if l.to_value(constants, target)? != 0.0 || r.to_value(constants, target)? != 0.0 {
+                    1.0
+                } else {
+                    0.0
+                }
+            }
+
+>>>>>>> 16b5c9baeff853ce5ef182653e08498f08b774a2
             Self::Equal(l, r) => {
                 if l.to_value(constants, target)? == r.to_value(constants, target)? {
                     1.0
@@ -506,15 +745,24 @@ pub enum HirExpression {
     Multiply(Box<Self>, Box<Self>),
     Divide(Box<Self>, Box<Self>),
 
+    Not(Box<Self>),
+    And(Box<Self>, Box<Self>),
+    Or(Box<Self>, Box<Self>),
+
     Greater(Box<Self>, Box<Self>),
     Less(Box<Self>, Box<Self>),
     GreaterEqual(Box<Self>, Box<Self>),
     LessEqual(Box<Self>, Box<Self>),
+    Equal(Box<Self>, Box<Self>),
+    NotEqual(Box<Self>, Box<Self>),
 
     Refer(Identifier),
     Deref(Box<Self>),
 
     Void,
+    True,
+    False,
+    Character(char),
     String(StringLiteral),
     Variable(Identifier),
 
@@ -542,6 +790,19 @@ impl HirExpression {
                 Box::new(r.to_mir_expr(constants, target)?),
             ),
 
+            Self::True => MirExpression::True,
+            Self::False => MirExpression::False,
+
+            Self::Not(expr) => MirExpression::Not(Box::new(expr.to_mir_expr(constants, target)?)),
+            Self::And(l, r) => MirExpression::And(
+                Box::new(l.to_mir_expr(constants, target)?),
+                Box::new(r.to_mir_expr(constants, target)?),
+            ),
+            Self::Or(l, r) => MirExpression::Or(
+                Box::new(l.to_mir_expr(constants, target)?),
+                Box::new(r.to_mir_expr(constants, target)?),
+            ),
+
             Self::Greater(l, r) => MirExpression::Greater(
                 Box::new(l.to_mir_expr(constants, target)?),
                 Box::new(r.to_mir_expr(constants, target)?),
@@ -558,6 +819,16 @@ impl HirExpression {
             ),
 
             Self::LessEqual(l, r) => MirExpression::LessEqual(
+                Box::new(l.to_mir_expr(constants, target)?),
+                Box::new(r.to_mir_expr(constants, target)?),
+            ),
+
+            Self::Equal(l, r) => MirExpression::Equal(
+                Box::new(l.to_mir_expr(constants, target)?),
+                Box::new(r.to_mir_expr(constants, target)?),
+            ),
+
+            Self::NotEqual(l, r) => MirExpression::NotEqual(
                 Box::new(l.to_mir_expr(constants, target)?),
                 Box::new(r.to_mir_expr(constants, target)?),
             ),
@@ -583,6 +854,7 @@ impl HirExpression {
             }
 
             Self::Void => MirExpression::Void,
+            Self::Character(ch) => MirExpression::Character(*ch),
             Self::String(string) => MirExpression::String(string.clone()),
 
             /// If a variable is actually a constant,

@@ -1,0 +1,6 @@
+#[no_std]
+
+fn main() {
+    // function putstrln is not defined
+    putstrln("This should not compile!")
+}

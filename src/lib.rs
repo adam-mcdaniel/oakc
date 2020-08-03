@@ -1,6 +1,7 @@
 #![allow(warnings, clippy, unknown_lints)]
 use std::{
     collections::BTreeMap,
+    sync::Mutex,
     env::consts::{FAMILY, OS},
     io::Result,
     path::PathBuf,
@@ -24,59 +25,77 @@ use time::OffsetDateTime;
 use lalrpop_util::{lalrpop_mod, ParseError};
 lalrpop_mod!(pub parser);
 
-pub fn compile(cwd: &PathBuf, input: impl ToString, target: impl Target) -> Result<()> {
-    let mut constants = BTreeMap::new();
+use lazy_static::lazy_static;
+lazy_static! {
+    static ref COMPILE_TIME_CONSTANTS: Mutex<BTreeMap<String, HirConstant>> = Mutex::new({
+        let mut constants = BTreeMap::new();
 
-    constants.insert(
-        String::from("TARGET"),
-        HirConstant::Float(target.get_name() as u8 as f64),
-    );
-    constants.insert(
-        String::from("IS_STANDARD"),
-        HirConstant::Float(target.is_standard() as i32 as f64),
-    );
+        constants.insert(
+            String::from("TARGET"),
+            HirConstant::Float(target.get_name() as u8 as f64),
+        );
+        constants.insert(
+            String::from("IS_STANDARD"),
+            HirConstant::Float(target.is_standard() as i32 as f64),
+        );
 
-    constants.insert(
-        String::from("ON_WINDOWS"),
-        HirConstant::Float((OS == "windows") as i32 as f64),
-    );
-    constants.insert(
-        String::from("ON_MACOS"),
-        HirConstant::Float((OS == "macos") as i32 as f64),
-    );
-    constants.insert(
-        String::from("ON_LINUX"),
-        HirConstant::Float((OS == "linux") as i32 as f64),
-    );
+        constants.insert(
+            String::from("ON_WINDOWS"),
+            HirConstant::Float((OS == "windows") as i32 as f64),
+        );
+        constants.insert(
+            String::from("ON_MACOS"),
+            HirConstant::Float((OS == "macos") as i32 as f64),
+        );
+        constants.insert(
+            String::from("ON_LINUX"),
+            HirConstant::Float((OS == "linux") as i32 as f64),
+        );
 
-    constants.insert(
-        String::from("ON_NIX"),
-        HirConstant::Float((FAMILY == "unix") as i32 as f64),
-    );
-    constants.insert(
-        String::from("ON_NON_NIX"),
-        HirConstant::Float((FAMILY != "unix") as i32 as f64),
-    );
+        constants.insert(
+            String::from("ON_NIX"),
+            HirConstant::Float((FAMILY == "unix") as i32 as f64),
+        );
+        constants.insert(
+            String::from("ON_NON_NIX"),
+            HirConstant::Float((FAMILY != "unix") as i32 as f64),
+        );
 
-    constants.insert(
-        String::from("DATE_DAY"),
-        HirConstant::Float(OffsetDateTime::now_local().day() as f64),
-    );
-    constants.insert(
-        String::from("DATE_MONTH"),
-        HirConstant::Float(OffsetDateTime::now_local().month() as f64),
-    );
-    constants.insert(
-        String::from("DATE_YEAR"),
-        HirConstant::Float(OffsetDateTime::now_local().year() as f64),
-    );
+        constants.insert(
+            String::from("DATE_DAY"),
+            HirConstant::Float(OffsetDateTime::now_local().day() as f64),
+        );
+        constants.insert(
+            String::from("DATE_MONTH"),
+            HirConstant::Float(OffsetDateTime::now_local().month() as f64),
+        );
+        constants.insert(
+            String::from("DATE_YEAR"),
+            HirConstant::Float(OffsetDateTime::now_local().year() as f64),
+        );
 
-    match parse(input).compile(cwd, &target, &mut constants) {
+        constants
+    })
+}
+
+pub fn generate_docs(input: impl ToString, filename: impl ToString, target: impl Target) -> String {
+    parse(input).generate_docs(filename.to_string(), &target, COMPILE_TIME_CONSTANTS.get_mut().unwrap(), false)
+}
+
+pub fn compile(cwd: &PathBuf, input: impl ToString, target: impl Target) -> Result<()> {    let mut hir = parse(input);
+    hir.extend_declarations(parse(include_str!("core.ok")).get_declarations());
+    if hir.use_std() {
+        hir.extend_declarations(parse(include_str!("std.ok")).get_declarations())
+    }
+
+    match hir.compile(cwd, &target, COMPILE_TIME_CONSTANTS.get_mut().unwrap()) {
         Ok(mir) => match mir.assemble() {
             Ok(asm) => match asm.assemble(&target) {
-                // Add the target's prelude, the FFI code from the user,
-                // the compiled Oak code, and the target's postlude
-                Ok(result) => target.compile(target.prelude() + &result + &target.postlude()),
+                Ok(result) => target.compile(if hir.use_std() {
+                    target.core_prelude() + &target.std() + &result + &target.core_postlude()
+                } else {
+                    target.core_prelude() + &result + &target.core_postlude()
+                }),
                 Err(e) => {
                     eprintln!("compilation error: {}", e.bright_red().underline());
                     exit(1);

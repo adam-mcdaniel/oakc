@@ -1,3 +1,4 @@
+#[std]
 #[include("lib/all.ok")]
 
 fn main() {
