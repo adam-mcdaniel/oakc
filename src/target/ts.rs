@@ -11,24 +11,46 @@ pub struct TS;
 impl Target for TS {
 	fn get_name(&self) -> char { 'T' }
 
-    fn prelude(&self) -> String {
-        String::from(include_str!("std.ts"))
+    fn std(&self) -> String {
+        String::from(include_str!("std/std.ts"))
     }
 
-    fn postlude(&self) -> String {
+    fn core_prelude(&self) -> String {
+        String::from(include_str!("core/core.ts"))
+    }
+
+    fn core_postlude(&self) -> String {
         String::new()
     }
 
-    fn begin_entry_point(&self, var_size: i32, heap_size: i32) -> String {
+    fn begin_entry_point(&self, global_scope_size: i32, memory_size: i32) -> String {
         format!(
             "async function OAKmain():Promise<void> {{\nlet vm = machine_new({}, {});\n",
-            var_size,
-            var_size + heap_size,
+            global_scope_size,
+            global_scope_size + memory_size,
         )
     }
 
     fn end_entry_point(&self) -> String {
         String::from("\nmachine_drop(vm);\n}\nOAKmain();")
+	}
+	
+	fn establish_stack_frame(&self, arg_size: i32, local_scope_size: i32) -> String {
+        format!(
+            "machine_establish_stack_frame(vm, {}, {});\n",
+            arg_size, local_scope_size
+        )
+    }
+
+    fn end_stack_frame(&self, return_size: i32, local_scope_size: i32) -> String {
+        format!(
+            "machine_end_stack_frame(vm, {}, {});\n",
+            return_size, local_scope_size
+        )
+    }
+
+    fn load_base_ptr(&self) -> String {
+        String::from("machine_load_base_ptr(vm);\n")
     }
 
     fn push(&self, n: f64) -> String {

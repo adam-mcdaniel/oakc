@@ -3,6 +3,7 @@ interface machine {
 	allocated: boolean[];
 	capacity: number;
 	stack_ptr: number;
+	base_ptr: number;
 }
 
 ///////////////////////////////////////////////////////////////////////
@@ -32,8 +33,9 @@ function machine_new(vars: number, capacity: number): machine {
 		capacity: capacity,
 		memory: Array<number>(capacity),
 		allocated: Array<boolean>(capacity),
-		stack_ptr: 0
-	}
+		stack_ptr: 0,
+		base_ptr: 0
+	};
 	
 	//initialize the memory and allocated arrays
 	for (let i = 0; i < capacity; i++) {
@@ -47,33 +49,96 @@ function machine_new(vars: number, capacity: number): machine {
 	return result;
 }
 
+// Print out the state of the virtual machine's stack and heap
+function machine_dump(vm: machine): void {
+	let i:number;
+	console.log("stack: [ ");
+	for (i=0; i<vm.stack_ptr; i++)
+	console.log(vm.memory[i]);
+	for (i=vm.stack_ptr; i<vm.capacity; i++)
+	console.log("  ");
+	console.log("]\nheap:  [ ");
+	for (i=0; i<vm.stack_ptr; i++)
+		console.log("  ");
+	for (i=vm.stack_ptr; i<vm.capacity; i++)
+		console.log(`${vm.memory[i]} `);
+	console.log("]\nalloc: [ ");
+	for (i=0; i<vm.capacity; i++)
+		console.log(`${vm.allocated[i]} `);
+	console.log("]\n");
+	let total: number = 0;
+	for (i=0; i<vm.capacity; i++)
+		total += vm.allocated[i] ? 1 : 0;
+	console.log(`STACK SIZE	${vm.stack_ptr}\n`);
+	console.log(`TOTAL ALLOC'D ${total}\n`);
+}
+
 // Free the virtual machine's memory. This is called at the end of the program.
 function machine_drop(vm: machine): void {
 	//JS doesn't have manual memory management, so this function does nothing
-
-	//let i:number;
-	//console.log("stack: [ ");
-	//for (i=0; i<vm.stack_ptr; i++)
-	//	console.log(vm.memory[i]);
-	//for (i=vm.stack_ptr; i<vm.capacity; i++)
-	//	console.log("  ");
-	//console.log("]\nheap:  [ ");
-	//for (i=0; i<vm.stack_ptr; i++)
-	//	console.log("  ");
-	//for (i=vm.stack_ptr; i<vm.capacity; i++)
-	//	console.log(`${vm.memory[i]} `);
-	//console.log("]\nalloc: [ ");
-	//for (i=0; i<vm.capacity; i++)
-	//	console.log(`${vm.allocated[i]} `);
-	//console.log("]\n");
-	//let total: number = 0;
-	//for (i=0; i<vm.capacity; i++)
-	//	total += vm.allocated[i] ? 1 : 0;
-	//console.log(`STACK SIZE	${vm.stack_ptr}\n`);
-	//console.log(`TOTAL ALLOC'D ${total}\n`);
-
 	//free(vm.memory);
 	//free(vm.allocated);
+}
+
+function machine_load_base_ptr(vm: machine): void {
+    // Get the virtual machine's current base pointer value,
+    // and push it onto the stack.
+    machine_push(vm, vm.base_ptr);
+}
+
+function machine_establish_stack_frame(
+	vm: machine, 
+	arg_size: number, 
+	local_scope_size: number
+): void {
+    // Allocate some space to store the arguments' cells for later
+    let args = Array<number>(arg_size);
+    let i: number;
+    // Pop the arguments' values off of the stack
+    for (i=arg_size-1; i>=0; i--)
+        args[i] = machine_pop(vm);
+
+    // Push the current base pointer onto the stack so that
+    // when this function returns, it will be able to resume
+    // the current stack frame
+    machine_load_base_ptr(vm);
+
+    // Set the base pointer to the current stack pointer to 
+    // begin the stack frame at the current position on the stack.
+    vm.base_ptr = vm.stack_ptr;
+
+    // Allocate space for all the variables used in the local scope on the stack
+    for (i=0; i<local_scope_size; i++)
+        machine_push(vm, 0);
+
+    // Push the arguments back onto the stack for use by the current function
+    for (i=0; i<arg_size; i++)
+        machine_push(vm, args[i]);
+}
+
+function machine_end_stack_frame(
+	vm: machine, 
+	return_size: number, 
+	local_scope_size: number
+): void {
+    // Allocate some space to store the returned cells for later
+    let return_val = Array<number>(return_size);
+    let i: number;
+    // Pop the returned values off of the stack
+    for (i=return_size-1; i>=0; i--)
+        return_val[i] = machine_pop(vm);
+
+    // Discard the memory setup by the stack frame
+    for (i=0; i<local_scope_size; i++)
+        machine_pop(vm);
+    
+    // Retrieve the parent function's base pointer to resume the function
+    vm.base_ptr = machine_pop(vm);
+
+    // Finally, push the returned value back onto the stack for use by
+    // the parent function.
+    for (i=0; i<return_size; i++)
+        machine_push(vm, return_val[i]);
 }
 
 // Push a number onto the stack
@@ -139,7 +204,8 @@ function machine_store(vm: machine, size: number): void {
 	for (let i = size-1; i >= 0; i--) vm.memory[addr+i] = machine_pop(vm);
 }
 
-// Pop an `address` parameter off of the stack, and push the value at `address` with size `size` onto the stack.
+// Pop an `address` parameter off of the stack, and push the value at `address` with size
+//`size` onto the stack.
 function machine_load(vm: machine, size: number): void {
 	let addr = machine_pop(vm);
 
@@ -170,70 +236,11 @@ function machine_divide(vm: machine): void {
 	machine_push(vm, a/b);
 }
 
-//print a number
-function prn(vm: machine): void {
-	let n = machine_pop(vm);
-	console.log(n);
+function machine_sign(vm: machine): void {
+    let x = machine_pop(vm);
+    if (x >= 0) {
+        machine_push(vm, 1);
+    } else {
+        machine_push(vm, -1);
+    }
 }
-
-//print a null-terminated string
-function prs(vm: machine): void {
-	let addr = machine_pop(vm);
-	//console.log always inserts a newline, so build the string first and then print
-	let out = "";
-	for (let i=addr; vm.memory[i]; i++) {
-		out += String.fromCharCode(vm.memory[i]);
-	}
-	console.log(out);
-}
-
-//print a char
-function prc(vm: machine): void {
-	let n = machine_pop(vm);
-	console.log(String.fromCharCode(n));
-}
-
-//print a newline
-function prend(vm: machine): void {
-	//console.log always inserts a newline
-	console.log("");
-}
-
-async function getch(vm: machine): Promise<void> {
-	//https://stackoverflow.com/questions/44746592/is-there-a-way-to-write-async-await-code-that-responds-to-onkeypress-events
-	async function readKey(): Promise<KeyboardEvent>{
-		return new Promise(resolve => {
-			window.addEventListener('keypress', resolve, {once:true});
-		});
-	}
-	let key: string = (await readKey()).key;
-	let ch: number;
-
-	if (key === "Enter") { //make sure pressing enter always gives \n
-		ch = "\n".charCodeAt(0);
-	} else if (key.length > 1){ //if the key is not a single character (arrow keys, etc.)
-		//find a way to make this non-recursive
-		getch(vm);
-	} else {
-		ch = key.charCodeAt(0);
-	}
-	machine_push(vm, ch);
-}
-
-function gt(vm: machine): void {
-	machine_push(vm, machine_pop(vm)>machine_pop(vm)? 1 : 0);
-}
-
-function ge(vm: machine): void {
-	machine_push(vm, machine_pop(vm)>=machine_pop(vm)? 1 : 0);
-}
-
-function lt(vm: machine): void {
-	machine_push(vm, machine_pop(vm)<machine_pop(vm)? 1 : 0);
-}
-
-function le(vm: machine): void {
-	machine_push(vm, machine_pop(vm)<=machine_pop(vm)? 1 : 0);
-}
-
-

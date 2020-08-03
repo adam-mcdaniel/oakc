@@ -43,16 +43,29 @@ fn main() {
                     compile(&cwd, contents, C)
                 } else if matches.is_present("go") {
                     compile(&cwd, contents, Go)
-                } else {
+                } else if matches.is_present("ts"){
+					compile(&cwd, contents, TS)
+				} else {
                     compile(&cwd, contents, C)
                 };
 
+                match compile_result {
                     Result::Ok(_) => println!("compilation successful"),
                     Result::Err(error) => {
                         if let Some(inner_error) = error.get_ref() {
                             eprintln!("error: {}", inner_error);
                         }
                     }
+                }
+            } else {
+                eprintln!("error: input file \"{}\" doesn't exist", input_file);
+            }
+        } else {
+            eprintln!("error: no input file given");
+        }
+    } else if let Some(matches) = matches.subcommand_matches("doc") {
+        if let Some(input_file) = matches.value_of("FILE") {
+            if let Ok(contents) = read_to_string(input_file) {
                 let docs = generate_docs(contents, input_file);
                 if let Some(output_file) = matches.value_of("OUTPUT") {
                     if let Ok(_) = write(output_file, docs) {
