@@ -733,6 +733,7 @@ impl HirStatement {
 
 #[derive(Clone, Debug)]
 pub enum HirExpression {
+    SizeOf(HirType),
     Constant(HirConstant),
 
     Add(Box<Self>, Box<Self>),
@@ -777,6 +778,8 @@ impl HirExpression {
         target: &impl Target,
     ) -> Result<MirExpression, HirError> {
         Ok(match self {
+            Self::SizeOf(t) => MirExpression::SizeOf(t.to_mir_type()),
+
             /// Convert a constant expression into a float literal
             Self::Constant(constant) => MirExpression::Float(constant.to_value(constants, target)?),
 

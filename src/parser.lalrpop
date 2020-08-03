@@ -159,6 +159,7 @@ Expression: HirExpression = {
 }
 
 ExpressionAtom: HirExpression = {
+    "sizeof" "(" <t:Type> ")" => HirExpression::SizeOf(t),
     "alloc" "(" <size:Expression> ")" => HirExpression::Alloc(Box::new(size)),
     <name:Ident> <args:List<"(", Expression, ",", ")">> => HirExpression::Call(name, args),
     <name:Ident> "!" <args:List<"(", Expression, ",", ")">> => HirExpression::ForeignCall(name, args),
