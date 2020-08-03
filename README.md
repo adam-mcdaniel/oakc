@@ -16,7 +16,7 @@ I'm a freshly minted highschool graduate and freshman in college looking for wor
 
 ## Intermediate Representation
 
-The key to oak's insane portability is its incredibly compact backend implementation. _The code for Oak's backend can be expressed in under 100 lines of C._ Such a small implementation is only possible because of the tiny instruction set of the intermediate representation. Oak's IR is only composed of **_14 different instructions_**. That's on par with [brainfuck](https://esolangs.org/wiki/Brainfuck)!
+The key to oak's insane portability is its incredibly compact backend implementation. _The code for Oak's backend can be expressed in under 100 lines of C._ Such a small implementation is only possible because of the tiny instruction set of the intermediate representation. Oak's IR is only composed of **_17 different instructions_**. That's on par with [brainfuck](https://esolangs.org/wiki/Brainfuck)!
 
 The backend of oak functions very simply. Every instruction operates on a _memory tape_. This tape is essentially a static array of double-precision floats.
 
@@ -30,7 +30,7 @@ The backend of oak functions very simply. Every instruction operates on a _memor
                           `current location of the stack pointer`
 ```
 
-When a variable is defined, it's given a static location on the memory tape. Then, the compiler just replaces the variable with its address in the rest of the code!
+When a variable is defined in a function, it's given a static position relative to the virtual machine's current base pointer. So, when a function is called, space for the function's variables is allocated on the stack, and the base pointer is incremented to use this new space. Then, the compiler just replaces the variable with its address added to the base pointer offset in the rest of the code!
 
 Additionally, the memory tape functions as a **_stack_** and a **_heap_**. After space for all of the program's variables is assigned, the memory used for the stack begins. The stack _grows_ and _shrinks_ with data throughout the program: when two numbers are summed, for example, they are popped off of the stack and replaced with the result. Similarly, the heap grows and shrinks throughout the program. The heap, however, is used for _dynamically allocated_ data: information with a memory footprint **unknown at compile time**.
 
@@ -52,6 +52,9 @@ Now that you understand how oak's backend fundamentally operates, here's the com
 | `call_foreign_fn(name: String);` | Call a foreign function by its name in source. |
 | `begin_while();` | Start a while loop. For each iteration, pop a number off of the stack. If the number is not zero, continue the loop. |
 | `end_while();` | Mark the end of a while loop. |
+| `load_base_ptr();` | Load the base pointer of the established stack frame, which is always less than or equal to the stack pointer. Variables are stored relative to the base pointer for each function. So, a function that defines `x: num` and `y: num`, `x` might be stored at `base_ptr + 1`, and `y` might be stored at `base_ptr + 2`. This allows functions to store variables in memory dynamically and as needed, rather than using static memory locations. |
+| `establish_stack_frame(arg_size: i32, local_scope_size: i32);` | Pop off `arg_size` number of cells off of the stack and store them away. Then, call `load_base_ptr` to resume the parent stack frame when this function ends. Push `local_scope_size` number of zeroes onto the stack to make room for the function's variables. Finally, push the stored argument cells back onto the stack as they were originally ordered. |
+| `end_stack_frame(return_size: i32, local_scope_size: i32);` | Pop off `return_size` number of cells off of the stack and store them away. Then, pop `local_scope_size` number of cells off of the stack to discard the stack frame's memory. Pop a value off of the stack and store it in the base pointer to resume the parent stack frame. Finally, push the stored return value cells back onto the stack as they were originally ordered. |
 
 Using only these instructions, oak is able to implement _**even higher level abstractions than C can offer**_!!! That might not sound like much, but it's very powerful for a language this small.
 
@@ -79,7 +82,7 @@ fn main() -> 0 {
 ```
 
 3. Statically compute the program's memory footprint
-    - After totalling all the statically allocated data, such as the overall memory size of variables and string literals, the program preemptively sets aside the proper amount of memory on the stack. This essentially means that the stack pointer is _immediately_ moved to make room for all the data at the start of the program.
+    - After totalling all the statically allocated data, such as the overall memory size of static variables and string literals, the program preemptively sets aside the proper amount of memory on the stack. This essentially means that the stack pointer is _immediately_ moved to make room for all the data at the start of the program.
 
 4. Convert Oak expressions and statements into equivalent IR instructions
     - Most expressions are pretty straightforward: function calls simply push their arguments onto the stack in reverse order and call a function by it's ID, references to a variable just push their assigned location on the stack as a number, and so on. Method calls, _however_, are a bit tricky.
@@ -95,285 +98,42 @@ fn main() -> 0 {
 
 The syntax of oak is heavily inspired by the Rust programming language.
 
-```rust
-// An optional flag to set the exact number of memory cells to use for the heap.
-// This makes Oak an extremely suitable language for embedded development!
-#[heap(128)]
+Functions are declared with the `fn` keyword, and are syntactically identical to Rust functions, with the exception of the `return` semantics. Additionally, user defined types and constants are declared with the `type` and `const` keywords respectively.
 
-type bool(1) {
-    fn true()  -> bool { return 1 as bool }
-    fn false() -> bool { return 0 as bool }
+Similar to Rust's outer attributes, Oak introduces many compile time flags. Some of these are demonstrated below along with other Oak features.
 
-    fn val(self: &bool) -> &num { return self as &num }
-
-    fn not(self: &bool) -> bool {
-        let result: bool = bool::true();
-        // "self->val" is equivalent to "*self.val()"
-        if self->val { result = bool::false(); }
-        return result
-    }
-}
-
-fn main() {
-    putnumln(square(5));
-
-    let b = bool::false();
-    putboolln(b);
-    // assign to b's "val" attribute
-    b->val = 1;
-    putboolln(b);
-    b = bool::true();
-    putboolln(b);
-
-    let size: num = 32;
-    // Allocate 32 cells
-    let addr: &char = alloc(size);
-    // Free those 32 cells
-    free addr: size;
-}
+![Syntax Example](assets/syntax.png)
 
 
-fn putbool(b: bool) {
-    if b {
-        putstr("true");
-    } else {
-        putstr("false");
-    }
-}
+## Installation
 
-fn putboolln(b: bool) {
-    putbool(b); putchar('\n');
-}
+#### Development Build
+To get the current development build, clone the repository and install it.
 
-// Functions can be ordered independently
-fn square(x: num) -> num {
-    putstr("Squaring the number '");
-    putnum(x);
-    putcharln('\'');
-    // The last statement in a body doesn't require brackets
-    return x * x
-}
+```bash
+git clone https://github.com/adam-mcdaniel/oakc
+cd oakc
+cargo install -f --path .
 ```
 
-## Sample Output
-
-Now it's time to show you the fruits of my labor!
-Here's an example program.
-
-```rust
-fn fact(n: num) -> num {
-    if n - 1 { n * fact(n-1) }
-    else { 1 }
-}
-
-fn main() {
-    prn!(fact(5))
-}
-```
-
-Here is the same program compiled to C.
-```c
-void fn0(machine* vm);
-void fn1(machine* vm);
-
-void fn0(machine* vm) {
-    machine_push(vm, 0);
-    machine_store(vm, 1);
-    machine_push(vm, 0);
-    machine_load(vm, 1);
-    machine_push(vm, 1);
-    machine_subtract(vm);
-    machine_push(vm, 1);
-    machine_store(vm, 1);
-    machine_push(vm, 1);
-    machine_push(vm, 2);
-    machine_store(vm, 1);
-    machine_push(vm, 1);
-    machine_load(vm, 1);
-    while (machine_pop(vm)) {
-        machine_push(vm, 0);
-        machine_load(vm, 1);
-        machine_push(vm, 0);
-        machine_load(vm, 1);
-        machine_push(vm, 1);
-        machine_subtract(vm);
-        fn0(vm);
-        machine_multiply(vm);
-        machine_push(vm, 0);
-        machine_push(vm, 1);
-        machine_store(vm, 1);
-        machine_push(vm, 0);
-        machine_push(vm, 2);
-        machine_store(vm, 1);
-        machine_push(vm, 1);
-        machine_load(vm, 1);
-    }
-    machine_push(vm, 2);
-    machine_load(vm, 1);
-    while (machine_pop(vm)) {
-        machine_push(vm, 1);
-        machine_push(vm, 0);
-        machine_push(vm, 1);
-        machine_store(vm, 1);
-        machine_push(vm, 0);
-        machine_push(vm, 2);
-        machine_store(vm, 1);
-        machine_push(vm, 2);
-        machine_load(vm, 1);
-    }
-}
-
-void fn1(machine* vm) {
-    machine_push(vm, 5);
-    fn0(vm);
-    prn(vm);
-}
-
-int main() {
-    machine *vm = machine_new(3, 515);
-    fn1(vm);
-
-    machine_drop(vm);
-    return 0;
-}
-```
-
-That's quite a bit of output code for such a small program. How did our code get turned into this? First, our `fact` function was renamed as `fn0`.
-
-Next, the function stores a number on the stack in the variable `n`:
-
-```c
-// `n` is stored in address 0
-// store a number in address 0
-machine_push(vm, 0);
-machine_store(vm, 1);
-```
-
-Then, compute `n-1` by loading the value `n`, pushing the value `1`, and executing the subtract function.
-
-```c
-// `n` is stored in address 0
-// load a number from address 0
-machine_push(vm, 0);
-machine_load(vm, 1);
-
-machine_push(vm, 1);
-machine_subtract(vm);
-```
-
-Store the result of `n-1` in a variable to use in the "if else" statement code, and `1` in another variable to determine if the "else" branch will run.
-
-```c
-// store `n-1` in address 1
-machine_push(vm, 1);
-machine_store(vm, 1);
-// store `1` in address 2
-machine_push(vm, 1);
-machine_push(vm, 2);
-machine_store(vm, 1);
-```
-
-Then, load the condition variable for the if statement and start the conditional branch.
-
-```c
-// load `n-1` off of the stack as the condition
-machine_push(vm, 1);
-machine_load(vm, 1);
-// begin a while loop
-while (machine_pop(vm)) {
-    // load `n`
-    machine_push(vm, 0);
-    machine_load(vm, 1);
-
-    // push `n-1` onto the stack
-    machine_push(vm, 0);
-    machine_load(vm, 1);
-    machine_push(vm, 1);
-    machine_subtract(vm);
-
-    // call `fact` with `n-1`
-    fn0(vm);
-
-    // multiply the result of `fact(n-1)` with `n`
-    machine_multiply(vm);
-
-    // store zero in the while loop's condition variable
-    // to stop the if statement's body from looping
-    machine_push(vm, 0);
-    machine_push(vm, 1);
-    machine_store(vm, 1);
-
-    // store zero in the "else" branch condition
-    // so the else branch will not execute
-    machine_push(vm, 0);
-    machine_push(vm, 2);
-    machine_store(vm, 1);
-
-    // this loads the condition for the while loop, which
-    // has been set to zero.
-    machine_push(vm, 1);
-    machine_load(vm, 1);
-}
-// end the if case
-```
-
-Then, check for the "else" case of the "if else" statement.
-```c
-// load the "else" case condition variable.
-// if the "if" case executed, then this is zero
-machine_push(vm, 2);
-machine_load(vm, 1);
-// begin else case conditional branch
-while (machine_pop(vm)) {
-    // push 1 onto the stack
-    machine_push(vm, 1);
-
-    // store zero in the if case condition variable
-    machine_push(vm, 0);
-    machine_push(vm, 1);
-    machine_store(vm, 1);
-
-
-    // store zero in the else case condition variable
-    machine_push(vm, 0);
-    machine_push(vm, 2);
-    machine_store(vm, 1);
-
-    // this loads the condition for the while loop, which
-    // has been set to zero.
-    machine_push(vm, 2);
-    machine_load(vm, 1);
-}
-```
-
-Lastly, in the entry point, our `fact` function is called with the argument `5`.
-
-```c
-void fn1(machine* vm) {
-    machine_push(vm, 5);
-    fn0(vm);
-    // print the result of `fact(5)`
-    prn(vm);
-}
-```
-
-## Usage
-
-The best way to install Oak is with the Rust package manager.
+#### Releases
+To get the current release build, install from [crates.io](https://crates.io/crates/oakc).
 
 ```bash
 # Also works for updating oakc
 cargo install -f oakc
 ```
 
+#### After Install
+
 Then, oak files can be compiled with the oakc binary.
 
 ```bash
-oak -c examples/hello_world.ok
+oak c examples/hello_world.ok -c
 main.exe
 ```
 
-### Dependencies
+## Dependencies
 
 **C backend**
     - Any GCC compiler that supports C99

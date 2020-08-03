@@ -1,3 +1,4 @@
+
 fn putstr(s: &char) -> void { prs!(s); }
 fn putstrln(s: &char) -> void { putstr(s); prend!(); }
 
@@ -6,5 +7,23 @@ fn putnumln(n: num) -> void { putnum(n); prend!(); }
 
 fn putchar(ch: char) -> void { prc!(ch); }
 fn putcharln(ch: char) -> void { putchar(ch); prend!(); }
+
+fn putbool(b: bool) -> void {
+    if b {
+        putchar('t');
+        putchar('r');
+        putchar('u');
+        putchar('e');
+    }
+    else {
+        putchar('f');
+        putchar('a');
+        putchar('l');
+        putchar('s');
+        putchar('e');
+    }
+}
+
+fn putboolln(b: bool) -> void { putbool(b); prend!(); }
 
 fn get_char() -> char { return getch!() as char; }

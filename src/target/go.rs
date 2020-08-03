@@ -11,24 +11,46 @@ impl Target for Go {
         'g'
     }
 
-    fn prelude(&self) -> String {
-        String::from(include_str!("std.go"))
+    fn std(&self) -> String {
+        String::from(include_str!("std/std.go"))
     }
 
-    fn postlude(&self) -> String {
+    fn core_prelude(&self) -> String {
+        String::from(include_str!("core/core.go"))
+    }
+
+    fn core_postlude(&self) -> String {
         String::new()
     }
 
-    fn begin_entry_point(&self, var_size: i32, heap_size: i32) -> String {
+    fn begin_entry_point(&self, global_scope_size: i32, memory_size: i32) -> String {
         format!(
             "func main() {{\nvm := machine_new({}, {})\n",
-            var_size,
-            var_size + heap_size,
+            global_scope_size,
+            global_scope_size + memory_size,
         )
     }
 
     fn end_entry_point(&self) -> String {
         String::from("\nvm.drop()\n}")
+    }
+
+    fn establish_stack_frame(&self, arg_size: i32, local_scope_size: i32) -> String {
+        format!(
+            "vm.establish_stack_frame({}, {})\n",
+            arg_size, local_scope_size
+        )
+    }
+
+    fn end_stack_frame(&self, return_size: i32, local_scope_size: i32) -> String {
+        format!(
+            "vm.end_stack_frame({}, {})\n",
+            return_size, local_scope_size
+        )
+    }
+
+    fn load_base_ptr(&self) -> String {
+        String::from("vm.load_base_ptr()\n")
     }
 
     fn push(&self, n: f64) -> String {
@@ -103,6 +125,9 @@ impl Target for Go {
                 }
             }
         }
-        Result::Err(Error::new(ErrorKind::Other, "could not compile output golang code. is golang installed?"))
+        Result::Err(Error::new(
+            ErrorKind::Other,
+            "could not compile output golang code. is golang installed?",
+        ))
     }
 }

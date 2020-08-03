@@ -1,5 +1,4 @@
-
-
+#[std]
 
 
 fn main() {
@@ -8,7 +7,7 @@ fn main() {
     // `cannot use type inference when defining void pointer` error.
     let x: &num = alloc(size);
 
-    for (let i=0; i-size; i=i+1) { x[i] = i * 5; }
+    for (let i=0; i<size; i=i+1) { x[i] = i * 5; }
 
-    for (let i=0; i-size; i=i+1) { putnumln(x[i]); }
+    for (let i=0; i<size; i=i+1) { putnumln(x[i]); }
 }

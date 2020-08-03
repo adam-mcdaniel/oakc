@@ -89,17 +89,17 @@ impl Debug for AsmType {
 pub struct AsmProgram {
     externs: Vec<PathBuf>,
     funcs: Vec<AsmFunction>,
-    heap_size: i32,
+    memory_size: i32,
 }
 
 impl AsmProgram {
     const ENTRY_POINT: &'static str = "main";
 
-    pub fn new(externs: Vec<PathBuf>, funcs: Vec<AsmFunction>, heap_size: i32) -> Self {
+    pub fn new(externs: Vec<PathBuf>, funcs: Vec<AsmFunction>, memory_size: i32) -> Self {
         Self {
             externs,
             funcs,
-            heap_size,
+            memory_size,
         }
     }
 
@@ -125,8 +125,8 @@ impl AsmProgram {
 
         // Store the IDs of each function
         let mut func_ids = BTreeMap::new();
-        // The number of cells to preemptively allocate on the stack
-        let mut var_size = 0;
+        // The number of cells to preemptively allocate on the stack before the program starts
+        let mut global_scope_size = 0;
         for (id, func) in self.funcs.iter().enumerate() {
             // Store the function's ID
             func_ids.insert(func.name.clone(), id as i32);
@@ -140,7 +140,7 @@ impl AsmProgram {
         for func in &self.funcs {
             // Compile the function
             if !func.is_entry_point() {
-                result += &func.assemble(&func_ids, &mut var_size, target)?;
+                result += &func.assemble(&func_ids, &mut global_scope_size, target)?;
             } else {
                 // Store the entry point for use later
                 // This has the side effect of ignoring multiple definitions
@@ -152,15 +152,12 @@ impl AsmProgram {
         if let Some(func) = entry_point {
             if let Some(main_id) = func_ids.get(Self::ENTRY_POINT) {
                 // Assemble the entry point code
-                result += &func.assemble(&func_ids, &mut var_size, target)?;
+                result += &func.assemble(&func_ids, &mut global_scope_size, target)?;
 
                 // Call the entry point
-                result += &target.begin_entry_point(var_size, self.heap_size);
+                result += &target.begin_entry_point(global_scope_size, self.memory_size);
                 result += &target.call_fn(AsmFunction::get_assembled_name(*main_id));
                 result += &target.end_entry_point();
-
-                // FOR DEBUGGING
-                // println!("STACK SIZE: {}", var_size);
 
                 Ok(result)
             } else {
@@ -209,29 +206,58 @@ impl AsmFunction {
     fn assemble(
         &self,
         func_ids: &BTreeMap<String, i32>,
-        var_size: &mut i32,
+        global_scope_size: &mut i32,
         target: &impl Target,
     ) -> Result<String, AsmError> {
         let mut result = String::new();
+        let mut arg_size = 0;
+
+        // The local scope size starts at one. This is VERY important.
+        // The reason the local scope size starts at one is to make room for
+        // the virtual machine's base pointer on the stack before the stack
+        // frame actually begins.
+        let mut local_scope_size = 1;
 
         // Store the variables's addresses and types in the scope
         let mut vars = BTreeMap::new();
         for (arg_name, arg_type) in &self.args {
+            // Add together the total size of all the arguments supplied to the function
+            arg_size += arg_type.get_size();
+
             // Define each argument of the function
-            result += &AsmStatement::Define(arg_name.clone(), *arg_type)
-                .assemble(func_ids, &mut vars, var_size, target)?;
-            result +=
-                &AsmStatement::Assign(*arg_type).assemble(func_ids, &mut vars, var_size, target)?;
+            result += &AsmStatement::Define(arg_name.clone(), *arg_type).assemble(
+                func_ids,
+                &mut vars,
+                global_scope_size,
+                &mut local_scope_size,
+                target,
+            )?;
+            result += &AsmStatement::Assign(*arg_type).assemble(
+                func_ids,
+                &mut vars,
+                global_scope_size,
+                &mut local_scope_size,
+                target,
+            )?;
         }
 
         for stmt in &self.body {
             // Assemble each statement in the function body
-            result += &stmt.assemble(func_ids, &mut vars, var_size, target)?;
+            result += &stmt.assemble(
+                func_ids,
+                &mut vars,
+                global_scope_size,
+                &mut local_scope_size,
+                target,
+            )?;
         }
+
+        let start = target.establish_stack_frame(arg_size, local_scope_size);
+        result += &target.end_stack_frame(self.return_type.get_size(), local_scope_size);
 
         // Write the function as output code
         if let Some(id) = func_ids.get(&self.name) {
-            Ok(target.fn_definition(Self::get_assembled_name(*id), result))
+            Ok(target.fn_definition(Self::get_assembled_name(*id), start + &result))
         } else {
             Err(AsmError::FunctionNotDefined(self.name.clone()))
         }
@@ -251,19 +277,20 @@ impl AsmStatement {
         &self,
         func_ids: &BTreeMap<String, i32>,
         vars: &mut BTreeMap<String, (i32, AsmType)>,
-        var_size: &mut i32,
+        global_scope_size: &mut i32,
+        local_scope_size: &mut i32,
         target: &impl Target,
     ) -> Result<String, AsmError> {
         Ok(match self {
             // Define a variable on the stack
             Self::Define(name, data_type) => {
-                let address = *var_size;
+                let address = *local_scope_size;
                 // Add the variable's location and type to the scope
                 vars.insert(name.clone(), (address, *data_type));
                 // Increment the size of the program's variables
-                *var_size += data_type.get_size();
+                *local_scope_size += data_type.get_size();
                 // Push the address of the new variable onto the stack
-                target.push(address as f64)
+                target.push(address as f64) + &target.load_base_ptr() + &target.add()
             }
             // Pop an address off of the stack, pop an item of size `data_type`
             // off of the stack, and store the item at the address
@@ -272,25 +299,55 @@ impl AsmStatement {
                 let mut result = String::new();
                 // Run the code that preps the for loop
                 for stmt in pre {
-                    result += &stmt.assemble(func_ids, vars, var_size, target)?;
+                    result += &stmt.assemble(
+                        func_ids,
+                        vars,
+                        global_scope_size,
+                        local_scope_size,
+                        target,
+                    )?;
                 }
                 // Check the condition of the for loop
                 for expr in cond {
-                    result += &expr.assemble(func_ids, vars, var_size, target)?;
+                    result += &expr.assemble(
+                        func_ids,
+                        vars,
+                        global_scope_size,
+                        local_scope_size,
+                        target,
+                    )?;
                 }
                 // Begin the loop body
                 result += &target.begin_while();
                 // Run the body of the loop
                 for stmt in body {
-                    result += &stmt.assemble(func_ids, vars, var_size, target)?;
+                    result += &stmt.assemble(
+                        func_ids,
+                        vars,
+                        global_scope_size,
+                        local_scope_size,
+                        target,
+                    )?;
                 }
                 // Run the code that procedes the body of the loop
                 for stmt in post {
-                    result += &stmt.assemble(func_ids, vars, var_size, target)?;
+                    result += &stmt.assemble(
+                        func_ids,
+                        vars,
+                        global_scope_size,
+                        local_scope_size,
+                        target,
+                    )?;
                 }
                 // Check the condition again
                 for expr in cond {
-                    result += &expr.assemble(func_ids, vars, var_size, target)?;
+                    result += &expr.assemble(
+                        func_ids,
+                        vars,
+                        global_scope_size,
+                        local_scope_size,
+                        target,
+                    )?;
                 }
                 // End the loop body
                 result + &target.end_while()
@@ -299,7 +356,13 @@ impl AsmStatement {
             Self::Expression(exprs) => {
                 let mut result = String::new();
                 for expr in exprs {
-                    result += &expr.assemble(func_ids, vars, var_size, target)?;
+                    result += &expr.assemble(
+                        func_ids,
+                        vars,
+                        global_scope_size,
+                        local_scope_size,
+                        target,
+                    )?;
                 }
                 result
             }
@@ -336,14 +399,15 @@ impl AsmExpression {
         &self,
         func_ids: &BTreeMap<String, i32>,
         vars: &BTreeMap<String, (i32, AsmType)>,
-        var_size: &mut i32,
+        global_scope_size: &mut i32,
+        local_scope_size: &mut i32,
         target: &impl Target,
     ) -> Result<String, AsmError> {
         Ok(match self {
             Self::String(s) => {
                 // The address of the string is at the current first
                 // empty spot on the stack.
-                let address = *var_size;
+                let address = *global_scope_size;
                 // The size of the string is the length of the characters,
                 // plus 1 for the zero terminated character.
                 let size = s.len() as i32 + 1;
@@ -363,7 +427,7 @@ impl AsmExpression {
                     + &target.push(address as f64));
 
                 // Increment the amount of data stored on the stack
-                *var_size += size;
+                *global_scope_size += size;
                 result
             }
             // Push a character onto the stack
@@ -377,9 +441,12 @@ impl AsmExpression {
             Self::Variable(name) => {
                 // Get the address of the variable on the stack
                 // and the type of the variable
-                if let Some((addr, data_type)) = vars.get(name) {
+                if let Some((address, data_type)) = vars.get(name) {
                     // Push the address and load the data at that address
-                    target.push(*addr as f64) + &target.load(data_type.get_size())
+                    target.push(*address as f64)
+                        + &target.load_base_ptr()
+                        + &target.add()
+                        + &target.load(data_type.get_size())
                 } else {
                     return Err(AsmError::VariableNotDefined(name.clone()));
                 }
@@ -404,7 +471,7 @@ impl AsmExpression {
             // Get the address of a variable on the stack
             Self::Refer(name) => {
                 if let Some((addr, _)) = vars.get(name) {
-                    target.push(*addr as f64)
+                    target.push(*addr as f64) + &target.load_base_ptr() + &target.add()
                 } else {
                     return Err(AsmError::VariableNotDefined(name.clone()));
                 }

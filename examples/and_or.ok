@@ -1,6 +1,6 @@
-
-const true = 1 || 0;
-const false = 0 && 1;
+#[std]
+const TRUE = 1 || 0;
+const FALSE = 0 && 1;
 
 
 fn main() {

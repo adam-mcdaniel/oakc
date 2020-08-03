@@ -1,3 +1,4 @@
+#[std]
 
 type Date(3) {
     fn new(month: num, day: num, year: num) -> Date {

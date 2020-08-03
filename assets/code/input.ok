@@ -1,0 +1,21 @@
+#[std]
+#[memory(512)]
+#[include("str.ok")]
+
+fn input(buffer: &char) {
+    let i = 0;
+    for (let ch = get_char(); ch != '\n'; ch = get_char()) {
+        buffer[i] = ch;
+        i = i + 1;
+    }
+}
+
+fn main() {
+    let size = 256;
+    let s = alloc(size) as &char;
+    putstr("Enter some text: "); input(s);
+    putstr("You said \""); putstr(s); putcharln('"');
+
+    putstr("Which is "); putnum(strlen(s)); putstrln(" chars long!");
+    free s: size;
+}

@@ -1,3 +1,4 @@
+#[std]
 
 fn main() {
     putstrln("Hello world!");

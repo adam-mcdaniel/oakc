@@ -1,4 +1,5 @@
-#[heap(1024)]
+#[std]
+#[memory(1024)]
 
 //
 // A brainfuck interpreter written in Oak
@@ -6,7 +7,7 @@
 
 // Copy a char array
 fn strcpy(dst: &char, src: &char) {
-	for (let i=0; src[i]; i=i+1) {
+	for (let i=0; src[i] != '\0'; i=i+1) {
 		dst[i] = src[i];
 	}
 	dst[i] = 0;
@@ -14,7 +15,7 @@ fn strcpy(dst: &char, src: &char) {
 
 // Get the length of a char array
 fn strlen(str: &char) -> num {
-	for (let i=0; str[i]; i=i+1) {}
+	for (let i=0; str[i] != '\0'; i=i+1) {}
 	return i
 }
 
@@ -29,7 +30,7 @@ type Machine(MACHINE) {
 		let jmp_counter = 0;
 		let val_ptr = 0;
 		let ins_ptr = 0;
-		let code = alloc(strlen(source_code) + 1) as &char;
+		let code = alloc(strlen(source_code)) as &char;
 		strcpy(code, source_code);
 		let tape = alloc(TAPE_SIZE) as &num;
 
@@ -59,7 +60,7 @@ type Machine(MACHINE) {
 	fn in(self: &Machine)  { self->val = get_char() }
 	fn out(self: &Machine) {
 		if self->val != EOF {
-			putchar(self->val)
+			putchar((self->val) as char)
 		}
 	}
 
@@ -71,7 +72,7 @@ type Machine(MACHINE) {
 	}
 
 	fn end(self: &Machine) {
-		if self->val {
+		if self->val != 0.0 {
 			self->jmp_counter = self->jmp_counter - 1;
 			self->ins_ptr = (self->jmp_stack)[self->jmp_counter];
 			(self->jmp_stack)[self->jmp_counter] = 0;
@@ -115,6 +116,12 @@ type Machine(MACHINE) {
 			}
 		}
 	}
+
+	fn drop(self: &Machine) {
+		free self->jmp_stack: MAX_LOOP_DEPTH;
+		free self->code: strlen(self->code);
+		free self->tape: TAPE_SIZE;
+	}
 }
 
 fn main() {
@@ -123,4 +130,5 @@ fn main() {
     );
     m.run();
     m.dump();
+    m.drop();
 }

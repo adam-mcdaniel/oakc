@@ -1,6 +1,5 @@
-
-const true  = 1;
-const false = 0;
+#[std]
+#[memory(128)]
 
 fn main() {
     if !false {
