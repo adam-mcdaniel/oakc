@@ -206,13 +206,13 @@ pub struct MirType {
 
 impl MirType {
     /// The name of the float type in Oak code
-    const FLOAT: &'static str = "num";
+    pub const FLOAT: &'static str = "num";
     /// The name of the character type in the Oak code
-    const CHAR: &'static str = "char";
+    pub const CHAR: &'static str = "char";
     /// The name of the unit type in the Oak code
-    const VOID: &'static str = "void";
+    pub const VOID: &'static str = "void";
     /// The name of the bool type in Oak code
-    const BOOLEAN: &'static str = "bool";
+    pub const BOOLEAN: &'static str = "bool";
 
     /// A user defined type
     pub fn structure(name: Identifier) -> Self {
