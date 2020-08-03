@@ -1,4 +1,6 @@
+// Require the standard library
 #[std]
+// Define the memory required by the program (optional)
 #[memory(128)]
 
 // Compile time assertion
