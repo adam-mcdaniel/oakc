@@ -183,7 +183,7 @@ pub enum HirError {
 impl Display for HirError {
     fn fmt(&self, f: &mut Formatter) -> Result<(), Error> {
         match self {
-            Self::MemorySizeTooSmall(n) => write!(f, "specified stack + heap memory size '{}' is too small. use at least '{}' or greater", n, HirProgram::MINIMUM_MEMORY_SIZE),
+            Self::MemorySizeTooSmall(n) => write!(f, "specified stack + heap memory size '{}' is too small. use '{}' or greater", n, HirProgram::MINIMUM_MEMORY_SIZE),
             Self::ConstantNotDefined(name) => write!(f, "constant '{}' is not defined", name),
             Self::UserError(err) => write!(f, "{}", err),
             Self::ConflictingStdReqs => write!(f, "conflicting 'require_std' and 'no_std' flags present"),
