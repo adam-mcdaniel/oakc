@@ -98,276 +98,33 @@ fn main() -> 0 {
 
 The syntax of oak is heavily inspired by the Rust programming language.
 
-```rust
-// An optional flag to set the exact number of memory cells to use for the heap.
-// This makes Oak an extremely suitable language for embedded development!
-#[heap(128)]
+Functions are declared with the `fn` keyword, and are syntactically identical to Rust functions, with the exception of the `return` semantics. Additionally, user defined types and constants are declared with the `type` and `const` keywords respectively.
 
-type bool(1) {
-    fn true()  -> bool { return 1 as bool }
-    fn false() -> bool { return 0 as bool }
+Similar to Rust's outer attributes, Oak introduces many compile time flags. Some of these are demonstrated below along with other Oak features.
 
-    fn val(self: &bool) -> &num { return self as &num }
-
-    fn not(self: &bool) -> bool {
-        let result: bool = bool::true();
-        // "self->val" is equivalent to "*self.val()"
-        if self->val { result = bool::false(); }
-        return result
-    }
-}
-
-fn main() {
-    putnumln(square(5));
-
-    let b = bool::false();
-    putboolln(b);
-    // assign to b's "val" attribute
-    b->val = 1;
-    putboolln(b);
-    b = bool::true();
-    putboolln(b);
-
-    let size: num = 32;
-    // Allocate 32 cells
-    let addr: &char = alloc(size);
-    // Free those 32 cells
-    free addr: size;
-}
+![Syntax Example](assets/syntax.png)
 
 
-fn putbool(b: bool) {
-    if b {
-        putstr("true");
-    } else {
-        putstr("false");
-    }
-}
+## Installation
 
-fn putboolln(b: bool) {
-    putbool(b); putchar('\n');
-}
+#### Development Build
+To get the current development build, clone the repository and install it.
 
-// Functions can be ordered independently
-fn square(x: num) -> num {
-    putstr("Squaring the number '");
-    putnum(x);
-    putcharln('\'');
-    // The last statement in a body doesn't require brackets
-    return x * x
-}
+```bash
+git clone https://github.com/adam-mcdaniel/oakc
+cd oakc
+cargo install -f --path .
 ```
 
-## Sample Output
-
-Now it's time to show you the fruits of my labor!
-Here's an example program.
-
-```rust
-fn fact(n: num) -> num {
-    if n - 1 { n * fact(n-1) }
-    else { 1 }
-}
-
-fn main() {
-    prn!(fact(5))
-}
-```
-
-Here is the same program compiled to C.
-```c
-void fn0(machine* vm);
-void fn1(machine* vm);
-
-void fn0(machine* vm) {
-    machine_push(vm, 0);
-    machine_store(vm, 1);
-    machine_push(vm, 0);
-    machine_load(vm, 1);
-    machine_push(vm, 1);
-    machine_subtract(vm);
-    machine_push(vm, 1);
-    machine_store(vm, 1);
-    machine_push(vm, 1);
-    machine_push(vm, 2);
-    machine_store(vm, 1);
-    machine_push(vm, 1);
-    machine_load(vm, 1);
-    while (machine_pop(vm)) {
-        machine_push(vm, 0);
-        machine_load(vm, 1);
-        machine_push(vm, 0);
-        machine_load(vm, 1);
-        machine_push(vm, 1);
-        machine_subtract(vm);
-        fn0(vm);
-        machine_multiply(vm);
-        machine_push(vm, 0);
-        machine_push(vm, 1);
-        machine_store(vm, 1);
-        machine_push(vm, 0);
-        machine_push(vm, 2);
-        machine_store(vm, 1);
-        machine_push(vm, 1);
-        machine_load(vm, 1);
-    }
-    machine_push(vm, 2);
-    machine_load(vm, 1);
-    while (machine_pop(vm)) {
-        machine_push(vm, 1);
-        machine_push(vm, 0);
-        machine_push(vm, 1);
-        machine_store(vm, 1);
-        machine_push(vm, 0);
-        machine_push(vm, 2);
-        machine_store(vm, 1);
-        machine_push(vm, 2);
-        machine_load(vm, 1);
-    }
-}
-
-void fn1(machine* vm) {
-    machine_push(vm, 5);
-    fn0(vm);
-    prn(vm);
-}
-
-int main() {
-    machine *vm = machine_new(3, 515);
-    fn1(vm);
-
-    machine_drop(vm);
-    return 0;
-}
-```
-
-That's quite a bit of output code for such a small program. How did our code get turned into this? First, our `fact` function was renamed as `fn0`.
-
-Next, the function stores a number on the stack in the variable `n`:
-
-```c
-// `n` is stored in address 0
-// store a number in address 0
-machine_push(vm, 0);
-machine_store(vm, 1);
-```
-
-Then, compute `n-1` by loading the value `n`, pushing the value `1`, and executing the subtract function.
-
-```c
-// `n` is stored in address 0
-// load a number from address 0
-machine_push(vm, 0);
-machine_load(vm, 1);
-
-machine_push(vm, 1);
-machine_subtract(vm);
-```
-
-Store the result of `n-1` in a variable to use in the "if else" statement code, and `1` in another variable to determine if the "else" branch will run.
-
-```c
-// store `n-1` in address 1
-machine_push(vm, 1);
-machine_store(vm, 1);
-// store `1` in address 2
-machine_push(vm, 1);
-machine_push(vm, 2);
-machine_store(vm, 1);
-```
-
-Then, load the condition variable for the if statement and start the conditional branch.
-
-```c
-// load `n-1` off of the stack as the condition
-machine_push(vm, 1);
-machine_load(vm, 1);
-// begin a while loop
-while (machine_pop(vm)) {
-    // load `n`
-    machine_push(vm, 0);
-    machine_load(vm, 1);
-
-    // push `n-1` onto the stack
-    machine_push(vm, 0);
-    machine_load(vm, 1);
-    machine_push(vm, 1);
-    machine_subtract(vm);
-
-    // call `fact` with `n-1`
-    fn0(vm);
-
-    // multiply the result of `fact(n-1)` with `n`
-    machine_multiply(vm);
-
-    // store zero in the while loop's condition variable
-    // to stop the if statement's body from looping
-    machine_push(vm, 0);
-    machine_push(vm, 1);
-    machine_store(vm, 1);
-
-    // store zero in the "else" branch condition
-    // so the else branch will not execute
-    machine_push(vm, 0);
-    machine_push(vm, 2);
-    machine_store(vm, 1);
-
-    // this loads the condition for the while loop, which
-    // has been set to zero.
-    machine_push(vm, 1);
-    machine_load(vm, 1);
-}
-// end the if case
-```
-
-Then, check for the "else" case of the "if else" statement.
-```c
-// load the "else" case condition variable.
-// if the "if" case executed, then this is zero
-machine_push(vm, 2);
-machine_load(vm, 1);
-// begin else case conditional branch
-while (machine_pop(vm)) {
-    // push 1 onto the stack
-    machine_push(vm, 1);
-
-    // store zero in the if case condition variable
-    machine_push(vm, 0);
-    machine_push(vm, 1);
-    machine_store(vm, 1);
-
-
-    // store zero in the else case condition variable
-    machine_push(vm, 0);
-    machine_push(vm, 2);
-    machine_store(vm, 1);
-
-    // this loads the condition for the while loop, which
-    // has been set to zero.
-    machine_push(vm, 2);
-    machine_load(vm, 1);
-}
-```
-
-Lastly, in the entry point, our `fact` function is called with the argument `5`.
-
-```c
-void fn1(machine* vm) {
-    machine_push(vm, 5);
-    fn0(vm);
-    // print the result of `fact(5)`
-    prn(vm);
-}
-```
-
-## Usage
-
-The best way to install Oak is with the Rust package manager.
+#### Releases
+To get the current release build, install from [crates.io](https://crates.io/crates/oakc).
 
 ```bash
 # Also works for updating oakc
 cargo install -f oakc
 ```
+
+#### After Install
 
 Then, oak files can be compiled with the oakc binary.
 
@@ -376,7 +133,7 @@ oak -c examples/hello_world.ok
 main.exe
 ```
 
-### Dependencies
+## Dependencies
 
 **C backend**
     - Any GCC compiler that supports C99

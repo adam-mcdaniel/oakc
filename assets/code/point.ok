@@ -1,0 +1,49 @@
+// Require the standard library
+#[std]
+// Define the memory required by the program (optional)
+#[memory(128)]
+
+// Compile time assertion
+#[assert(2 + 2 == 4)]
+
+const COMPILE_POINT = 1;
+// Conditional compilation
+#[if(COMPILE_POINT) {
+    type Point(2) {
+        // A constructor for Point
+        fn new(x: num, y: num) -> Point {
+            return [x, y];
+        }
+    
+        // Another constructor for Point
+        fn origin() -> Point { return Point::new(0, 0) }
+    
+        // Return a pointer to the memory location of `x`
+        fn x(self: &Point) -> &num { return self as &num }
+        // Return a pointer to the memory location of `y`
+        fn y(self: &Point) -> &num { return (self + 1) as &num }
+    
+        fn move(self: &Point, dx: num, dy: num) {
+            // self->x is equivalent to *self.x()
+            self->x = self->x + dx;
+            self->y = self->y + dy;
+        }
+    
+        fn print(self: &Point) {
+            putchar('(');
+            putnum(self->x);
+            putstr(", ");
+            putnum(self->y);
+            putcharln(')');
+        }
+    }
+} else {
+    #[error("This is a compile time user error!")]
+}]
+
+fn main() {
+    let p = Point::new(5, 6);
+    putstr("p is "); p.print();
+    p.move(0, -10);
+    putstr("p is "); p.print();
+}
