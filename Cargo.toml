@@ -1,6 +1,6 @@
 [package]
 name = "oakc"
-version = "0.3.0"
+version = "0.4.0"
 authors = ["Adam McDaniel <adam.mcdaniel17@gmail.com>"]
 edition = "2018"
 license = "MIT"

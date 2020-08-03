@@ -38,7 +38,7 @@ type machine struct {
 	stack_ptr int
 }
 
-func machine_new(vars int, capacity int) *machine {
+func machine_new(global_scope_size, capacity int) *machine {
 	memory := []float64{}
 	allocated := []bool{}
 	for i := 0; i < capacity; i++ {
@@ -46,7 +46,7 @@ func machine_new(vars int, capacity int) *machine {
 		allocated = append(allocated, false)
 	}
 	result := &machine{memory, allocated, capacity, 0, 0}
-	for i := 0; i < vars; i++ {
+	for i := 0; i < global_scope_size; i++ {
 		result.push(0)
 	}
 	return result

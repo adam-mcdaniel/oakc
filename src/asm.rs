@@ -125,8 +125,8 @@ impl AsmProgram {
 
         // Store the IDs of each function
         let mut func_ids = BTreeMap::new();
-        // The number of cells to preemptively allocate on the stack
-        let mut var_size = 0;
+        // The number of cells to preemptively allocate on the stack before the program starts
+        let mut global_scope_size = 0;
         for (id, func) in self.funcs.iter().enumerate() {
             // Store the function's ID
             func_ids.insert(func.name.clone(), id as i32);
@@ -140,7 +140,7 @@ impl AsmProgram {
         for func in &self.funcs {
             // Compile the function
             if !func.is_entry_point() {
-                result += &func.assemble(&func_ids, &mut var_size, target)?;
+                result += &func.assemble(&func_ids, &mut global_scope_size, target)?;
             } else {
                 // Store the entry point for use later
                 // This has the side effect of ignoring multiple definitions
@@ -152,10 +152,10 @@ impl AsmProgram {
         if let Some(func) = entry_point {
             if let Some(main_id) = func_ids.get(Self::ENTRY_POINT) {
                 // Assemble the entry point code
-                result += &func.assemble(&func_ids, &mut var_size, target)?;
+                result += &func.assemble(&func_ids, &mut global_scope_size, target)?;
 
                 // Call the entry point
-                result += &target.begin_entry_point(var_size, self.memory_size);
+                result += &target.begin_entry_point(global_scope_size, self.memory_size);
                 result += &target.call_fn(AsmFunction::get_assembled_name(*main_id));
                 result += &target.end_entry_point();
 
