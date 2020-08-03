@@ -215,7 +215,7 @@ impl AsmFunction {
         // The local scope size starts at one. This is VERY important.
         // The reason the local scope size starts at one is to make room for
         // the virtual machine's base pointer on the stack before the stack
-        // frame actually begins. 
+        // frame actually begins.
         let mut local_scope_size = 1;
 
         // Store the variables's addresses and types in the scope
@@ -225,15 +225,31 @@ impl AsmFunction {
             arg_size += arg_type.get_size();
 
             // Define each argument of the function
-            result += &AsmStatement::Define(arg_name.clone(), *arg_type)
-                .assemble(func_ids, &mut vars, global_scope_size, &mut local_scope_size, target)?;
-            result +=
-                &AsmStatement::Assign(*arg_type).assemble(func_ids, &mut vars, global_scope_size, &mut local_scope_size, target)?;
+            result += &AsmStatement::Define(arg_name.clone(), *arg_type).assemble(
+                func_ids,
+                &mut vars,
+                global_scope_size,
+                &mut local_scope_size,
+                target,
+            )?;
+            result += &AsmStatement::Assign(*arg_type).assemble(
+                func_ids,
+                &mut vars,
+                global_scope_size,
+                &mut local_scope_size,
+                target,
+            )?;
         }
 
         for stmt in &self.body {
             // Assemble each statement in the function body
-            result += &stmt.assemble(func_ids, &mut vars, global_scope_size, &mut local_scope_size, target)?;
+            result += &stmt.assemble(
+                func_ids,
+                &mut vars,
+                global_scope_size,
+                &mut local_scope_size,
+                target,
+            )?;
         }
 
         let start = target.establish_stack_frame(arg_size, local_scope_size);
@@ -283,25 +299,55 @@ impl AsmStatement {
                 let mut result = String::new();
                 // Run the code that preps the for loop
                 for stmt in pre {
-                    result += &stmt.assemble(func_ids, vars, global_scope_size, local_scope_size, target)?;
+                    result += &stmt.assemble(
+                        func_ids,
+                        vars,
+                        global_scope_size,
+                        local_scope_size,
+                        target,
+                    )?;
                 }
                 // Check the condition of the for loop
                 for expr in cond {
-                    result += &expr.assemble(func_ids, vars, global_scope_size, local_scope_size, target)?;
+                    result += &expr.assemble(
+                        func_ids,
+                        vars,
+                        global_scope_size,
+                        local_scope_size,
+                        target,
+                    )?;
                 }
                 // Begin the loop body
                 result += &target.begin_while();
                 // Run the body of the loop
                 for stmt in body {
-                    result += &stmt.assemble(func_ids, vars, global_scope_size, local_scope_size, target)?;
+                    result += &stmt.assemble(
+                        func_ids,
+                        vars,
+                        global_scope_size,
+                        local_scope_size,
+                        target,
+                    )?;
                 }
                 // Run the code that procedes the body of the loop
                 for stmt in post {
-                    result += &stmt.assemble(func_ids, vars, global_scope_size, local_scope_size, target)?;
+                    result += &stmt.assemble(
+                        func_ids,
+                        vars,
+                        global_scope_size,
+                        local_scope_size,
+                        target,
+                    )?;
                 }
                 // Check the condition again
                 for expr in cond {
-                    result += &expr.assemble(func_ids, vars, global_scope_size, local_scope_size, target)?;
+                    result += &expr.assemble(
+                        func_ids,
+                        vars,
+                        global_scope_size,
+                        local_scope_size,
+                        target,
+                    )?;
                 }
                 // End the loop body
                 result + &target.end_while()
@@ -310,7 +356,13 @@ impl AsmStatement {
             Self::Expression(exprs) => {
                 let mut result = String::new();
                 for expr in exprs {
-                    result += &expr.assemble(func_ids, vars, global_scope_size, local_scope_size, target)?;
+                    result += &expr.assemble(
+                        func_ids,
+                        vars,
+                        global_scope_size,
+                        local_scope_size,
+                        target,
+                    )?;
                 }
                 result
             }
@@ -391,7 +443,10 @@ impl AsmExpression {
                 // and the type of the variable
                 if let Some((address, data_type)) = vars.get(name) {
                     // Push the address and load the data at that address
-                    target.push(*address as f64) + &target.load_base_ptr() + &target.add() + &target.load(data_type.get_size())
+                    target.push(*address as f64)
+                        + &target.load_base_ptr()
+                        + &target.add()
+                        + &target.load(data_type.get_size())
                 } else {
                     return Err(AsmError::VariableNotDefined(name.clone()));
                 }

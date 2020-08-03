@@ -36,11 +36,17 @@ impl Target for Go {
     }
 
     fn establish_stack_frame(&self, arg_size: i32, local_scope_size: i32) -> String {
-        format!("vm.establish_stack_frame({}, {})\n", arg_size, local_scope_size)
+        format!(
+            "vm.establish_stack_frame({}, {})\n",
+            arg_size, local_scope_size
+        )
     }
 
     fn end_stack_frame(&self, return_size: i32, local_scope_size: i32) -> String {
-        format!("vm.end_stack_frame({}, {})\n", return_size, local_scope_size)
+        format!(
+            "vm.end_stack_frame({}, {})\n",
+            return_size, local_scope_size
+        )
     }
 
     fn load_base_ptr(&self) -> String {
@@ -119,6 +125,9 @@ impl Target for Go {
                 }
             }
         }
-        Result::Err(Error::new(ErrorKind::Other, "could not compile output golang code. is golang installed?"))
+        Result::Err(Error::new(
+            ErrorKind::Other,
+            "could not compile output golang code. is golang installed?",
+        ))
     }
 }

@@ -76,19 +76,23 @@ impl HirProgram {
                 HirDeclaration::Structure(structure) => mir_decls.push(MirDeclaration::Structure(
                     structure.to_mir_struct(&constants, target)?,
                 )),
-                HirDeclaration::RequireStd => if let Some(false) = std_required {
-                    return Err(HirError::ConflictingStdReqs)
-                } else {
-                    std_required = Some(true)
-                },
-                HirDeclaration::NoStd => if let Some(true) = std_required {
-                    return Err(HirError::ConflictingStdReqs)
-                } else {
-                    std_required = Some(false)
-                },
+                HirDeclaration::RequireStd => {
+                    if let Some(false) = std_required {
+                        return Err(HirError::ConflictingStdReqs);
+                    } else {
+                        std_required = Some(true)
+                    }
+                }
+                HirDeclaration::NoStd => {
+                    if let Some(true) = std_required {
+                        return Err(HirError::ConflictingStdReqs);
+                    } else {
+                        std_required = Some(false)
+                    }
+                }
                 HirDeclaration::Assert(constant) => {
                     if constant.to_value(constants, target)? == 0.0 {
-                        return Err(HirError::FailedAssertion(constant.clone()))
+                        return Err(HirError::FailedAssertion(constant.clone()));
                     }
                 }
                 HirDeclaration::Extern(filename) => {
@@ -160,7 +164,7 @@ impl HirProgram {
                     if *size >= Self::MINIMUM_MEMORY_SIZE {
                         memory_size = *size;
                     } else {
-                        return Err(HirError::MemorySizeTooSmall(*size))
+                        return Err(HirError::MemorySizeTooSmall(*size));
                     }
                 }
                 _ => {}
@@ -183,10 +187,17 @@ pub enum HirError {
 impl Display for HirError {
     fn fmt(&self, f: &mut Formatter) -> Result<(), Error> {
         match self {
-            Self::MemorySizeTooSmall(n) => write!(f, "specified stack + heap memory size '{}' is too small. use '{}' or greater", n, HirProgram::MINIMUM_MEMORY_SIZE),
+            Self::MemorySizeTooSmall(n) => write!(
+                f,
+                "specified stack + heap memory size '{}' is too small. use '{}' or greater",
+                n,
+                HirProgram::MINIMUM_MEMORY_SIZE
+            ),
             Self::ConstantNotDefined(name) => write!(f, "constant '{}' is not defined", name),
             Self::UserError(err) => write!(f, "{}", err),
-            Self::ConflictingStdReqs => write!(f, "conflicting 'require_std' and 'no_std' flags present"),
+            Self::ConflictingStdReqs => {
+                write!(f, "conflicting 'require_std' and 'no_std' flags present")
+            }
             Self::FailedAssertion(assertion) => write!(f, "failed assertion '{}'", assertion),
         }
     }
@@ -228,7 +239,7 @@ pub enum HirDeclaration {
     Include(String),
     Memory(i32),
     RequireStd,
-    NoStd
+    NoStd,
 }
 
 #[derive(Clone, Debug)]
@@ -339,7 +350,6 @@ pub enum HirConstant {
     Not(Box<Self>),
 }
 
-
 impl Display for HirConstant {
     fn fmt(&self, f: &mut Formatter) -> Result<(), Error> {
         match self {
@@ -375,7 +385,7 @@ impl HirConstant {
         Ok(match self {
             Self::True => 1.0,
             Self::False => 0.0,
-            
+
             Self::Float(n) => *n,
             Self::Character(ch) => *ch as u8 as f64,
 
@@ -653,9 +663,7 @@ impl HirExpression {
             Self::True => MirExpression::True,
             Self::False => MirExpression::False,
 
-            Self::Not(expr) => MirExpression::Not(
-                Box::new(expr.to_mir_expr(constants, target)?),
-            ),
+            Self::Not(expr) => MirExpression::Not(Box::new(expr.to_mir_expr(constants, target)?)),
             Self::And(l, r) => MirExpression::And(
                 Box::new(l.to_mir_expr(constants, target)?),
                 Box::new(r.to_mir_expr(constants, target)?),

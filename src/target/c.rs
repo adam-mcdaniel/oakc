@@ -37,11 +37,17 @@ impl Target for C {
     }
 
     fn establish_stack_frame(&self, arg_size: i32, local_scope_size: i32) -> String {
-        format!("machine_establish_stack_frame(vm, {}, {});\n", arg_size, local_scope_size)
+        format!(
+            "machine_establish_stack_frame(vm, {}, {});\n",
+            arg_size, local_scope_size
+        )
     }
 
     fn end_stack_frame(&self, return_size: i32, local_scope_size: i32) -> String {
-        format!("machine_end_stack_frame(vm, {}, {});\n", return_size, local_scope_size)
+        format!(
+            "machine_end_stack_frame(vm, {}, {});\n",
+            return_size, local_scope_size
+        )
     }
 
     fn load_base_ptr(&self) -> String {
