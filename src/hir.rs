@@ -59,7 +59,7 @@ impl HirProgram {
                 HirDeclaration::Structure(structure) => content += &structure.generate_docs(),
                 HirDeclaration::Function(function) => content += &function.generate_docs(false),
                 HirDeclaration::Constant(doc, name, constant) => {
-                    content += &format!("### _const_ **{}** = {}", name, constant);
+                    content += &format!("### *const* **{}** = {}", name, constant);
                     if let Some(s) = doc {
                         content += "\n---\n";
                         content += &s.trim();
@@ -295,7 +295,7 @@ impl HirStructure {
 
     pub fn generate_docs(&self) -> String {
         let mut result = format!(
-            "## _type_ **{}** with size **{}**\n",
+            "## *type* **{}** with size **{}**\n",
             self.name, self.size
         );
         if let Some(doc) = &self.doc {
@@ -353,15 +353,15 @@ impl HirFunction {
 
     pub fn generate_docs(&self, is_method: bool) -> String {
         let mut result = if is_method {
-            format!(" - _fn_ **{}**(", self.name)
+            format!(" - *fn* **{}**(", self.name)
         } else {
-            format!("### _fn_ **{}**(", self.name)
+            format!("### *fn* **{}**(", self.name)
         };
         for (i, (arg_name, arg_type)) in self.args.iter().enumerate() {
             if i < self.args.len() - 1 {
-                result += &format!("_{}_: {}, ", arg_name, arg_type)
+                result += &format!("*{}*: {}, ", arg_name, arg_type)
             } else {
-                result += &format!("_{}_: {}", arg_name, arg_type)
+                result += &format!("*{}*: {}", arg_name, arg_type)
             }
         }
 

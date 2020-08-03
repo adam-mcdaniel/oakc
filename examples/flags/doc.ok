@@ -9,7 +9,7 @@ const TEST = CONSTANT + 5;
 
 #[doc("This structure represents a given date in time.
 A Date object has three members:
-|||
+|Member|Value|
 |-|-|
 |`month: num` | The month component of the date |
 |`day: num`   | The day component of the date   |

@@ -1,4 +1,4 @@
-use bat::PrettyPrinter;
+use termimad::*;
 use clap::{clap_app, crate_authors, crate_version, AppSettings::ArgRequiredElseHelp};
 use oakc::{compile, generate_docs, Go, C};
 use std::{
@@ -71,13 +71,7 @@ fn main() {
                         eprintln!("error: could not write to file \"{}\"", output_file);
                     }
                 } else {
-                    if let Err(_) = PrettyPrinter::new()
-                        .input_from_bytes(docs.as_bytes())
-                        .language("markdown")
-                        .print()
-                    {
-                        eprintln!("error: could not print docs");
-                    }
+                    print_text(&docs)
                 }
             } else {
                 eprintln!("error: input file \"{}\" doesn't exist", input_file);
