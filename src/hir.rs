@@ -48,14 +48,26 @@ impl HirProgram {
         false
     }
 
-    pub fn generate_docs(&self, filename: String) -> String {
-        let mut header = format!("# {}\n", filename.trim());
+    pub fn generate_docs(
+        &self,
+        filename: String,
+        target: &impl Target,
+        constants: &mut BTreeMap<String, HirConstant>,
+        ignore_header: bool,
+    ) -> String {
+        let mut header = String::new();
+        if !ignore_header {
+            header = format!("# {}\n", filename.trim())
+        }
+        
         let mut content = String::new();
         for decl in self.get_declarations() {
             match decl {
                 HirDeclaration::DocumentHeader(s) => {
-                    header += s;
-                    header += "\n";
+                    if !ignore_header {
+                        header += s;
+                        header += "\n";
+                    }
                     continue;
                 }
                 HirDeclaration::Structure(structure) => content += &structure.generate_docs(),
@@ -65,6 +77,24 @@ impl HirProgram {
                     if let Some(s) = doc {
                         content += "\n";
                         content += &s.trim();
+                    }
+                }
+
+                HirDeclaration::If(cond, code) => {
+                    if let Ok(val) = cond.to_value(constants, target) {
+                        if val != 0.0 {
+                            content += &code.generate_docs(filename.clone(), target, constants, true);
+                        }
+                    }
+                }
+
+                HirDeclaration::IfElse(cond, then_code, else_code) => {
+                    if let Ok(val) = cond.to_value(constants, target) {
+                        if val != 0.0 {
+                            content += &then_code.generate_docs(filename.clone(), target, constants, true);
+                        } else {
+                            content += &else_code.generate_docs(filename.clone(), target, constants, true);
+                        }
                     }
                 }
                 _ => continue,
