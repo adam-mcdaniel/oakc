@@ -98,6 +98,57 @@ fn main() -> 0 {
 
 To allow users to read documentation of libraries and files without access to the internet, Oak provides the `doc` subcommand. This allows authors to add documentation attributes to their code to help other users understand their code or API without having to sift through the source and read comments.
 
+Here is some example code.
+```rust
+#[std]
+#[header("This file tests Oak's doc subcommand.")]
+
+#[doc("This constant is a constant.")]
+const CONSTANT = 3;
+// No doc attribute
+const TEST = CONSTANT + 5;
+
+#[doc("This structure represents a given date in time.
+A Date object has three members:
+|Member|Value|
+|-|-|
+|`month: num` | The month component of the date |
+|`day: num`   | The day component of the date   |
+|`year: num`  | The year component of the date  |")]
+type Date(3) {
+    #[doc("The constructor used to create a date.")]
+    fn new(month: num, day: num, year: num) -> Date {
+        return [month, day, year];
+    }
+
+    #[doc("Get the `month` member of the object")]
+    fn month(self: &Date) -> &num { return self as &num }
+    #[doc("Get the `day` member of the object")]
+    fn day(self: &Date)   -> &num { return (self+1) as &num }
+    #[doc("Get the `year` member of the object")]
+    fn year(self: &Date)  -> &num { return (self+2) as &num }
+
+    #[doc("Print the date object to STDOUT")]
+    fn print(self: &Date) {
+        putnum(self->month); putchar('/');
+        putnum(self->day); putchar('/');
+        putnumln(self->year);
+    }
+}
+
+#[doc("This function takes a number `n` and returns `n * n`, or `n` squared.")]
+fn square(n: num) -> num {
+    return n * n
+}
+
+fn main() {
+    let d = Date::new(5, 14, 2002);
+    d.print();
+}
+```
+
+And here is example usage of the `doc` subcommand to print the formatted documentation to the terminal.
+
 ![Documentation Example](assets/doc.png)
 
 
