@@ -1678,7 +1678,7 @@ impl Display for MirExpression {
             Self::Alloc(size) => write!(f, "alloc({})", size),
 
             Self::Void => write!(f, "@"),
-            Self::Character(ch) => write!(f, "{}", ch),
+            Self::Character(ch) => write!(f, "'{}'", ch),
             Self::Float(n) => write!(f, "{}", n),
             Self::String(s) => write!(f, "{:?}", s),
 
