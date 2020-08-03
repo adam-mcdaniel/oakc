@@ -23,11 +23,11 @@ impl Target for Go {
         String::new()
     }
 
-    fn begin_entry_point(&self, global_scope_size: i32, heap_size: i32) -> String {
+    fn begin_entry_point(&self, global_scope_size: i32, memory_size: i32) -> String {
         format!(
             "func main() {{\nvm := machine_new({}, {})\n",
             global_scope_size,
-            global_scope_size + heap_size,
+            global_scope_size + memory_size,
         )
     }
 

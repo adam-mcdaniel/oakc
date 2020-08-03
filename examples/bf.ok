@@ -1,5 +1,5 @@
 #[std]
-#[heap(1024)]
+#[memory(1024)]
 
 //
 // A brainfuck interpreter written in Oak

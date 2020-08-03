@@ -10,7 +10,7 @@ pub trait Target {
     fn core_prelude(&self) -> String;
     fn core_postlude(&self) -> String;
 
-    fn begin_entry_point(&self, global_scope_size: i32, heap_size: i32) -> String;
+    fn begin_entry_point(&self, global_scope_size: i32, memory_size: i32) -> String;
     fn end_entry_point(&self) -> String;
 
     fn establish_stack_frame(&self, arg_size: i32, local_scope_size: i32) -> String;
