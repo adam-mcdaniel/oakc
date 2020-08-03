@@ -98,8 +98,11 @@ fn main() -> 0 {
 
 The syntax of oak is heavily inspired by the Rust programming language.
 
-![Syntax Example](assets/syntax.png)
+Functions are declared with the `fn` keyword, and are syntactically identical to Rust functions, with the exception of the `return` semantics. Additionally, user defined types and constants are declared with the `type` and `const` keywords respectively.
 
+Similar to Rust's outer attributes, Oak introduces many compile time flags. Some of these are demonstrated below along with other Oak features.
+
+![Syntax Example](assets/syntax.png)
 
 
 ## Installation
