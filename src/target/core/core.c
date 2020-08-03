@@ -18,7 +18,7 @@ void panic(int code);
 ////////////////////// Constructor and destructor //////////////////////
 ////////////////////////////////////////////////////////////////////////
 // Create new virtual machine
-machine *machine_new(int vars, int capacity);
+machine *machine_new(int global_scope_size, int capacity);
 // Free the virtual machine's memory. This is called at the end of the program.
 void machine_drop(machine *vm);
 
@@ -91,7 +91,7 @@ void panic(int code) {
     exit(code);
 }
 
-machine *machine_new(int vars, int capacity) {
+machine *machine_new(int global_scope_size, int capacity) {
     machine *result = malloc(sizeof(machine));
     result->capacity  = capacity;
     result->memory    = malloc(sizeof(double) * capacity);
@@ -103,7 +103,7 @@ machine *machine_new(int vars, int capacity) {
         result->allocated[i] = false;
     }
 
-    for (i=0; i<vars; i++)
+    for (i=0; i<global_scope_size; i++)
         machine_push(result, 0);
 
     result->base_ptr = 0;

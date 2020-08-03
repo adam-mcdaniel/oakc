@@ -24,11 +24,11 @@ impl Target for C {
         String::new()
     }
 
-    fn begin_entry_point(&self, var_size: i32, heap_size: i32) -> String {
+    fn begin_entry_point(&self, global_scope_size: i32, heap_size: i32) -> String {
         format!(
             "int main() {{\nmachine *vm = machine_new({}, {});\n",
-            var_size,
-            var_size + heap_size,
+            global_scope_size,
+            global_scope_size + heap_size,
         )
     }
 
