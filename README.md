@@ -58,6 +58,16 @@ Now that you understand how oak's backend fundamentally operates, here's the com
 
 Using only these instructions, oak is able to implement _**even higher level abstractions than C can offer**_!!! That might not sound like much, but it's very powerful for a language this small.
 
+## Syntax and Flags
+
+The syntax of oak is heavily inspired by the Rust programming language.
+
+Functions are declared with the `fn` keyword, and are syntactically identical to Rust functions, with the exception of the `return` semantics. Additionally, user defined types and constants are declared with the `type` and `const` keywords respectively.
+
+Similar to Rust's outer attributes, Oak introduces many compile time flags. Some of these are demonstrated below along with other Oak features.
+
+![Syntax Example](assets/syntax.png)
+
 ## Compilation Process
 
 So how exactly does the oak compiler work?
@@ -150,17 +160,6 @@ fn main() {
 And here is example usage of the `doc` subcommand to print the formatted documentation to the terminal.
 
 ![Documentation Example](assets/doc.png)
-
-
-## Syntax and Flags
-
-The syntax of oak is heavily inspired by the Rust programming language.
-
-Functions are declared with the `fn` keyword, and are syntactically identical to Rust functions, with the exception of the `return` semantics. Additionally, user defined types and constants are declared with the `type` and `const` keywords respectively.
-
-Similar to Rust's outer attributes, Oak introduces many compile time flags. Some of these are demonstrated below along with other Oak features.
-
-![Syntax Example](assets/syntax.png)
 
 ## Installation
 
