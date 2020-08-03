@@ -463,12 +463,9 @@ pub enum HirConstant {
     Multiply(Box<Self>, Box<Self>),
     Divide(Box<Self>, Box<Self>),
 
-<<<<<<< HEAD
-=======
     And(Box<Self>, Box<Self>),
     Or(Box<Self>, Box<Self>),
 
->>>>>>> 16b5c9baeff853ce5ef182653e08498f08b774a2
     Greater(Box<Self>, Box<Self>),
     Less(Box<Self>, Box<Self>),
     GreaterEqual(Box<Self>, Box<Self>),
@@ -520,8 +517,6 @@ impl HirConstant {
             Self::Float(n) => *n,
             Self::Character(ch) => *ch as u8 as f64,
 
-<<<<<<< HEAD
-=======
             Self::And(l, r) => {
                 if l.to_value(constants, target)? != 0.0 && r.to_value(constants, target)? != 0.0 {
                     1.0
@@ -537,7 +532,6 @@ impl HirConstant {
                 }
             }
 
->>>>>>> 16b5c9baeff853ce5ef182653e08498f08b774a2
             Self::Equal(l, r) => {
                 if l.to_value(constants, target)? == r.to_value(constants, target)? {
                     1.0

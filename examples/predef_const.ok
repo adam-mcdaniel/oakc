@@ -1,13 +1,29 @@
+#[std]
 
+#[if(DATE_MONTH == 7) {
+    #[error("this code doesn't compile in july")]
+}]
 
-#[if(DATE_MONTH == 8) {
-    #[error("this code doesn't compile in august")]
+#[if(ON_WINDOWS) {
+    fn platform() -> &char { return "windows" }
+} else {
+    #[if(ON_MACOS) {
+        fn platform() -> &char { return "macOS" }
+    } else {
+        #[if(ON_LINUX) {
+            fn platform() -> &char { return "linux" }
+        } else {
+            #[error("Unknown platform")]            
+        }]
+    }]
 }]
 
 
 fn main() {
-    putstr("compiled on: ");
+    putstr("compiled on the date ");
     putnum(DATE_MONTH); putchar('/');
     putnum(DATE_DAY);   putchar('/');
     putnum(DATE_YEAR);
+
+    putstr(" on the "); putstr(platform()); putstrln(" operating system.");
 }

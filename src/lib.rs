@@ -27,17 +27,8 @@ lalrpop_mod!(pub parser);
 
 use lazy_static::lazy_static;
 lazy_static! {
-    static ref COMPILE_TIME_CONSTANTS: Mutex<BTreeMap<String, HirConstant>> = Mutex::new({
+    static ref COMPILE_TIME_CONSTANTS: BTreeMap<String, HirConstant> = {
         let mut constants = BTreeMap::new();
-
-        constants.insert(
-            String::from("TARGET"),
-            HirConstant::Float(target.get_name() as u8 as f64),
-        );
-        constants.insert(
-            String::from("IS_STANDARD"),
-            HirConstant::Float(target.is_standard() as i32 as f64),
-        );
 
         constants.insert(
             String::from("ON_WINDOWS"),
@@ -75,11 +66,25 @@ lazy_static! {
         );
 
         constants
-    })
+    };
+}
+
+pub fn get_constants(target: &impl Target) -> BTreeMap<String, HirConstant> {
+    let mut constants = COMPILE_TIME_CONSTANTS.clone();
+    constants.insert(
+        String::from("TARGET"),
+        HirConstant::Float(target.get_name() as u8 as f64),
+    );
+    constants.insert(
+        String::from("IS_STANDARD"),
+        HirConstant::Float(target.is_standard() as i32 as f64),
+    );
+
+    constants
 }
 
 pub fn generate_docs(input: impl ToString, filename: impl ToString, target: impl Target) -> String {
-    parse(input).generate_docs(filename.to_string(), &target, COMPILE_TIME_CONSTANTS.get_mut().unwrap(), false)
+    parse(input).generate_docs(filename.to_string(), &target, &mut get_constants(&target), false)
 }
 
 pub fn compile(cwd: &PathBuf, input: impl ToString, target: impl Target) -> Result<()> {    let mut hir = parse(input);
@@ -88,7 +93,8 @@ pub fn compile(cwd: &PathBuf, input: impl ToString, target: impl Target) -> Resu
         hir.extend_declarations(parse(include_str!("std.ok")).get_declarations())
     }
 
-    match hir.compile(cwd, &target, COMPILE_TIME_CONSTANTS.get_mut().unwrap()) {
+
+    match hir.compile(cwd, &target, &mut get_constants(&target)) {
         Ok(mir) => match mir.assemble() {
             Ok(asm) => match asm.assemble(&target) {
                 Ok(result) => target.compile(if hir.use_std() {
