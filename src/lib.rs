@@ -25,52 +25,45 @@ use time::OffsetDateTime;
 use lalrpop_util::{lalrpop_mod, ParseError};
 lalrpop_mod!(pub parser);
 
-use lazy_static::lazy_static;
-lazy_static! {
-    static ref COMPILE_TIME_CONSTANTS: BTreeMap<String, HirConstant> = {
-        let mut constants = BTreeMap::new();
 
-        constants.insert(
-            String::from("ON_WINDOWS"),
-            HirConstant::Float((OS == "windows") as i32 as f64),
-        );
-        constants.insert(
-            String::from("ON_MACOS"),
-            HirConstant::Float((OS == "macos") as i32 as f64),
-        );
-        constants.insert(
-            String::from("ON_LINUX"),
-            HirConstant::Float((OS == "linux") as i32 as f64),
-        );
+pub fn get_predefined_constants(target: &impl Target) -> BTreeMap<String, HirConstant> {
+    let mut constants = BTreeMap::new();
 
-        constants.insert(
-            String::from("ON_NIX"),
-            HirConstant::Float((FAMILY == "unix") as i32 as f64),
-        );
-        constants.insert(
-            String::from("ON_NON_NIX"),
-            HirConstant::Float((FAMILY != "unix") as i32 as f64),
-        );
+    constants.insert(
+        String::from("ON_WINDOWS"),
+        HirConstant::Float((OS == "windows") as i32 as f64),
+    );
+    constants.insert(
+        String::from("ON_MACOS"),
+        HirConstant::Float((OS == "macos") as i32 as f64),
+    );
+    constants.insert(
+        String::from("ON_LINUX"),
+        HirConstant::Float((OS == "linux") as i32 as f64),
+    );
 
-        constants.insert(
-            String::from("DATE_DAY"),
-            HirConstant::Float(OffsetDateTime::now_local().day() as f64),
-        );
-        constants.insert(
-            String::from("DATE_MONTH"),
-            HirConstant::Float(OffsetDateTime::now_local().month() as f64),
-        );
-        constants.insert(
-            String::from("DATE_YEAR"),
-            HirConstant::Float(OffsetDateTime::now_local().year() as f64),
-        );
+    constants.insert(
+        String::from("ON_NIX"),
+        HirConstant::Float((FAMILY == "unix") as i32 as f64),
+    );
+    constants.insert(
+        String::from("ON_NON_NIX"),
+        HirConstant::Float((FAMILY != "unix") as i32 as f64),
+    );
 
-        constants
-    };
-}
+    constants.insert(
+        String::from("DATE_DAY"),
+        HirConstant::Float(OffsetDateTime::now_local().day() as f64),
+    );
+    constants.insert(
+        String::from("DATE_MONTH"),
+        HirConstant::Float(OffsetDateTime::now_local().month() as f64),
+    );
+    constants.insert(
+        String::from("DATE_YEAR"),
+        HirConstant::Float(OffsetDateTime::now_local().year() as f64),
+    );
 
-pub fn get_constants(target: &impl Target) -> BTreeMap<String, HirConstant> {
-    let mut constants = COMPILE_TIME_CONSTANTS.clone();
     constants.insert(
         String::from("TARGET"),
         HirConstant::Float(target.get_name() as u8 as f64),
@@ -84,7 +77,7 @@ pub fn get_constants(target: &impl Target) -> BTreeMap<String, HirConstant> {
 }
 
 pub fn generate_docs(input: impl ToString, filename: impl ToString, target: impl Target) -> String {
-    parse(input).generate_docs(filename.to_string(), &target, &mut get_constants(&target), false)
+    parse(input).generate_docs(filename.to_string(), &target, &mut get_predefined_constants(&target), false)
 }
 
 pub fn compile(cwd: &PathBuf, input: impl ToString, target: impl Target) -> Result<()> {    let mut hir = parse(input);
@@ -94,7 +87,7 @@ pub fn compile(cwd: &PathBuf, input: impl ToString, target: impl Target) -> Resu
     }
 
 
-    match hir.compile(cwd, &target, &mut get_constants(&target)) {
+    match hir.compile(cwd, &target, &mut get_predefined_constants(&target)) {
         Ok(mir) => match mir.assemble() {
             Ok(asm) => match asm.assemble(&target) {
                 Ok(result) => target.compile(if hir.use_std() {
