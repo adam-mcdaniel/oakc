@@ -1,0 +1,7 @@
+
+
+type Test(1) {
+    fn drop(_: &num) {}
+}
+
+fn main() {}

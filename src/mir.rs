@@ -306,6 +306,13 @@ impl MirType {
         self.name == Self::VOID && self.ptr_level == 1
     }
 
+    fn is_primitive(&self) -> bool {
+        match self.name.as_str() {
+            Self::VOID | Self::BOOLEAN | Self::FLOAT | Self::CHAR => true,
+            _ => self.is_pointer(),
+        }
+    }
+
     fn method_to_function_name(&self, method_name: &Identifier) -> Identifier {
         format!("{}::{}", self.name, method_name)
     }
@@ -520,6 +527,12 @@ impl MirFunction {
         for stmt in &self.body {
             asm_body.extend(stmt.assemble(&mut vars, funcs, structs)?);
             stmt.type_check(&vars, funcs, structs)?
+        }
+
+        for var_name in vars.clone().keys() {
+            let var_drop =
+                MirExpression::Variable(var_name.clone()).call_drop(&vars, funcs, structs)?;
+            asm_body.extend(var_drop.assemble(&mut vars, funcs, structs)?);
         }
 
         // Check return type
@@ -832,7 +845,10 @@ impl MirStatement {
                 let asm_t = t.to_asm_type(structs)?;
 
                 // Push the expression to store in the variable
-                result.extend(expr.assemble(vars, funcs, structs)?);
+                result.extend(
+                    expr.call_copy(vars, funcs, structs)?
+                        .assemble(vars, funcs, structs)?,
+                );
                 // Allocate the variable on the stack, and store the
                 // expression at the variable's new address
                 result.extend(vec![
@@ -847,7 +863,7 @@ impl MirStatement {
             Self::AutoDefine(var_name, expr) => Self::Define(
                 var_name.clone(),
                 expr.get_type(vars, funcs, structs)?,
-                expr.clone(),
+                expr.call_copy(vars, funcs, structs)?,
             )
             .assemble(vars, funcs, structs)?,
 
@@ -857,7 +873,10 @@ impl MirStatement {
                 if let Some(t) = vars.clone().get(var_name) {
                     let mut result = Vec::new();
                     // Push the expression to store onto the stack
-                    result.extend(expr.assemble(vars, funcs, structs)?);
+                    result.extend(
+                        expr.call_copy(vars, funcs, structs)?
+                            .assemble(vars, funcs, structs)?,
+                    );
                     // Store the expression at the address of the variable
                     result.extend(vec![
                         AsmStatement::Expression(vec![AsmExpression::Refer(var_name.clone())]),
@@ -874,7 +893,10 @@ impl MirStatement {
             Self::AssignAddress(lhs, rhs) => {
                 let mut result = Vec::new();
                 // Push the expression to store onto the stack
-                result.extend(rhs.assemble(vars, funcs, structs)?);
+                result.extend(
+                    rhs.call_copy(vars, funcs, structs)?
+                        .assemble(vars, funcs, structs)?,
+                );
                 // Push the address to dereference onto the stack
                 result.extend(lhs.assemble(vars, funcs, structs)?);
                 result.push(AsmStatement::Assign(
@@ -1010,7 +1032,10 @@ impl MirStatement {
             Self::Return(exprs) => {
                 let mut result = Vec::new();
                 for expr in exprs {
-                    result.extend(expr.assemble(vars, funcs, structs)?)
+                    result.extend(
+                        expr.call_copy(vars, funcs, structs)?
+                            .assemble(vars, funcs, structs)?,
+                    )
                 }
                 result
             }
@@ -1068,6 +1093,49 @@ pub enum MirExpression {
 }
 
 impl MirExpression {
+    fn call_drop(
+        &self,
+        vars: &BTreeMap<Identifier, MirType>,
+        funcs: &BTreeMap<Identifier, MirFunction>,
+        structs: &BTreeMap<Identifier, MirStructure>,
+    ) -> Result<Self, MirError> {
+        Ok(if self.has_copy_and_drop(vars, funcs, structs)? {
+            Self::Method(Box::new(self.clone()), Identifier::from("drop"), vec![])
+        } else {
+            Self::Void
+        })
+    }
+
+    fn call_copy(
+        &self,
+        vars: &BTreeMap<Identifier, MirType>,
+        funcs: &BTreeMap<Identifier, MirFunction>,
+        structs: &BTreeMap<Identifier, MirStructure>,
+    ) -> Result<Self, MirError> {
+        match self {
+            Self::Method(_, _, _) | Self::Variable(_) | Self::Deref(_) => {
+                if self.has_copy_and_drop(vars, funcs, structs)? {
+                    return Ok(Self::Method(
+                        Box::new(self.clone()),
+                        Identifier::from("copy"),
+                        vec![],
+                    ));
+                }
+            }
+            _ => {}
+        }
+        return Ok(self.clone());
+    }
+
+    fn has_copy_and_drop(
+        &self,
+        vars: &BTreeMap<Identifier, MirType>,
+        funcs: &BTreeMap<Identifier, MirFunction>,
+        structs: &BTreeMap<Identifier, MirStructure>,
+    ) -> Result<bool, MirError> {
+        Ok(!self.get_type(vars, funcs, structs)?.is_primitive())
+    }
+
     fn type_check(
         &self,
         vars: &BTreeMap<Identifier, MirType>,
@@ -1451,7 +1519,10 @@ impl MirExpression {
                 let mut result = Vec::new();
                 // Push arguments onto the stack in reverse order
                 for arg in args.iter().rev() {
-                    result.extend(arg.assemble(vars, funcs, structs)?);
+                    result.extend(
+                        arg.call_copy(vars, funcs, structs)?
+                            .assemble(vars, funcs, structs)?,
+                    );
                 }
                 // Call the function
                 result.push(AsmStatement::Expression(vec![AsmExpression::Call(

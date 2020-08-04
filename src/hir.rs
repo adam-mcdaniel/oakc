@@ -59,7 +59,7 @@ impl HirProgram {
         if !ignore_header {
             header = format!("# {}\n", filename.trim())
         }
-        
+
         let mut content = String::new();
         for decl in self.get_declarations() {
             match decl {
@@ -83,7 +83,8 @@ impl HirProgram {
                 HirDeclaration::If(cond, code) => {
                     if let Ok(val) = cond.to_value(constants, target) {
                         if val != 0.0 {
-                            content += &code.generate_docs(filename.clone(), target, constants, true);
+                            content +=
+                                &code.generate_docs(filename.clone(), target, constants, true);
                         }
                     }
                 }
@@ -91,9 +92,11 @@ impl HirProgram {
                 HirDeclaration::IfElse(cond, then_code, else_code) => {
                     if let Ok(val) = cond.to_value(constants, target) {
                         if val != 0.0 {
-                            content += &then_code.generate_docs(filename.clone(), target, constants, true);
+                            content +=
+                                &then_code.generate_docs(filename.clone(), target, constants, true);
                         } else {
-                            content += &else_code.generate_docs(filename.clone(), target, constants, true);
+                            content +=
+                                &else_code.generate_docs(filename.clone(), target, constants, true);
                         }
                     }
                 }
@@ -131,7 +134,7 @@ impl HirProgram {
                     func.to_mir_fn(&constants, target)?,
                 )),
                 HirDeclaration::Structure(structure) => mir_decls.push(MirDeclaration::Structure(
-                    structure.to_mir_struct(&constants, target)?,
+                    structure.clone().to_mir_struct(&constants, target)?,
                 )),
                 HirDeclaration::RequireStd => {
                     if let Some(false) = std_required {
@@ -239,6 +242,9 @@ pub enum HirError {
     ConflictingStdReqs,
     FailedAssertion(HirConstant),
     UserError(String),
+    InvalidCopyTypeSignature(Identifier),
+    InvalidDropTypeSignature(Identifier),
+    ExplicitCopy,
 }
 
 impl Display for HirError {
@@ -256,6 +262,13 @@ impl Display for HirError {
                 write!(f, "conflicting 'require_std' and 'no_std' flags present")
             }
             Self::FailedAssertion(assertion) => write!(f, "failed assertion '{}'", assertion),
+            Self::InvalidCopyTypeSignature(type_name) => {
+                write!(f, "invalid copy constructor type signature for type '{}'", type_name)
+            }
+            Self::InvalidDropTypeSignature(type_name) => {
+                write!(f, "invalid drop destructor type signature for type '{}'", type_name)
+            }
+            Self::ExplicitCopy => write!(f, "cannot explicitly call copy constructors"),
         }
     }
 }
@@ -284,6 +297,10 @@ impl Display for HirType {
 }
 
 impl HirType {
+    fn refer(&self) -> Self {
+        Self::Pointer(Box::new(self.clone()))
+    }
+
     pub fn to_mir_type(&self) -> MirType {
         match self {
             Self::Pointer(inner) => inner.to_mir_type().refer(),
@@ -336,7 +353,37 @@ impl HirStructure {
         }
     }
 
-    pub fn generate_docs(&self) -> String {
+    fn to_type(&self) -> HirType {
+        HirType::Structure(self.name.clone())
+    }
+
+    fn get_name(&self) -> &Identifier {
+        &self.name
+    }
+
+    fn add_copy_and_drop(&mut self) -> Result<(), HirError> {
+        let mut has_copy = false;
+        let mut has_drop = false;
+        for method in &self.methods {
+            if method.is_valid_copy(self)? {
+                has_copy = true;
+            } else if method.is_valid_drop(self)? {
+                has_drop = true;
+            }
+        }
+
+        if !has_copy {
+            self.methods.push(HirFunction::copy_constructor(self));
+        }
+
+        if !has_drop {
+            self.methods.push(HirFunction::drop_destructor(self));
+        }
+
+        Ok(())
+    }
+
+    fn generate_docs(&self) -> String {
         let mut result = format!(
             "## *type* **{}** *with size* **{}**\n",
             self.name, self.size
@@ -351,12 +398,14 @@ impl HirStructure {
     }
 
     pub fn to_mir_struct(
-        &self,
+        &mut self,
         constants: &BTreeMap<Identifier, HirConstant>,
         target: &impl Target,
     ) -> Result<MirStructure, HirError> {
+        self.add_copy_and_drop()?;
+
         let mut mir_methods = Vec::new();
-        for method in self.methods.clone() {
+        for method in &self.methods {
             mir_methods.push(method.to_mir_fn(constants, target)?);
         }
 
@@ -368,7 +417,7 @@ impl HirStructure {
     }
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct HirFunction {
     doc: Option<String>,
     name: Identifier,
@@ -394,7 +443,67 @@ impl HirFunction {
         }
     }
 
-    pub fn generate_docs(&self, is_method: bool) -> String {
+    fn copy_constructor(structure: &HirStructure) -> Self {
+        Self::new(
+            None,
+            Identifier::from("copy"),
+            vec![(Identifier::from("self"), structure.to_type().refer())],
+            structure.to_type(),
+            vec![HirStatement::Return(vec![HirExpression::Deref(Box::new(
+                HirExpression::Variable(Identifier::from("self")),
+            ))])],
+        )
+    }
+
+    fn drop_destructor(structure: &HirStructure) -> Self {
+        Self::new(
+            None,
+            Identifier::from("drop"),
+            vec![(Identifier::from("self"), structure.to_type().refer())],
+            HirType::Void,
+            vec![],
+        )
+    }
+
+    fn get_name(&self) -> &Identifier {
+        &self.name
+    }
+
+    fn is_valid_copy(&self, structure: &HirStructure) -> Result<bool, HirError> {
+        if &self.name == "copy" {
+            let struct_t = structure.to_type();
+            if self.args.len() == 1
+                && self.args[0].1 == struct_t.refer()
+                && self.return_type == struct_t
+            {
+                return Ok(true);
+            } else {
+                return Err(HirError::InvalidCopyTypeSignature(
+                    structure.get_name().clone(),
+                ));
+            }
+        }
+        return Ok(false);
+    }
+
+    fn is_valid_drop(&self, structure: &HirStructure) -> Result<bool, HirError> {
+        if &self.name == "drop" {
+            let struct_t = structure.to_type();
+            if self.args.len() == 1
+                && self.args[0].1 == struct_t.refer()
+                && self.return_type == HirType::Void
+            {
+                return Ok(true);
+            } else {
+                return Err(HirError::InvalidDropTypeSignature(
+                    structure.get_name().clone(),
+                ));
+            }
+        }
+        return Ok(false);
+    }
+
+    fn generate_docs(&self, is_method: bool) -> String {
         let mut result = if is_method {
             format!("* *fn* **{}**(", self.name)
         } else {
@@ -448,7 +557,7 @@ impl HirFunction {
     }
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq)]
 pub enum HirConstant {
     Float(f64),
     Character(char),
@@ -612,7 +721,7 @@ impl HirConstant {
     }
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq)]
 pub enum HirStatement {
     /// An HIR let expression with a manually assigned type
     Define(Identifier, HirType, HirExpression),
@@ -731,7 +840,7 @@ impl HirStatement {
     }
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq)]
 pub enum HirExpression {
     Constant(HirConstant),
 
@@ -887,17 +996,23 @@ impl HirExpression {
                 result
             }),
 
-            Self::Method(instance, name, arguments) => MirExpression::Method(
-                Box::new(instance.to_mir_expr(constants, target)?),
-                name.clone(),
-                {
-                    let mut result = Vec::new();
-                    for arg in arguments {
-                        result.push(arg.to_mir_expr(constants, target)?);
-                    }
-                    result
-                },
-            ),
+            Self::Method(instance, name, arguments) => {
+                if name == "copy" {
+                    return Err(HirError::ExplicitCopy);
+                }
+
+                MirExpression::Method(
+                    Box::new(instance.to_mir_expr(constants, target)?),
+                    name.clone(),
+                    {
+                        let mut result = Vec::new();
+                        for arg in arguments {
+                            result.push(arg.to_mir_expr(constants, target)?);
+                        }
+                        result
+                    },
+                )
+            }
 
             Self::Index(ptr, idx) => MirExpression::Index(
                 Box::new(ptr.to_mir_expr(constants, target)?),

@@ -1,0 +1,7 @@
+
+
+type Test(1) {
+    fn copy(testing: num) {}
+}
+
+fn main() {}
