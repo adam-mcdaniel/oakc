@@ -136,7 +136,7 @@ void machine_dump(machine *vm) {
 }
 
 void machine_drop(machine *vm) {
-    machine_dump(vm);
+    // machine_dump(vm);
     free(vm->memory);
     free(vm->allocated);
 }

@@ -1082,6 +1082,7 @@ pub enum MirExpression {
     Variable(Identifier),
     Refer(Identifier),
     Deref(Box<Self>),
+    Move(Box<Self>),
 
     TypeCast(Box<Self>, MirType),
     Alloc(Box<Self>),
@@ -1133,7 +1134,11 @@ impl MirExpression {
         funcs: &BTreeMap<Identifier, MirFunction>,
         structs: &BTreeMap<Identifier, MirStructure>,
     ) -> Result<bool, MirError> {
-        Ok(!self.get_type(vars, funcs, structs)?.is_primitive())
+        Ok(if let Self::Move(_) = self {
+            false
+        } else {
+            !self.get_type(vars, funcs, structs)?.is_primitive()
+        })
     }
 
     fn type_check(
@@ -1292,7 +1297,7 @@ impl MirExpression {
             }
 
             // Typecheck a dereference expression
-            Self::Deref(expr) => expr.type_check(vars, funcs, structs)?,
+            Self::Deref(expr) | Self::Move(expr) => expr.type_check(vars, funcs, structs)?,
 
             // Typecheck atomic expressions
             Self::ForeignCall(_, _)
@@ -1315,6 +1320,8 @@ impl MirExpression {
         structs: &BTreeMap<Identifier, MirStructure>,
     ) -> Result<Vec<AsmStatement>, MirError> {
         Ok(match self {
+            Self::Move(expr) => expr.assemble(vars, funcs, structs)?,
+            
             Self::True => vec![AsmStatement::Expression(vec![AsmExpression::Float(1.0)])],
             Self::False => vec![AsmStatement::Expression(vec![AsmExpression::Float(0.0)])],
 
@@ -1626,6 +1633,8 @@ impl MirExpression {
         structs: &BTreeMap<Identifier, MirStructure>,
     ) -> Result<MirType, MirError> {
         Ok(match self {
+            Self::Move(expr) => expr.get_type(vars, funcs, structs)?,
+
             Self::True => MirType::boolean(),
             Self::False => MirType::boolean(),
 
@@ -1726,6 +1735,8 @@ impl MirExpression {
 impl Display for MirExpression {
     fn fmt(&self, f: &mut Formatter) -> Result<(), Error> {
         match self {
+            Self::Move(expr) => write!(f, "move({})", expr),
+
             Self::True => write!(f, "true"),
             Self::False => write!(f, "false"),
             Self::TypeCast(expr, t) => write!(f, "{} as {}", expr, t),

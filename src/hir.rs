@@ -449,9 +449,9 @@ impl HirFunction {
             Identifier::from("copy"),
             vec![(Identifier::from("self"), structure.to_type().refer())],
             structure.to_type(),
-            vec![HirStatement::Return(vec![HirExpression::Deref(Box::new(
+            vec![HirStatement::Return(vec![HirExpression::Move(Box::new(HirExpression::Deref(Box::new(
                 HirExpression::Variable(Identifier::from("self")),
-            ))])],
+            ))))])],
         )
     }
 
@@ -871,6 +871,7 @@ pub enum HirExpression {
     Variable(Identifier),
 
     TypeCast(Box<Self>, HirType),
+    Move(Box<Self>),
     Alloc(Box<Self>),
 
     Call(Identifier, Vec<Self>),
@@ -886,6 +887,8 @@ impl HirExpression {
         target: &impl Target,
     ) -> Result<MirExpression, HirError> {
         Ok(match self {
+            Self::Move(expr) => MirExpression::Move(Box::new(expr.to_mir_expr(constants, target)?)),
+
             /// Convert a constant expression into a float literal
             Self::Constant(constant) => MirExpression::Float(constant.to_value(constants, target)?),
 

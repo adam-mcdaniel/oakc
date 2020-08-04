@@ -1,5 +1,5 @@
 #[std]
-#[memory(2048)]
+#[memory(512)]
 
 const ARRAY = 3;
 type Array(ARRAY) {
@@ -31,6 +31,16 @@ type Array(ARRAY) {
         prend!();
     }
 
+    fn copy(self: &Array) -> Array {
+        let size = (self->len) * (self->elem_size);
+        let ptr = alloc(size) as &char;
+        let self_ptr = (self->contents) as &char;
+        for (let i=0; i < size; i=i+1) {
+            ptr[i] = self_ptr[i];
+        }
+        return [self->len, self->elem_size, self_ptr]
+    }
+
     fn drop(self: &Array) -> void {
         free self->contents: ((self->len) * (self->elem_size));
     }
@@ -40,7 +50,7 @@ const DATE = 3;
 type Date(DATE) {
     fn from(ptr: &void) -> &Date { return ptr as &Date }
     fn new(month: num, day: num, year: num) -> Date {
-        return [month, day, year]
+        return [month, day, year];
     }
 
     fn birthday() -> Date { return Date::new(5, 14, 2002) }
@@ -80,6 +90,10 @@ type Date(DATE) {
         self->month = self->month + 1;
         return *self
     }
+
+    fn copy(self: &Date) -> Date {
+        return move(*self)
+    }
 }
 
 fn main() -> void {
@@ -90,10 +104,8 @@ fn main() -> void {
     *arr.idx(1) = Date::birthday().tomorrow();
     *arr.idx(2) = Date::birthday().yesterday();
     *arr.idx(3) = (Date::birthday().next_week()).next_month();
-    // Date::from(arr.idx(1)).print();
+    Date::from(arr.idx(1)).print();
     for (let i:num=0; i < arr->len; i=i+1) {
         Date::from(arr.idx(i)).print();
     }
-
-    arr.drop();
 }
