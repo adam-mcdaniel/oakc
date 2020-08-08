@@ -58,6 +58,16 @@ Now that you understand how oak's backend fundamentally operates, here's the com
 
 Using only these instructions, oak is able to implement _**even higher level abstractions than C can offer**_!!! That might not sound like much, but it's very powerful for a language this small.
 
+## Syntax and Flags
+
+The syntax of oak is heavily inspired by the Rust programming language.
+
+Functions are declared with the `fn` keyword, and are syntactically identical to Rust functions, with the exception of the `return` semantics. Additionally, user defined types and constants are declared with the `type` and `const` keywords respectively.
+
+Similar to Rust's outer attributes, Oak introduces many compile time flags. Some of these are demonstrated below along with other Oak features.
+
+![Syntax Example](assets/syntax.png)
+
 ## Compilation Process
 
 So how exactly does the oak compiler work?
@@ -94,16 +104,62 @@ fn main() -> 0 {
 5. Assemble the IR instructions for a target
     - Because oak's IR is so small, it can support several targets. Even better, adding a target is incredibly easy. In oak's crate, there's a trait named `Target`. If you implement each of the IR's instructions for your language using the `Target` trait, then oak can automatically compile all the way down to your new programming or assembly language! _Yes, it's as easy as it sounds!_
 
-## Syntax and Flags
+## Documentation Tool
 
-The syntax of oak is heavily inspired by the Rust programming language.
+To allow users to read documentation of libraries and files without access to the internet, Oak provides the `doc` subcommand. This allows authors to add documentation attributes to their code to help other users understand their code or API without having to sift through the source and read comments.
 
-Functions are declared with the `fn` keyword, and are syntactically identical to Rust functions, with the exception of the `return` semantics. Additionally, user defined types and constants are declared with the `type` and `const` keywords respectively.
+Here is some example code.
+```rust
+#[std]
+#[header("This file tests Oak's doc subcommand.")]
 
-Similar to Rust's outer attributes, Oak introduces many compile time flags. Some of these are demonstrated below along with other Oak features.
+#[doc("This constant is a constant.")]
+const CONSTANT = 3;
+// No doc attribute
+const TEST = CONSTANT + 5;
 
-![Syntax Example](assets/syntax.png)
+#[doc("This structure represents a given date in time.
+A Date object has three members:
+|Member|Value|
+|-|-|
+|`month: num` | The month component of the date |
+|`day: num`   | The day component of the date   |
+|`year: num`  | The year component of the date  |")]
+type Date(3) {
+    #[doc("The constructor used to create a date.")]
+    fn new(month: num, day: num, year: num) -> Date {
+        return [month, day, year];
+    }
 
+    #[doc("Get the `month` member of the object")]
+    fn month(self: &Date) -> &num { return self as &num }
+    #[doc("Get the `day` member of the object")]
+    fn day(self: &Date)   -> &num { return (self+1) as &num }
+    #[doc("Get the `year` member of the object")]
+    fn year(self: &Date)  -> &num { return (self+2) as &num }
+
+    #[doc("Print the date object to STDOUT")]
+    fn print(self: &Date) {
+        putnum(self->month); putchar('/');
+        putnum(self->day); putchar('/');
+        putnumln(self->year);
+    }
+}
+
+#[doc("This function takes a number `n` and returns `n * n`, or `n` squared.")]
+fn square(n: num) -> num {
+    return n * n
+}
+
+fn main() {
+    let d = Date::new(5, 14, 2002);
+    d.print();
+}
+```
+
+And here is example usage of the `doc` subcommand to print the formatted documentation to the terminal.
+
+![Documentation Example](assets/doc.png)
 
 ## Installation
 

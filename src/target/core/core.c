@@ -136,7 +136,6 @@ void machine_dump(machine *vm) {
 }
 
 void machine_drop(machine *vm) {
-    // machine_dump(vm);
     free(vm->memory);
     free(vm->allocated);
 }
@@ -320,3 +319,5 @@ void machine_sign(machine *vm) {
         machine_push(vm, -1);
     }
 }
+
+

@@ -1,4 +1,3 @@
-use termimad::*;
 use clap::{clap_app, crate_authors, crate_version, AppSettings::ArgRequiredElseHelp};
 use oakc::{compile, generate_docs, Go, C, TS};
 use std::{
@@ -6,20 +5,21 @@ use std::{
     io::Result,
     path::PathBuf,
 };
+use termimad::*;
 
 fn main() {
     let matches = clap_app!(oak =>
         (version: crate_version!())
         (author: crate_authors!())
         (about: "Compiler for the Oak programming langauge")
+        (@group target =>
+            (@arg c: -c "Compile with C backend")
+			(@arg go: -g --go "Compile with Golang backend")
+			(@arg ts: --ts "Compile with TypeScript backend")
+        )
         (@subcommand c =>
             (about: "Compile an Oak file")
             (@arg FILE: +required "The input file to use")
-            (@group target =>
-                (@arg c: -c "Compile with C backend")
-				(@arg go: -g --go "Compile with Golang backend")
-				(@arg ts: --ts "Compile with TypeScript backend")
-            )
         )
         (@subcommand doc =>
             (about: "Generate documentation for an Oak file")
@@ -66,7 +66,16 @@ fn main() {
     } else if let Some(matches) = matches.subcommand_matches("doc") {
         if let Some(input_file) = matches.value_of("FILE") {
             if let Ok(contents) = read_to_string(input_file) {
-                let docs = generate_docs(contents, input_file);
+
+                let docs = if matches.is_present("c") {
+                    generate_docs(contents, input_file, C)
+                } else if matches.is_present("go") {
+                    generate_docs(contents, input_file, Go)
+                } else {
+                    generate_docs(contents, input_file, C)
+                };
+
+
                 if let Some(output_file) = matches.value_of("OUTPUT") {
                     if let Ok(_) = write(output_file, docs) {
                         println!("doc generation successful")
