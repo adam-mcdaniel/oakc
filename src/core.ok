@@ -1,0 +1,83 @@
+#[header("Oak's Core Library")]
+
+#[doc("Take an existing array in memory and *grow* it in memory")]
+fn realloc(old_ptr: &char, old_size: num, new_size: num) -> &char {
+    let new_ptr = alloc(new_size) as &char;
+
+    for (let i=0; i<old_size; i=i+1) {
+        new_ptr[i] = old_ptr[i];
+    }
+
+    free old_ptr: old_size;
+
+    return new_ptr
+}
+
+#[doc("Copy a `src` cstring in memory to another `dst` cstring in memory")]
+fn strcpy(dst: &char, src: &char) {
+    for (let i=0; src[i] != '\0'; i=i+1) {
+        dst[i] = src[i];
+    }
+    dst[i] = '\0';
+}
+
+#[doc("Get the number of characters in a cstring")]
+fn strlen(str: &char) -> num {
+    for (let i=0; str[i] != '\0'; i=i+1) {}
+    return i
+}
+
+#[doc("Get the number of words that a cstring uses in memory")]
+fn strsize(str: &char) -> num { return strlen(str) + 1 }
+
+#[doc("The number of words that the String type uses in memory")]
+const STRING_SIZE = 2;
+
+#[doc("A growable string type.
+Without the String type, the `&char` type must be used instead,
+which is extremely clumsy due to manual memory management.
+With the String type, users can take advantage of automatic memory management.")]
+type String(STRING_SIZE) {
+    #[doc("Create an empty string")]
+    fn new() -> String {
+        return [alloc(1), 0];
+    }
+
+    #[doc("Create a String from a cstring")]
+    fn from(str: &char) -> String {
+        let result = String::new();
+        for (let i=0; str[i] != '\0'; i=i+1) {
+            result.push(str[i]);
+        }
+
+        return result
+    }
+
+    #[doc("Get the String's cstring representation")]
+    fn ptr(self: &String) -> &&char { return self as &&char }
+
+    #[doc("Get the length of the String")]
+    fn len(self: &String) -> &num { return (self + 1) as &num }
+
+    #[doc("Add a character to the end of the string")]
+    fn push(self: &String, ch: char) {
+        self->len = self->len + 1;
+        self->ptr = realloc(self->ptr, self->len, self->len + 1);
+        (self->ptr)[self->len - 1] = ch;
+        (self->ptr)[self->len] = '\0';
+    }
+
+    #[doc("Create a copy of the string")]
+    fn copy(self: &String) -> String {
+        let ptr = alloc(self->len+1) as &char;
+        strcpy(ptr, self->ptr);
+        return [ptr, self->len]
+    }
+
+    #[doc("Free the string's memory")]
+    fn drop(self: &String) {
+        free self->ptr: self->len + 1;
+    }
+}
+
+

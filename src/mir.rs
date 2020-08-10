@@ -1194,7 +1194,7 @@ impl MirExpression {
         structs: &BTreeMap<Identifier, MirStructure>,
     ) -> Result<Self, MirError> {
         match self {
-            Self::Method(_, _, _) | Self::Variable(_) | Self::Deref(_) => {
+            Self::Variable(_) | Self::Deref(_) => {
                 if self.has_copy_and_drop(vars, funcs, structs)? {
                     return Ok(Self::Method(
                         Box::new(self.clone()),

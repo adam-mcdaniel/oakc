@@ -27,3 +27,8 @@ fn putbool(b: bool) -> void {
 fn putboolln(b: bool) -> void { putbool(b); prend!(); }
 
 fn get_char() -> char { return getch!() as char; }
+
+
+fn print(s: &String) { putstr(s->ptr); }
+fn println(s: &String) { putstrln(s->ptr); }
+

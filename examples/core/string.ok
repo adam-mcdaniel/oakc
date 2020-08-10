@@ -1,0 +1,14 @@
+#[std]
+
+fn test(s: String) {
+    s.push('!');
+    println(&s);
+}
+
+fn main() {
+    let str = String::from("hello world?");
+    println(&str);
+    test(str);
+    str.push('?');
+    println(&str);
+}
