@@ -90,10 +90,6 @@ type Date(DATE) {
         self->month = self->month + 1;
         return *self
     }
-
-    fn copy(self: &Date) -> Date {
-        return move(*self)
-    }
 }
 
 fn main() -> void {
@@ -104,8 +100,8 @@ fn main() -> void {
     *arr.idx(1) = Date::birthday().tomorrow();
     *arr.idx(2) = Date::birthday().yesterday();
     *arr.idx(3) = (Date::birthday().next_week()).next_month();
-    Date::from(arr.idx(1)).print();
     for (let i:num=0; i < arr->len; i=i+1) {
         Date::from(arr.idx(i)).print();
     }
+    arr.drop();
 }

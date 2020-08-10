@@ -1,5 +1,5 @@
 #[std]
-#[memory(256)]
+#[memory(512)]
 
 fn realloc(old_ptr: &char, old_size: num, new_size: num) -> &char {
     let new_ptr = alloc(new_size) as &char;
@@ -99,6 +99,11 @@ fn putstringln(s: String) {
     putstrln(s->ptr);
 }
 
+fn test(s: String) -> String {
+    putstrln(s->ptr);
+    return s
+}
+
 fn puttwostrln(ts: TwoString) {
     putstringln(ts->first);
     putstringln(ts->second);
@@ -118,4 +123,6 @@ fn main() {
     ref_test(&ts->first);
     ref_test(&ts->second);
     puttwostrln(ts);
+    let t = test(String::from("testing"));
+    putstrln(t->ptr);
 }

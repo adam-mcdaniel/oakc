@@ -85,6 +85,9 @@ pub enum MirError {
     ConditionalReturn(String),
     /// A non-void function never returns
     NonVoidNoReturn(String),
+    /// Prevent memory leaks by preventing the user from calling methods
+    /// on objects that will not be dropped
+    MethodOnUnboundCopyDrop(MirExpression),
 }
 
 /// Print an MIR error on the command line
@@ -191,6 +194,11 @@ impl Display for MirError {
                 "the non-void function '{}' never returns an expression",
                 fn_name
             ),
+            Self::MethodOnUnboundCopyDrop(method_call) => write!(
+                f,
+                "the expression '{}' calls a method on an unbound object that implements 'copy' or 'drop'. try binding the object using a let expression",
+                method_call
+            ),
         }
     }
 }
@@ -213,6 +221,22 @@ impl MirType {
     pub const VOID: &'static str = "void";
     /// The name of the bool type in Oak code
     pub const BOOLEAN: &'static str = "bool";
+
+    /// Must this type use the drop method?
+    /// Types that use non-default copy OR drop constructors
+    /// must be dropped.
+    pub fn must_drop(&self, structs: &BTreeMap<Identifier, MirStructure>) -> bool {
+        // Primitive types do not need to be dropped
+        if self.is_primitive() {
+            return false;
+        } else if let Some(s) = structs.get(&self.name) {
+            // Types only **must** be dropped if the user specifies so
+            // with a manual drop definition
+            s.must_drop()
+        } else {
+            false
+        }
+    }
 
     /// A user defined type
     pub fn structure(name: Identifier) -> Self {
@@ -419,15 +443,34 @@ pub struct MirStructure {
     name: Identifier,
     size: i32,
     methods: Vec<MirFunction>,
+    /// Does the user specifiy a `copy` method explicitly or not?
+    default_copy: bool,
+    /// Does the user specifiy a `drop` method explicitly or not?
+    default_drop: bool,
 }
 
 impl MirStructure {
-    pub fn new(name: Identifier, size: i32, methods: Vec<MirFunction>) -> Self {
+    pub fn new(
+        name: Identifier,
+        size: i32,
+        methods: Vec<MirFunction>,
+        default_copy: bool,
+        default_drop: bool,
+    ) -> Self {
         Self {
             name,
             size,
             methods,
+            default_copy,
+            default_drop,
         }
+    }
+
+    /// Must this type use the drop method?
+    /// Types that use non-default copy OR drop constructors
+    /// must be dropped.
+    fn must_drop(&self) -> bool {
+        !self.default_copy || !self.default_drop
     }
 
     fn to_mir_type(&self) -> MirType {
@@ -522,17 +565,21 @@ impl MirFunction {
             vars.insert(arg_name.clone(), arg_type.clone());
         }
 
+        // Track the number of object instances TEMPORARILY
+        // stored on the stack for method calls.
+        let mut instance_count = 0;
+
         // Assemble each statement in the body
         let mut asm_body = Vec::new();
         for stmt in &self.body {
-            asm_body.extend(stmt.assemble(&mut vars, funcs, structs)?);
+            asm_body.extend(stmt.assemble(&mut vars, funcs, structs, &mut instance_count)?);
             stmt.type_check(&vars, funcs, structs)?
         }
 
         for var_name in vars.clone().keys() {
             let var_drop =
                 MirExpression::Variable(var_name.clone()).call_drop(&vars, funcs, structs)?;
-            asm_body.extend(var_drop.assemble(&mut vars, funcs, structs)?);
+            asm_body.extend(var_drop.assemble(&mut vars, funcs, structs, &mut instance_count)?);
         }
 
         // Check return type
@@ -835,6 +882,7 @@ impl MirStatement {
         vars: &mut BTreeMap<Identifier, MirType>,
         funcs: &BTreeMap<Identifier, MirFunction>,
         structs: &BTreeMap<Identifier, MirStructure>,
+        instance_count: &mut i32,
     ) -> Result<Vec<AsmStatement>, MirError> {
         Ok(match self {
             /// Define a variable with a given type
@@ -845,10 +893,12 @@ impl MirStatement {
                 let asm_t = t.to_asm_type(structs)?;
 
                 // Push the expression to store in the variable
-                result.extend(
-                    expr.call_copy(vars, funcs, structs)?
-                        .assemble(vars, funcs, structs)?,
-                );
+                result.extend(expr.call_copy(vars, funcs, structs)?.assemble(
+                    vars,
+                    funcs,
+                    structs,
+                    instance_count,
+                )?);
                 // Allocate the variable on the stack, and store the
                 // expression at the variable's new address
                 result.extend(vec![
@@ -865,7 +915,7 @@ impl MirStatement {
                 expr.get_type(vars, funcs, structs)?,
                 expr.call_copy(vars, funcs, structs)?,
             )
-            .assemble(vars, funcs, structs)?,
+            .assemble(vars, funcs, structs, instance_count)?,
 
             /// Assign an expression to a defined variable
             Self::AssignVariable(var_name, expr) => {
@@ -873,10 +923,12 @@ impl MirStatement {
                 if let Some(t) = vars.clone().get(var_name) {
                     let mut result = Vec::new();
                     // Push the expression to store onto the stack
-                    result.extend(
-                        expr.call_copy(vars, funcs, structs)?
-                            .assemble(vars, funcs, structs)?,
-                    );
+                    result.extend(expr.call_copy(vars, funcs, structs)?.assemble(
+                        vars,
+                        funcs,
+                        structs,
+                        instance_count,
+                    )?);
                     // Store the expression at the address of the variable
                     result.extend(vec![
                         AsmStatement::Expression(vec![AsmExpression::Refer(var_name.clone())]),
@@ -893,12 +945,14 @@ impl MirStatement {
             Self::AssignAddress(lhs, rhs) => {
                 let mut result = Vec::new();
                 // Push the expression to store onto the stack
-                result.extend(
-                    rhs.call_copy(vars, funcs, structs)?
-                        .assemble(vars, funcs, structs)?,
-                );
+                result.extend(rhs.call_copy(vars, funcs, structs)?.assemble(
+                    vars,
+                    funcs,
+                    structs,
+                    instance_count,
+                )?);
                 // Push the address to dereference onto the stack
-                result.extend(lhs.assemble(vars, funcs, structs)?);
+                result.extend(lhs.assemble(vars, funcs, structs, instance_count)?);
                 result.push(AsmStatement::Assign(
                     rhs.get_type(vars, funcs, structs)?.to_asm_type(structs)?,
                 ));
@@ -909,15 +963,15 @@ impl MirStatement {
                 // Assemble the `pre` condition first so that
                 // if a variable is defined in this statement,
                 // it is defined for the rest of the loop.
-                let asm_pre = pre.assemble(vars, funcs, structs)?;
+                let asm_pre = pre.assemble(vars, funcs, structs, instance_count)?;
                 let mut asm_body = Vec::new();
                 for stmt in body {
-                    asm_body.extend(stmt.assemble(vars, funcs, structs)?);
+                    asm_body.extend(stmt.assemble(vars, funcs, structs, instance_count)?);
                 }
                 vec![AsmStatement::For(
                     asm_pre,
-                    cond.assemble(vars, funcs, structs)?,
-                    post.assemble(vars, funcs, structs)?,
+                    cond.assemble(vars, funcs, structs, instance_count)?,
+                    post.assemble(vars, funcs, structs, instance_count)?,
                     asm_body,
                 )]
             }
@@ -925,12 +979,12 @@ impl MirStatement {
             Self::While(cond, body) => {
                 let mut asm_body = Vec::new();
                 for stmt in body {
-                    asm_body.extend(stmt.assemble(vars, funcs, structs)?);
+                    asm_body.extend(stmt.assemble(vars, funcs, structs, instance_count)?);
                 }
                 // Create a for loop using only a condition.
                 vec![AsmStatement::For(
                     vec![],
-                    cond.assemble(vars, funcs, structs)?,
+                    cond.assemble(vars, funcs, structs, instance_count)?,
                     vec![],
                     asm_body,
                 )]
@@ -939,12 +993,12 @@ impl MirStatement {
             Self::If(cond, body) => {
                 let mut asm_body = Vec::new();
                 for stmt in body {
-                    asm_body.extend(stmt.assemble(vars, funcs, structs)?);
+                    asm_body.extend(stmt.assemble(vars, funcs, structs, instance_count)?);
                 }
 
                 // Use a variable to store the condition of the if statement
                 let mut pre = Vec::new();
-                pre.extend(cond.assemble(vars, funcs, structs)?);
+                pre.extend(cond.assemble(vars, funcs, structs, instance_count)?);
                 pre.extend(vec![
                     AsmStatement::Define(Identifier::from("%IF_VAR%"), AsmType::float()),
                     AsmStatement::Assign(AsmType::float()),
@@ -973,17 +1027,17 @@ impl MirStatement {
             Self::IfElse(cond, then_body, else_body) => {
                 let mut asm_then_body = Vec::new();
                 for stmt in then_body {
-                    asm_then_body.extend(stmt.assemble(vars, funcs, structs)?);
+                    asm_then_body.extend(stmt.assemble(vars, funcs, structs, instance_count)?);
                 }
 
                 let mut asm_else_body = Vec::new();
                 for stmt in else_body {
-                    asm_else_body.extend(stmt.assemble(vars, funcs, structs)?);
+                    asm_else_body.extend(stmt.assemble(vars, funcs, structs, instance_count)?);
                 }
 
                 // Use a variable to store the condition of the if statement
                 let mut pre = Vec::new();
-                pre.extend(cond.assemble(vars, funcs, structs)?);
+                pre.extend(cond.assemble(vars, funcs, structs, instance_count)?);
                 pre.extend(vec![
                     AsmStatement::Define(Identifier::from("%IF_VAR%"), AsmType::float()),
                     AsmStatement::Assign(AsmType::float()),
@@ -1032,10 +1086,12 @@ impl MirStatement {
             Self::Return(exprs) => {
                 let mut result = Vec::new();
                 for expr in exprs {
-                    result.extend(
-                        expr.call_copy(vars, funcs, structs)?
-                            .assemble(vars, funcs, structs)?,
-                    )
+                    result.extend(expr.call_copy(vars, funcs, structs)?.assemble(
+                        vars,
+                        funcs,
+                        structs,
+                        instance_count,
+                    )?)
                 }
                 result
             }
@@ -1043,13 +1099,13 @@ impl MirStatement {
             /// Freeing an address does not return a value, so it is a statement.
             Self::Free(addr, size) => {
                 let mut result = Vec::new();
-                result.extend(size.assemble(vars, funcs, structs)?);
-                result.extend(addr.assemble(vars, funcs, structs)?);
+                result.extend(size.assemble(vars, funcs, structs, instance_count)?);
+                result.extend(addr.assemble(vars, funcs, structs, instance_count)?);
                 result.push(AsmStatement::Expression(vec![AsmExpression::Free]));
                 result
             }
 
-            Self::Expression(expr) => expr.assemble(vars, funcs, structs)?,
+            Self::Expression(expr) => expr.assemble(vars, funcs, structs, instance_count)?,
         })
     }
 }
@@ -1094,6 +1150,30 @@ pub enum MirExpression {
 }
 
 impl MirExpression {
+    fn get_instance_var(&self, instance_count: &mut i32) -> Identifier {
+        *instance_count += 1;
+        format!("%INSTANCE_VAR_{}%", *instance_count)
+    }
+
+    /// Must this type use the drop method?
+    /// Types that use non-default copy OR drop constructors
+    /// must be dropped.
+    fn must_drop(
+        &self,
+        vars: &BTreeMap<Identifier, MirType>,
+        funcs: &BTreeMap<Identifier, MirFunction>,
+        structs: &BTreeMap<Identifier, MirStructure>,
+    ) -> Result<bool, MirError> {
+        Ok(self.get_type(vars, funcs, structs)?.must_drop(structs))
+    }
+
+    fn is_a_copy(&self) -> bool {
+        match self {
+            Self::Method(_, name, _) if name == "copy" => true,
+            _ => false,
+        }
+    }
+
     fn call_drop(
         &self,
         vars: &BTreeMap<Identifier, MirType>,
@@ -1318,10 +1398,11 @@ impl MirExpression {
         vars: &mut BTreeMap<Identifier, MirType>,
         funcs: &BTreeMap<Identifier, MirFunction>,
         structs: &BTreeMap<Identifier, MirStructure>,
+        instance_count: &mut i32,
     ) -> Result<Vec<AsmStatement>, MirError> {
         Ok(match self {
-            Self::Move(expr) => expr.assemble(vars, funcs, structs)?,
-            
+            Self::Move(expr) => expr.assemble(vars, funcs, structs, instance_count)?,
+
             Self::True => vec![AsmStatement::Expression(vec![AsmExpression::Float(1.0)])],
             Self::False => vec![AsmStatement::Expression(vec![AsmExpression::Float(0.0)])],
 
@@ -1331,7 +1412,7 @@ impl MirExpression {
                 vec![MirStatement::Expression(MirExpression::Float(0.0))],
                 vec![MirStatement::Expression(MirExpression::Float(1.0))],
             )
-            .assemble(vars, funcs, structs)?,
+            .assemble(vars, funcs, structs, instance_count)?,
 
             /// And two boolean values
             /// And is essentially boolean multiplication,
@@ -1342,7 +1423,7 @@ impl MirExpression {
                 vec![MirStatement::Expression(MirExpression::Float(1.0))],
                 vec![MirStatement::Expression(MirExpression::Float(0.0))],
             )
-            .assemble(vars, funcs, structs)?,
+            .assemble(vars, funcs, structs, instance_count)?,
 
             /// Or two boolean values
             /// Or is essentially boolean addition,
@@ -1353,7 +1434,7 @@ impl MirExpression {
                 vec![MirStatement::Expression(MirExpression::Float(1.0))],
                 vec![MirStatement::Expression(MirExpression::Float(0.0))],
             )
-            .assemble(vars, funcs, structs)?,
+            .assemble(vars, funcs, structs, instance_count)?,
 
             /// Are two numbers equal?
             /// I know this expression doesn't type check,
@@ -1363,7 +1444,7 @@ impl MirExpression {
                 vec![MirStatement::Expression(MirExpression::Float(0.0))],
                 vec![MirStatement::Expression(MirExpression::Float(1.0))],
             )
-            .assemble(vars, funcs, structs)?,
+            .assemble(vars, funcs, structs, instance_count)?,
 
             /// Are two numbers not equal?
             /// I know this expression doesn't type check,
@@ -1373,18 +1454,18 @@ impl MirExpression {
                 vec![MirStatement::Expression(MirExpression::Float(1.0))],
                 vec![MirStatement::Expression(MirExpression::Float(0.0))],
             )
-            .assemble(vars, funcs, structs)?,
+            .assemble(vars, funcs, structs, instance_count)?,
 
             /// A typecast is only a way to explicitly validate
             /// some kinds of typechecks. The typecast expression
             /// has no change on the output code.
-            Self::TypeCast(expr, _) => expr.assemble(vars, funcs, structs)?,
+            Self::TypeCast(expr, _) => expr.assemble(vars, funcs, structs, instance_count)?,
 
             /// Is the LHS greater than or equal the RHS?
             Self::GreaterEqual(l, r) => {
                 let mut result = Vec::new();
-                result.extend(l.assemble(vars, funcs, structs)?);
-                result.extend(r.assemble(vars, funcs, structs)?);
+                result.extend(l.assemble(vars, funcs, structs, instance_count)?);
+                result.extend(r.assemble(vars, funcs, structs, instance_count)?);
                 result.push(AsmStatement::Expression(vec![
                     // Subtract RHS from the LHS and check the sign
                     AsmExpression::Subtract,
@@ -1400,8 +1481,8 @@ impl MirExpression {
             /// Is the LHS greater than the RHS?
             Self::Greater(l, r) => {
                 let mut result = Vec::new();
-                result.extend(r.assemble(vars, funcs, structs)?);
-                result.extend(l.assemble(vars, funcs, structs)?);
+                result.extend(r.assemble(vars, funcs, structs, instance_count)?);
+                result.extend(l.assemble(vars, funcs, structs, instance_count)?);
                 result.push(AsmStatement::Expression(vec![
                     // Subtract LHS from the RHS and check the sign
                     AsmExpression::Subtract,
@@ -1417,8 +1498,8 @@ impl MirExpression {
             /// Is the LHS less than or equal to the RHS?
             Self::LessEqual(l, r) => {
                 let mut result = Vec::new();
-                result.extend(r.assemble(vars, funcs, structs)?);
-                result.extend(l.assemble(vars, funcs, structs)?);
+                result.extend(r.assemble(vars, funcs, structs, instance_count)?);
+                result.extend(l.assemble(vars, funcs, structs, instance_count)?);
                 result.push(AsmStatement::Expression(vec![
                     // Subtract LHS from the RHS and check the sign
                     AsmExpression::Subtract,
@@ -1434,8 +1515,8 @@ impl MirExpression {
             /// Is the LHS less than the RHS?
             Self::Less(l, r) => {
                 let mut result = Vec::new();
-                result.extend(l.assemble(vars, funcs, structs)?);
-                result.extend(r.assemble(vars, funcs, structs)?);
+                result.extend(l.assemble(vars, funcs, structs, instance_count)?);
+                result.extend(r.assemble(vars, funcs, structs, instance_count)?);
                 result.push(AsmStatement::Expression(vec![
                     // Subtract RHS from the LHS and check the sign
                     AsmExpression::Subtract,
@@ -1452,32 +1533,32 @@ impl MirExpression {
             /// Add two values
             Self::Add(l, r) => {
                 let mut result = Vec::new();
-                result.extend(l.assemble(vars, funcs, structs)?);
-                result.extend(r.assemble(vars, funcs, structs)?);
+                result.extend(l.assemble(vars, funcs, structs, instance_count)?);
+                result.extend(r.assemble(vars, funcs, structs, instance_count)?);
                 result.push(AsmStatement::Expression(vec![AsmExpression::Add]));
                 result
             }
             /// Multiply two values
             Self::Multiply(l, r) => {
                 let mut result = Vec::new();
-                result.extend(l.assemble(vars, funcs, structs)?);
-                result.extend(r.assemble(vars, funcs, structs)?);
+                result.extend(l.assemble(vars, funcs, structs, instance_count)?);
+                result.extend(r.assemble(vars, funcs, structs, instance_count)?);
                 result.push(AsmStatement::Expression(vec![AsmExpression::Multiply]));
                 result
             }
             /// Divide two values
             Self::Divide(l, r) => {
                 let mut result = Vec::new();
-                result.extend(l.assemble(vars, funcs, structs)?);
-                result.extend(r.assemble(vars, funcs, structs)?);
+                result.extend(l.assemble(vars, funcs, structs, instance_count)?);
+                result.extend(r.assemble(vars, funcs, structs, instance_count)?);
                 result.push(AsmStatement::Expression(vec![AsmExpression::Divide]));
                 result
             }
             /// Subtract two values
             Self::Subtract(l, r) => {
                 let mut result = Vec::new();
-                result.extend(l.assemble(vars, funcs, structs)?);
-                result.extend(r.assemble(vars, funcs, structs)?);
+                result.extend(l.assemble(vars, funcs, structs, instance_count)?);
+                result.extend(r.assemble(vars, funcs, structs, instance_count)?);
                 result.push(AsmStatement::Expression(vec![AsmExpression::Subtract]));
                 result
             }
@@ -1507,7 +1588,7 @@ impl MirExpression {
             /// Dereference a pointer
             Self::Deref(expr) => {
                 let mut result = Vec::new();
-                result.extend(expr.assemble(vars, funcs, structs)?);
+                result.extend(expr.assemble(vars, funcs, structs, instance_count)?);
                 // The `Deref` instruction requires the size of the item in memory
                 // to push onto the stack. A pointer to the object has size 1, but
                 // the size of the type itself can vary. To get the size of the
@@ -1526,10 +1607,12 @@ impl MirExpression {
                 let mut result = Vec::new();
                 // Push arguments onto the stack in reverse order
                 for arg in args.iter().rev() {
-                    result.extend(
-                        arg.call_copy(vars, funcs, structs)?
-                            .assemble(vars, funcs, structs)?,
-                    );
+                    result.extend(arg.call_copy(vars, funcs, structs)?.assemble(
+                        vars,
+                        funcs,
+                        structs,
+                        instance_count,
+                    )?);
                 }
                 // Call the function
                 result.push(AsmStatement::Expression(vec![AsmExpression::Call(
@@ -1542,7 +1625,7 @@ impl MirExpression {
             Self::ForeignCall(func_name, args) => {
                 let mut result = Vec::new();
                 for arg in args.iter().rev() {
-                    result.extend(arg.assemble(vars, funcs, structs)?);
+                    result.extend(arg.assemble(vars, funcs, structs, instance_count)?);
                 }
                 result.push(AsmStatement::Expression(vec![AsmExpression::ForeignCall(
                     func_name.clone(),
@@ -1553,7 +1636,7 @@ impl MirExpression {
             /// Allocate data on the heap
             Self::Alloc(size_expr) => {
                 let mut result = Vec::new();
-                result.extend(size_expr.assemble(vars, funcs, structs)?);
+                result.extend(size_expr.assemble(vars, funcs, structs, instance_count)?);
                 result.push(AsmStatement::Expression(vec![AsmExpression::Alloc]));
                 result
             }
@@ -1568,36 +1651,56 @@ impl MirExpression {
                 if expr.get_type(vars, funcs, structs)?.is_pointer() {
                     let mut call_args = vec![*expr.clone()];
                     call_args.extend(args.clone());
-                    return Self::Call(func_name, call_args).assemble(vars, funcs, structs);
+                    return Self::Call(func_name, call_args).assemble(
+                        vars,
+                        funcs,
+                        structs,
+                        instance_count,
+                    );
                 // Here the instance object must be a non-pointer type
                 // and also a variable. In this case, reference the
                 // variable and call the method with the pointer to the object.
-                } else if let Self::Variable(name) = *expr.clone() {
+                } else if let Self::Variable(var_name) = *expr.clone() {
                     // Reference the variable storing the object
-                    let mut call_args = vec![Self::Refer(name.clone())];
+                    let mut call_args = vec![Self::Refer(var_name)];
                     call_args.extend(args.clone());
-                    Self::Call(func_name, call_args).assemble(vars, funcs, structs)?
-                // Here, the instance object must be an object stored on the stack
-                // at an address not known at compile time. This case is much more complicated.
-                // In this case,
-                } else {
+                    Self::Call(func_name, call_args).assemble(
+                        vars,
+                        funcs,
+                        structs,
+                        instance_count,
+                    )?
+                } else if method_name == "copy"
+                    || method_name == "drop"
+                    || !expr.must_drop(vars, funcs, structs)?
+                {
+                    // Reference the variable storing the object
+                    let instance_var = self.get_instance_var(instance_count);
+
                     let mut result = Vec::new();
                     // Push the instance object
-                    result.extend(expr.assemble(vars, funcs, structs)?);
+                    result.extend(expr.assemble(vars, funcs, structs, instance_count)?);
 
                     let self_type = instance_type.to_asm_type(structs)?;
                     result.extend(vec![
                         // Store the instance object into a stack variable
-                        AsmStatement::Define(Identifier::from("%INSTANCE_VAR%"), self_type),
+                        AsmStatement::Define(instance_var.clone(), self_type),
                         AsmStatement::Assign(self_type),
                     ]);
 
-                    let mut call_args = vec![Self::Refer(Identifier::from("%INSTANCE_VAR%"))];
+                    let mut call_args = vec![Self::Refer(instance_var.clone())];
                     call_args.extend(args.clone());
 
-                    result.extend(Self::Call(func_name, call_args).assemble(vars, funcs, structs)?);
+                    result.extend(Self::Call(func_name, call_args).assemble(
+                        vars,
+                        funcs,
+                        structs,
+                        instance_count,
+                    )?);
 
                     result
+                } else {
+                    return Err(MirError::MethodOnUnboundCopyDrop(self.clone()));
                 }
             }
 
@@ -1605,9 +1708,9 @@ impl MirExpression {
             Self::Index(ptr, idx) => {
                 let mut result = Vec::new();
                 // Push the array pointer on the stack
-                result.extend(ptr.assemble(vars, funcs, structs)?);
+                result.extend(ptr.assemble(vars, funcs, structs, instance_count)?);
                 // Push the index of the array onto the stack
-                result.extend(idx.assemble(vars, funcs, structs)?);
+                result.extend(idx.assemble(vars, funcs, structs, instance_count)?);
                 // Get the size of the array's inner type
                 let type_size = ptr
                     .get_type(vars, funcs, structs)?

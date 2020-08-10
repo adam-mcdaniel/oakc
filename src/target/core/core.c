@@ -147,6 +147,12 @@ void machine_load_base_ptr(machine *vm) {
     machine_push(vm, vm->base_ptr);
 }
 
+void machine_load_stack_ptr(machine *vm) {
+    // Get the virtual machine's current base pointer value,
+    // and push it onto the stack.
+    machine_push(vm, vm->stack_ptr);
+}
+
 void machine_establish_stack_frame(machine *vm, int arg_size, int local_scope_size) {
     // Allocate some space to store the arguments' cells for later
     double *args = malloc(arg_size * sizeof(double));

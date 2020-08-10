@@ -398,7 +398,7 @@ impl AsmExpression {
     fn assemble(
         &self,
         func_ids: &BTreeMap<String, i32>,
-        vars: &BTreeMap<String, (i32, AsmType)>,
+        vars: &mut BTreeMap<String, (i32, AsmType)>,
         global_scope_size: &mut i32,
         local_scope_size: &mut i32,
         target: &impl Target,

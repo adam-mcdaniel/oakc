@@ -262,12 +262,16 @@ impl Display for HirError {
                 write!(f, "conflicting 'require_std' and 'no_std' flags present")
             }
             Self::FailedAssertion(assertion) => write!(f, "failed assertion '{}'", assertion),
-            Self::InvalidCopyTypeSignature(type_name) => {
-                write!(f, "invalid copy constructor type signature for type '{}'", type_name)
-            }
-            Self::InvalidDropTypeSignature(type_name) => {
-                write!(f, "invalid drop destructor type signature for type '{}'", type_name)
-            }
+            Self::InvalidCopyTypeSignature(type_name) => write!(
+                f,
+                "invalid copy constructor type signature for type '{}'",
+                type_name
+            ),
+            Self::InvalidDropTypeSignature(type_name) => write!(
+                f,
+                "invalid drop destructor type signature for type '{}'",
+                type_name
+            ),
             Self::ExplicitCopy => write!(f, "cannot explicitly call copy constructors"),
         }
     }
@@ -336,6 +340,8 @@ pub struct HirStructure {
     name: Identifier,
     size: HirConstant,
     methods: Vec<HirFunction>,
+    default_copy: bool,
+    default_drop: bool,
 }
 
 impl HirStructure {
@@ -350,6 +356,8 @@ impl HirStructure {
             name,
             size,
             methods,
+            default_copy: false,
+            default_drop: false,
         }
     }
 
@@ -374,10 +382,16 @@ impl HirStructure {
 
         if !has_copy {
             self.methods.push(HirFunction::copy_constructor(self));
+            // If the user does not specify a `copy` method, specify that
+            // the `copy` method is a default.
+            self.default_copy = true;
         }
 
         if !has_drop {
             self.methods.push(HirFunction::drop_destructor(self));
+            // If the user does not specify a `drop` method, specify that
+            // the `drop` method is a default.
+            self.default_drop = true;
         }
 
         Ok(())
@@ -413,6 +427,8 @@ impl HirStructure {
             self.name.clone(),
             self.size.to_value(constants, target)? as i32,
             mir_methods,
+            self.default_copy,
+            self.default_drop,
         ))
     }
 }
@@ -449,9 +465,9 @@ impl HirFunction {
             Identifier::from("copy"),
             vec![(Identifier::from("self"), structure.to_type().refer())],
             structure.to_type(),
-            vec![HirStatement::Return(vec![HirExpression::Move(Box::new(HirExpression::Deref(Box::new(
-                HirExpression::Variable(Identifier::from("self")),
-            ))))])],
+            vec![HirStatement::Return(vec![HirExpression::Move(Box::new(
+                HirExpression::Deref(Box::new(HirExpression::Variable(Identifier::from("self")))),
+            ))])],
         )
     }
 
@@ -955,7 +971,7 @@ impl HirExpression {
                 Box::new(r.to_mir_expr(constants, target)?),
             ),
 
-            Self::Refer(name) => MirExpression::Refer(name.clone()),
+            Self::Refer(var_name) => MirExpression::Refer(var_name.clone()),
             Self::Deref(value) => {
                 MirExpression::Deref(Box::new(value.to_mir_expr(constants, target)?))
             }
