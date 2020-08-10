@@ -59,7 +59,7 @@ impl HirProgram {
         if !ignore_header {
             header = format!("# {}\n", filename.trim())
         }
-        
+
         let mut content = String::new();
         for decl in self.get_declarations() {
             match decl {
@@ -83,7 +83,8 @@ impl HirProgram {
                 HirDeclaration::If(cond, code) => {
                     if let Ok(val) = cond.to_value(constants, target) {
                         if val != 0.0 {
-                            content += &code.generate_docs(filename.clone(), target, constants, true);
+                            content +=
+                                &code.generate_docs(filename.clone(), target, constants, true);
                         }
                     }
                 }
@@ -91,9 +92,11 @@ impl HirProgram {
                 HirDeclaration::IfElse(cond, then_code, else_code) => {
                     if let Ok(val) = cond.to_value(constants, target) {
                         if val != 0.0 {
-                            content += &then_code.generate_docs(filename.clone(), target, constants, true);
+                            content +=
+                                &then_code.generate_docs(filename.clone(), target, constants, true);
                         } else {
-                            content += &else_code.generate_docs(filename.clone(), target, constants, true);
+                            content +=
+                                &else_code.generate_docs(filename.clone(), target, constants, true);
                         }
                     }
                 }
@@ -239,6 +242,7 @@ pub enum HirError {
     ConflictingStdReqs,
     FailedAssertion(HirConstant),
     UserError(String),
+    CastLiteralAsPointer(HirType),
 }
 
 impl Display for HirError {
@@ -256,6 +260,7 @@ impl Display for HirError {
                 write!(f, "conflicting 'require_std' and 'no_std' flags present")
             }
             Self::FailedAssertion(assertion) => write!(f, "failed assertion '{}'", assertion),
+            Self::CastLiteralAsPointer(t) => write!(f, "cannot cast literal to type '{}'", t),
         }
     }
 }
@@ -284,6 +289,13 @@ impl Display for HirType {
 }
 
 impl HirType {
+    pub fn is_pointer(&self) -> bool {
+        match self {
+            Self::Pointer(_) => true,
+            _ => false,
+        }
+    }
+
     pub fn to_mir_type(&self) -> MirType {
         match self {
             Self::Pointer(inner) => inner.to_mir_type().refer(),
@@ -771,6 +783,13 @@ pub enum HirExpression {
 }
 
 impl HirExpression {
+    pub fn is_literal(&self) -> bool {
+        match self {
+            Self::Void | Self::True | Self::False | Self::Character(_) | Self::String(_) | Self::Constant(_) => true,
+            _ => false,
+        }
+    }
+
     pub fn to_mir_expr(
         &self,
         constants: &BTreeMap<Identifier, HirConstant>,
@@ -864,6 +883,10 @@ impl HirExpression {
 
             Self::Alloc(value) => {
                 MirExpression::Alloc(Box::new(value.to_mir_expr(constants, target)?))
+            }
+
+            Self::TypeCast(expr, t) if expr.is_literal() && t.is_pointer() => {
+                return Err(HirError::CastLiteralAsPointer(t.clone()))
             }
 
             Self::TypeCast(expr, t) => MirExpression::TypeCast(
