@@ -63,7 +63,6 @@ fn main() {
     } else if let Some(matches) = matches.subcommand_matches("doc") {
         if let Some(input_file) = matches.value_of("FILE") {
             if let Ok(contents) = read_to_string(input_file) {
-
                 let docs = if matches.is_present("c") {
                     generate_docs(contents, input_file, C)
                 } else if matches.is_present("go") {
@@ -71,7 +70,6 @@ fn main() {
                 } else {
                     generate_docs(contents, input_file, C)
                 };
-
 
                 if let Some(output_file) = matches.value_of("OUTPUT") {
                     if let Ok(_) = write(output_file, docs) {
