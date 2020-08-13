@@ -15,7 +15,7 @@ fn main() {
         (@group target =>
             (@arg cc: -c --cc "Compile with C backend")
 			(@arg go: -g --go "Compile with Golang backend")
-			(@arg ts: --ts "Compile with TypeScript backend")
+			(@arg ts: -t --ts "Compile with TypeScript backend")
         )
         (@subcommand c =>
             (about: "Compile an Oak file")
