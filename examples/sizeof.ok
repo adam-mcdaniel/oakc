@@ -1,13 +1,9 @@
 #[std]
 
-type Testing(24) {
+
+type Testing(sizeof(char) + sizeof(char)) {
     fn new() -> Testing {
-        return [
-            0, 0, 0, 0, 0, 0,
-            0, 0, 0, 0, 0, 0,
-            0, 0, 0, 0, 0, 0,
-            0, 0, 0, 0, 0, 0,
-        ];
+        return [0, 0];
     }
 }
 

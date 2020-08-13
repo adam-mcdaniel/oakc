@@ -59,6 +59,7 @@ List<Begin, T, Sep, End>: Vec<T> = {
 Constant: HirConstant = <ConstantMathBottom> => <>;
 
 ConstantAtom: HirConstant = {
+    "sizeof" "(" <Type> ")" => HirConstant::SizeOf(<>),
     "isdef" "(" <Str> ")" => HirConstant::IsDefined(<>),
     "true" => HirConstant::True,
     "false" => HirConstant::False,

@@ -13,7 +13,7 @@ fn main() {
         (author: crate_authors!())
         (about: "Compiler for the Oak programming langauge")
         (@group target =>
-            (@arg c: -c "Compile with C backend")
+            (@arg cc: -c --cc "Compile with C backend")
             (@arg go: -g --go "Compile with Golang backend")
         )
         (@subcommand c =>
@@ -29,8 +29,8 @@ fn main() {
     .setting(ArgRequiredElseHelp)
     .get_matches();
 
-    if let Some(matches) = matches.subcommand_matches("c") {
-        if let Some(input_file) = matches.value_of("FILE") {
+    if let Some(sub_matches) = matches.subcommand_matches("c") {
+        if let Some(input_file) = sub_matches.value_of("FILE") {
             if let Ok(contents) = read_to_string(input_file) {
                 let cwd = if let Some(dir) = PathBuf::from(input_file).parent() {
                     PathBuf::from(dir)
@@ -38,7 +38,7 @@ fn main() {
                     PathBuf::from("./")
                 };
 
-                let compile_result = if matches.is_present("c") {
+                let compile_result = if matches.is_present("cc") {
                     compile(&cwd, contents, C)
                 } else if matches.is_present("go") {
                     compile(&cwd, contents, Go)
@@ -60,11 +60,11 @@ fn main() {
         } else {
             eprintln!("error: no input file given");
         }
-    } else if let Some(matches) = matches.subcommand_matches("doc") {
-        if let Some(input_file) = matches.value_of("FILE") {
+    } else if let Some(sub_matches) = matches.subcommand_matches("doc") {
+        if let Some(input_file) = sub_matches.value_of("FILE") {
             if let Ok(contents) = read_to_string(input_file) {
 
-                let docs = if matches.is_present("c") {
+                let docs = if matches.is_present("cc") {
                     generate_docs(contents, input_file, C)
                 } else if matches.is_present("go") {
                     generate_docs(contents, input_file, Go)
