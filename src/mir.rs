@@ -435,10 +435,8 @@ impl MirStructure {
         // Iterate over the methods and rename them
         // to their method names, such as `Date::day`
         for function in &self.methods {
-            let method = function.as_method(
-                &MirType::structure(self.get_name())
-            );
-            funcs.insert(method.get_name(), method.clone());
+            function.as_method(&self.to_mir_type())
+                .declare(funcs)?;
         }
         Ok(())
     }
