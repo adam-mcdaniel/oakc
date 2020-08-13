@@ -186,7 +186,7 @@ impl Display for MirError {
             ),
             Self::OnlyOneBranchReturns(fn_name) => write!(
                 f,
-                "only one branch of an if-statement returns in the function '{}'",
+                "only one branch of an if-else statement returns in the function '{}'",
                 fn_name
             ),
             Self::IfReturns(fn_name) => write!(
