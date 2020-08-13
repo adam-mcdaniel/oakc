@@ -9,7 +9,7 @@ use std::{
 
 pub struct TS;
 impl Target for TS {
-	fn get_name(&self) -> char { 'T' }
+	fn get_name(&self) -> char { 't' }
 
     fn std(&self) -> String {
         String::from(include_str!("std/std.ts"))
