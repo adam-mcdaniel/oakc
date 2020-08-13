@@ -80,9 +80,9 @@ pub enum MirError {
     /// A bad typecast due to mismatched sizes in types. For example,
     /// a value with size `3` cannot be cast to a number with size `1`
     MismatchedCastSize(MirExpression, MirType),
-    /// Only one branch of an if-statement returns in a function
+    /// Only one branch of an if-else statement returns in a function
     OnlyOneBranchReturns(String),
-    /// A single branch if-statement may not return
+    /// A single branch if-statement uses a return
     IfReturns(String),
     /// Return statement used in a loop in a function
     LoopReturns(String),
