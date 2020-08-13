@@ -1134,6 +1134,8 @@ impl MirStatement {
 
 #[derive(Clone, Debug, PartialEq, PartialOrd)]
 pub enum MirExpression {
+    SizeOf(MirType),
+
     Add(Box<Self>, Box<Self>),
     Subtract(Box<Self>, Box<Self>),
     Multiply(Box<Self>, Box<Self>),
@@ -1331,6 +1333,7 @@ impl MirExpression {
 
             // Typecheck atomic expressions
             Self::ForeignCall(_, _)
+            | Self::SizeOf(_)
             | Self::Refer(_)
             | Self::Variable(_)
             | Self::String(_)
@@ -1350,6 +1353,8 @@ impl MirExpression {
         structs: &BTreeMap<Identifier, MirStructure>,
     ) -> Result<Vec<AsmStatement>, MirError> {
         Ok(match self {
+            Self::SizeOf(t) => vec![AsmStatement::Expression(vec![AsmExpression::Float(t.get_size(structs)? as f64)])],
+
             Self::True => vec![AsmStatement::Expression(vec![AsmExpression::Float(1.0)])],
             Self::False => vec![AsmStatement::Expression(vec![AsmExpression::Float(0.0)])],
 
@@ -1658,6 +1663,8 @@ impl MirExpression {
         structs: &BTreeMap<Identifier, MirStructure>,
     ) -> Result<MirType, MirError> {
         Ok(match self {
+            Self::SizeOf(_) => MirType::float(),
+
             Self::True => MirType::boolean(),
             Self::False => MirType::boolean(),
 
@@ -1758,6 +1765,8 @@ impl MirExpression {
 impl Display for MirExpression {
     fn fmt(&self, f: &mut Formatter) -> Result<(), Error> {
         match self {
+            Self::SizeOf(t) => write!(f, "sizeof({})", t),
+
             Self::True => write!(f, "true"),
             Self::False => write!(f, "false"),
             Self::TypeCast(expr, t) => write!(f, "{} as {}", expr, t),
