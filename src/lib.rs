@@ -101,11 +101,11 @@ fn get_line(script: &str, location: usize) -> (usize, String, usize) {
     let line = match script.lines().nth(line_number - 1) {
         Some(line) => line,
         None => {
-			if let Some(line) = script.lines().last() {
-				line
-			} else {
-				""
-			}
+            if let Some(line) = script.lines().last() {
+                line
+            } else {
+                ""
+            }
         }
     }
     .replace("\t", "    ");
