@@ -358,21 +358,9 @@ impl MirProgram {
         let mut result = Vec::new();
         for decl in &decls {
             match decl {
-                MirDeclaration::Function(func) => {
-                    let name = func.get_name();
-                    if funcs.contains_key(&name) {
-                        return Err(MirError::FunctionRedefined(name));
-                    } else {
-                        funcs.insert(name, func.clone());
-                    }
-                }
+                MirDeclaration::Function(func) => func.declare(&mut funcs)?,
                 MirDeclaration::Structure(structure) => {
-                    let name = structure.get_name();
-                    if structs.contains_key(&name) {
-                        return Err(MirError::StructureRedefined(name));
-                    } else {
-                        structs.insert(structure.get_name(), structure.clone());
-                    }
+                    structure.declare(&mut funcs, &mut structs)?
                 }
                 MirDeclaration::Extern(filename) => externs.push(filename.clone()),
             }
@@ -435,6 +423,26 @@ impl MirStructure {
         self.size
     }
 
+    /// Declare the structure to the compiler WITHOUT assembling it
+    fn declare(
+        &self,
+        funcs: &mut BTreeMap<Identifier, MirFunction>,
+        structs: &mut BTreeMap<Identifier, MirStructure>,
+    ) -> Result<(), MirError> {
+        // Check if the structure has already been declared
+        if structs.contains_key(&self.name) {
+            return Err(MirError::StructureRedefined(self.get_name()));
+        } else {
+            structs.insert(self.get_name(), self.clone());
+        }
+        // Iterate over the methods and rename them
+        // to their method names, such as `Date::day`
+        for function in &self.methods {
+            function.as_method(&self.to_mir_type()).declare(funcs)?;
+        }
+        Ok(())
+    }
+
     fn assemble(
         &self,
         funcs: &mut BTreeMap<Identifier, MirFunction>,
@@ -450,13 +458,6 @@ impl MirStructure {
 
         let mir_type = self.to_mir_type();
         let mut result = Vec::new();
-
-        // Iterate over the methods and rename them
-        // to their method names, such as `Date::day`
-        for function in &self.methods {
-            let method = function.as_method(&mir_type);
-            funcs.insert(method.get_name(), method.clone());
-        }
 
         // After each function has been declared, go back and assemble them.
         // We do two passes to allow methods to depend on one another.
@@ -498,6 +499,17 @@ impl MirFunction {
         let mut result = self.clone();
         result.name = mir_type.method_to_function_name(&self.name);
         result
+    }
+
+    /// Declare this function to the compiler WITHOUT assembling it
+    fn declare(&self, funcs: &mut BTreeMap<Identifier, MirFunction>) -> Result<(), MirError> {
+        // Check if the function has already been declared
+        if funcs.contains_key(&self.name) {
+            Err(MirError::FunctionRedefined(self.get_name()))
+        } else {
+            funcs.insert(self.get_name(), self.clone());
+            Ok(())
+        }
     }
 
     fn assemble(
