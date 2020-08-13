@@ -14,8 +14,8 @@ fn main() {
         (about: "Compiler for the Oak programming langauge")
         (@group target =>
             (@arg cc: -c --cc "Compile with C backend")
-			(@arg go: -g --go "Compile with Golang backend")
-			(@arg ts: -t --ts "Compile with TypeScript backend")
+            (@arg go: -g --go "Compile with Golang backend")
+            (@arg ts: -t --ts "Compile with TypeScript backend")
         )
         (@subcommand c =>
             (about: "Compile an Oak file")
@@ -49,8 +49,8 @@ fn main() {
                 } else if matches.is_present("go") {
                     compile(&cwd, contents, Go)
                 } else if matches.is_present("ts"){
-					compile(&cwd, contents, TS)
-				} else {
+                    compile(&cwd, contents, TS)
+                } else {
                     compile(&cwd, contents, C)
                 };
 
