@@ -1,14 +1,13 @@
 #[std]
 
 fn not(x: bool) -> num {
-    let result = 0;
     if x {
         putstrln("x is true");
-        result = 1
+        return 1
     } else {
         putstrln("x is false");
+        return 0
     }
-    return result
 }
 
 fn main() {

@@ -59,6 +59,7 @@ List<Begin, T, Sep, End>: Vec<T> = {
 Constant: HirConstant = <ConstantMathBottom> => <>;
 
 ConstantAtom: HirConstant = {
+    "sizeof" "(" <Type> ")" => HirConstant::SizeOf(<>),
     "isdef" "(" <Str> ")" => HirConstant::IsDefined(<>),
     "true" => HirConstant::True,
     "false" => HirConstant::False,
@@ -117,8 +118,8 @@ Body: Vec<HirStatement> = "{" <head: Statement*> <tail: SmallStatement?> "}" => 
 };
 
 Type: HirType = {
-    "&" <t:Type> => HirType::Pointer(Box::new(t)),
-    "&&" <t:Type> => HirType::Pointer(Box::new(HirType::Pointer(Box::new(t)))),
+    "&" <Type> => HirType::Pointer(Box::new(<>)),
+    "&&" <Type> => HirType::Pointer(Box::new(HirType::Pointer(Box::new(<>)))),
     "void" => HirType::Void,
     "num"  => HirType::Float,
     "bool" => HirType::Boolean,
@@ -160,6 +161,7 @@ Expression: HirExpression = {
 
 ExpressionAtom: HirExpression = {
     "move" "(" <val:Expression> ")" => HirExpression::Move(Box::new(val)),
+    "sizeof" "(" <Type> ")" => HirExpression::SizeOf(<>),
     "alloc" "(" <size:Expression> ")" => HirExpression::Alloc(Box::new(size)),
     <name:Ident> <args:List<"(", Expression, ",", ")">> => HirExpression::Call(name, args),
     <name:Ident> "!" <args:List<"(", Expression, ",", ")">> => HirExpression::ForeignCall(name, args),

@@ -1,0 +1,12 @@
+
+
+
+struct Date {
+    let month: num,
+        day: num,
+        year: num;
+
+    fn new(month: num, day: num, year: num) -> Date {
+        return [month, day, year];
+    }
+}

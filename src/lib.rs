@@ -6,6 +6,7 @@ pub type StringLiteral = String;
 pub mod asm;
 pub mod hir;
 pub mod mir;
+pub mod tir;
 use hir::HirProgram;
 
 mod target;

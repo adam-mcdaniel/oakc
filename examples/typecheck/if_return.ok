@@ -1,0 +1,13 @@
+#[std]
+
+fn sign(n: num) -> num {
+    if n >= 0 {
+        return 1;
+    }
+}
+
+
+fn main() {
+    putnumln(sign(5));
+    putnumln(sign(-1));
+}
