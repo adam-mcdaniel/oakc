@@ -359,7 +359,9 @@ impl MirProgram {
         for decl in &decls {
             match decl {
                 MirDeclaration::Function(func) => func.declare(&mut funcs)?,
-                MirDeclaration::Structure(structure) => structure.declare(&mut funcs, &mut structs)?,
+                MirDeclaration::Structure(structure) => {
+                    structure.declare(&mut funcs, &mut structs)?
+                }
                 MirDeclaration::Extern(filename) => externs.push(filename.clone()),
             }
         }
@@ -422,10 +424,11 @@ impl MirStructure {
     }
 
     /// Declare the structure to the compiler WITHOUT assembling it
-    fn declare(&self, 
+    fn declare(
+        &self,
         funcs: &mut BTreeMap<Identifier, MirFunction>,
-        structs: &mut BTreeMap<Identifier, MirStructure>) -> Result<(), MirError> {
-
+        structs: &mut BTreeMap<Identifier, MirStructure>,
+    ) -> Result<(), MirError> {
         // Check if the structure has already been declared
         if structs.contains_key(&self.name) {
             return Err(MirError::StructureRedefined(self.get_name()));
@@ -435,8 +438,7 @@ impl MirStructure {
         // Iterate over the methods and rename them
         // to their method names, such as `Date::day`
         for function in &self.methods {
-            function.as_method(&self.to_mir_type())
-                .declare(funcs)?;
+            function.as_method(&self.to_mir_type()).declare(funcs)?;
         }
         Ok(())
     }

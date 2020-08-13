@@ -785,7 +785,12 @@ pub enum HirExpression {
 impl HirExpression {
     pub fn is_literal(&self) -> bool {
         match self {
-            Self::Void | Self::True | Self::False | Self::Character(_) | Self::String(_) | Self::Constant(_) => true,
+            Self::Void
+            | Self::True
+            | Self::False
+            | Self::Character(_)
+            | Self::String(_)
+            | Self::Constant(_) => true,
             _ => false,
         }
     }
