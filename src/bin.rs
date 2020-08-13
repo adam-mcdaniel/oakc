@@ -29,15 +29,20 @@ fn main() {
     .setting(ArgRequiredElseHelp)
     .get_matches();
 
+    // If the compile subcommand is being used
     if let Some(sub_matches) = matches.subcommand_matches("c") {
+        // Get the input file
         if let Some(input_file) = sub_matches.value_of("FILE") {
+            // Get the contents of the input file
             if let Ok(contents) = read_to_string(input_file) {
+                // Get the current working directory of the input file
                 let cwd = if let Some(dir) = PathBuf::from(input_file).parent() {
                     PathBuf::from(dir)
                 } else {
                     PathBuf::from("./")
                 };
 
+                // Compile using the target backend
                 let compile_result = if matches.is_present("cc") {
                     compile(&cwd, contents, C)
                 } else if matches.is_present("go") {
@@ -60,10 +65,13 @@ fn main() {
         } else {
             eprintln!("error: no input file given");
         }
+    // If the documentation subcommand is being used
     } else if let Some(sub_matches) = matches.subcommand_matches("doc") {
+        // Get the input file
         if let Some(input_file) = sub_matches.value_of("FILE") {
+            // Get the contents of the input file
             if let Ok(contents) = read_to_string(input_file) {
-
+                // Document the input file using the target backend
                 let docs = if matches.is_present("cc") {
                     generate_docs(contents, input_file, C)
                 } else if matches.is_present("go") {
@@ -72,7 +80,7 @@ fn main() {
                     generate_docs(contents, input_file, C)
                 };
 
-
+                // If the output file exists, write the output to it
                 if let Some(output_file) = matches.value_of("OUTPUT") {
                     if let Ok(_) = write(output_file, docs) {
                         println!("doc generation successful")
@@ -80,6 +88,7 @@ fn main() {
                         eprintln!("error: could not write to file \"{}\"", output_file);
                     }
                 } else {
+                    // If no output file is specified, pretty print the markdown
                     println!("{}", make_skin().term_text(&docs));
                 }
             } else {
@@ -91,6 +100,8 @@ fn main() {
     }
 }
 
+/// Get the theme for printing the documentation
+/// markdown to the terminal.
 fn make_skin() -> MadSkin {
     let mut skin = MadSkin::default();
     // Pink
