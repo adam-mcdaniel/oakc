@@ -80,9 +80,12 @@ pub enum MirError {
     /// A bad typecast due to mismatched sizes in types. For example,
     /// a value with size `3` cannot be cast to a number with size `1`
     MismatchedCastSize(MirExpression, MirType),
-    /// Attempted to use a return statement in a conditional expression,
-    /// such as a while loop or if statement
-    ConditionalReturn(String),
+    /// Only one branch of an if-statement returns in a function
+    OnlyOneBranchReturns(String),
+    /// A single branch if-statement may not return
+    IfReturns(String),
+    /// Return statement used in a loop in a function
+    LoopReturns(String),
     /// A non-void function never returns
     NonVoidNoReturn(String),
 }
@@ -181,9 +184,19 @@ impl Display for MirError {
                 "cannot cast expression '{}' to type '{}' due to mismatched sizes",
                 expr, t
             ),
-            Self::ConditionalReturn(fn_name) => write!(
+            Self::OnlyOneBranchReturns(fn_name) => write!(
                 f,
-                "used a return statement within a conditional statement in the function '{}'",
+                "only one branch of an if-statement returns in the function '{}'",
+                fn_name
+            ),
+            Self::IfReturns(fn_name) => write!(
+                f,
+                "used a return statement in a single branch if statement in the function '{}'",
+                fn_name
+            ),
+            Self::LoopReturns(fn_name) => write!(
+                f,
+                "used a return statement within a loop in the function '{}'",
                 fn_name
             ),
             Self::NonVoidNoReturn(fn_name) => write!(
@@ -537,43 +550,22 @@ impl MirFunction {
         // Check return type
         let mut has_returned = false;
         for (i, stmt) in self.body.iter().enumerate() {
-            if let MirStatement::Return(exprs) = stmt {
-                // If the function has already used a return statement,
-                // throw an error.
-                if has_returned {
-                    return Err(MirError::MultipleReturns(self.name.clone()));
-                }
+            // Does the statment return a valid value?
+            let valid_return =
+                stmt.has_valid_return(&self.name, &self.return_type, &vars, funcs, structs)?;
+            // If so, check that the function has not already returned
+            if !has_returned && valid_return {
                 has_returned = true;
-
-                // Get the size of the return statement's stack allocation
-                let mut result_size = 0;
-                for expr in exprs {
-                    result_size += expr.get_type(&vars, funcs, structs)?.get_size(structs)?;
-                }
-
-                // If the result's size is not equal to the size of the
-                // return type, throw a type error.
-                if result_size != self.return_type.get_size(structs)? {
-                    return Err(MirError::MismatchedReturnType(self.name.clone()));
-
-                // If there is only one return argument, check the individual
-                // expression's type against the return type.
-                } else if exprs.len() == 1
-                    && self.return_type != exprs[0].get_type(&vars, funcs, structs)?
-                {
-                    return Err(MirError::MismatchedReturnType(self.name.clone()));
-                }
-            // If a statement has a return statement, but is not a return
-            // statement itself, it must be a conditional return statement
-            } else if stmt.has_return() {
-                return Err(MirError::ConditionalReturn(self.name.clone()));
+            // If the function has already returned, throw an error
+            } else if valid_return {
+                return Err(MirError::MultipleReturns(self.get_name()));
             }
         }
 
         // If the function is non-void and has not returned,
         // then throw an error.
         if !has_returned && self.return_type != MirType::void() {
-            return Err(MirError::NonVoidNoReturn(self.name.clone()));
+            return Err(MirError::NonVoidNoReturn(self.get_name()));
         }
 
         Ok(AsmFunction::new(
@@ -625,6 +617,105 @@ impl MirStatement {
             expr.get_type(vars, funcs, structs)
         } else {
             Ok(MirType::void())
+        }
+    }
+
+    /// Does the statement return a single, valid expression?
+    fn has_valid_return(
+        &self,
+        func_name: &String,
+        return_type: &MirType,
+        vars: &BTreeMap<Identifier, MirType>,
+        funcs: &BTreeMap<Identifier, MirFunction>,
+        structs: &BTreeMap<Identifier, MirStructure>,
+    ) -> Result<bool, MirError> {
+        match self {
+            Self::IfElse(_, then_body, else_body) => {
+                // For each statement in the body, check if the
+                // statement returns a valid expression
+                let mut then_valid = false;
+                for stmt in then_body {
+                    let stmt_valid =
+                        stmt.has_valid_return(func_name, return_type, vars, funcs, structs)?;
+                    // Verify the body hasnt returned yet if this statement returns
+                    if !then_valid && stmt_valid {
+                        then_valid = true;
+                    } else if stmt_valid {
+                        // If this body has returned once already, throw an error
+                        return Err(MirError::MultipleReturns(func_name.clone()));
+                    }
+                }
+
+                // For each statement in the body, check if the
+                // statement returns a valid expression
+                let mut else_valid = false;
+                for stmt in else_body {
+                    let stmt_valid =
+                        stmt.has_valid_return(func_name, return_type, vars, funcs, structs)?;
+                    // Verify the body hasnt returned yet if this statement returns
+                    if !else_valid && stmt_valid {
+                        else_valid = true;
+                    } else if stmt_valid {
+                        // If this body has returned once already, throw an error
+                        return Err(MirError::MultipleReturns(func_name.clone()));
+                    }
+                }
+
+                // If both branches of the if-statement return, then the return is valid
+                if then_valid && else_valid {
+                    Ok(true)
+                // If only one branch returns, throw an error
+                } else if then_valid || else_valid {
+                    Err(MirError::OnlyOneBranchReturns(func_name.clone()))
+                // Otherwise, this branch does not return.
+                } else {
+                    Ok(false)
+                }
+            }
+            Self::Return(exprs) => {
+                // Get the size of the return statement's stack allocation
+                let mut result_size = 0;
+                for expr in exprs {
+                    result_size += expr.get_type(&vars, funcs, structs)?.get_size(structs)?;
+                }
+
+                // If the result's size is not equal to the size of the
+                // return type, throw a type error.
+                if result_size != return_type.get_size(structs)? {
+                    return Err(MirError::MismatchedReturnType(func_name.clone()));
+
+                // If there is only one return argument, check the individual
+                // expression's type against the return type.
+                } else if exprs.len() == 1
+                    && return_type != &exprs[0].get_type(&vars, funcs, structs)?
+                {
+                    return Err(MirError::MismatchedReturnType(func_name.clone()));
+                }
+
+                // If all the above checks passed, this statement returns a valid expression
+                Ok(true)
+            }
+            Self::If(_, body) => {
+                // Check each statement for a return. A single branch if
+                // MUST NOT return.
+                for stmt in body {
+                    if stmt.has_return() {
+                        return Err(MirError::IfReturns(func_name.clone()));
+                    }
+                }
+                Ok(false)
+            }
+
+            // Loops MUST NOT return.
+            Self::While(_, body) | Self::For(_, _, _, body) => {
+                for stmt in body {
+                    if stmt.has_return() {
+                        return Err(MirError::LoopReturns(func_name.clone()));
+                    }
+                }
+                Ok(false)
+            }
+            _ => Ok(false),
         }
     }
 
