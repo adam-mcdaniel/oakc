@@ -1,0 +1,4 @@
+
+fn main() {
+    let n = 123 as &num;
+}
