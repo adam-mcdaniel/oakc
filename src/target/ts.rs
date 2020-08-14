@@ -6,10 +6,11 @@ use std::{
     process::{Command, Stdio},
 };
 
-
 pub struct TS;
 impl Target for TS {
-	fn get_name(&self) -> char { 't' }
+    fn get_name(&self) -> char {
+        't'
+    }
 
     fn std(&self) -> String {
         String::from(include_str!("std/std.ts"))
@@ -33,9 +34,9 @@ impl Target for TS {
 
     fn end_entry_point(&self) -> String {
         String::from("\nmachine_drop(vm);\n}\nOAKmain();")
-	}
-	
-	fn establish_stack_frame(&self, arg_size: i32, local_scope_size: i32) -> String {
+    }
+
+    fn establish_stack_frame(&self, arg_size: i32, local_scope_size: i32) -> String {
         format!(
             "machine_establish_stack_frame(vm, {}, {});\n",
             arg_size, local_scope_size
@@ -71,9 +72,9 @@ impl Target for TS {
 
     fn divide(&self) -> String {
         String::from("machine_divide(vm);\n")
-	}
-	
-	fn sign(&self) -> String {
+    }
+
+    fn sign(&self) -> String {
         String::from("machine_sign(vm);\n")
     }
 
@@ -120,18 +121,18 @@ impl Target for TS {
     fn compile(&self, code: String) -> Result<()> {
         if let Ok(_) = write("OUTPUT.ts", code) {
             if let Ok(_) = Command::new("tsc")
-				.arg("OUTPUT.ts")
-				.arg("--outFile")
-				.arg("main.js")
-				.arg("--target")
-				.arg("ES2017")
+                .arg("OUTPUT.ts")
+                .arg("--outFile")
+                .arg("main.js")
+                .arg("--target")
+                .arg("ES2017")
                 .output()
             {
                 if let Ok(_) = remove_file("OUTPUT.ts") {
-            		return Result::Ok(());
+                    return Result::Ok(());
                 }
             }
-		}
-		Result::Err(Error::new(ErrorKind::Other, "error compiling "))
+        }
+        Result::Err(Error::new(ErrorKind::Other, "error compiling "))
     }
 }

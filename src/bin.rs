@@ -48,7 +48,7 @@ fn main() {
                     compile(&cwd, contents, C)
                 } else if matches.is_present("go") {
                     compile(&cwd, contents, Go)
-                } else if matches.is_present("ts"){
+                } else if matches.is_present("ts") {
                     compile(&cwd, contents, TS)
                 } else {
                     compile(&cwd, contents, C)

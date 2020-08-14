@@ -1353,7 +1353,9 @@ impl MirExpression {
         structs: &BTreeMap<Identifier, MirStructure>,
     ) -> Result<Vec<AsmStatement>, MirError> {
         Ok(match self {
-            Self::SizeOf(t) => vec![AsmStatement::Expression(vec![AsmExpression::Float(t.get_size(structs)? as f64)])],
+            Self::SizeOf(t) => vec![AsmStatement::Expression(vec![AsmExpression::Float(
+                t.get_size(structs)? as f64,
+            )])],
 
             Self::True => vec![AsmStatement::Expression(vec![AsmExpression::Float(1.0)])],
             Self::False => vec![AsmStatement::Expression(vec![AsmExpression::Float(0.0)])],
