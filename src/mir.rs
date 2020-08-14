@@ -243,15 +243,17 @@ impl MirType {
     /// Must this type use the drop method? If so, it is not movable.
     /// Types that have only movable members are also movable.
     pub fn is_movable(&self, structs: &BTreeMap<Identifier, MirStructure>) -> bool {
-        // Primitive types do not need to be dropped
-        if self.is_primitive() {
-            return false;
+        // Pointer types do not need to be dropped
+        if self.is_pointer() {
+            return true;
         } else if let Some(s) = structs.get(&self.name) {
             // Types only **must** be dropped if the user specifies so
             // with a manual drop definition
             s.is_movable()
         } else {
-            false
+            // If the type isnt a pointer, and the type
+            // isn't a structure, it is movable.
+            true
         }
     }
 
@@ -347,10 +349,10 @@ impl MirType {
         self.name == Self::VOID && self.ptr_level == 1
     }
 
-    fn is_primitive(&self) -> bool {
+    fn is_structure(&self) -> bool {
         match self.name.as_str() {
-            Self::VOID | Self::BOOLEAN | Self::FLOAT | Self::CHAR => true,
-            _ => self.is_pointer(),
+            Self::VOID | Self::BOOLEAN | Self::FLOAT | Self::CHAR => false,
+            _ => !self.is_pointer(),
         }
     }
 
@@ -468,6 +470,7 @@ impl MirStructure {
         self.movable
     }
 
+    /// Convert the structure to its MIR type representation
     fn to_mir_type(&self) -> MirType {
         MirType::structure(self.name.clone())
     }
@@ -492,10 +495,12 @@ impl MirStructure {
         Ok(())
     }
 
+    // Get the name of the structure
     fn get_name(&self) -> Identifier {
         self.name.clone()
     }
 
+    // Get the size of the structure
     fn get_size(&self) -> i32 {
         self.size
     }
@@ -663,24 +668,37 @@ impl MirFunction {
     }
 }
 
+/// A statement used in MIR functions
 #[derive(Clone, Debug, PartialEq, PartialOrd)]
 pub enum MirStatement {
+    /// A variable definition
     Define(Identifier, MirType, MirExpression),
+    /// A type inferenced variable definition
     AutoDefine(Identifier, MirExpression),
+    /// Assign to a variable
     AssignVariable(Identifier, MirExpression),
+    /// Assign to an address
     AssignAddress(MirExpression, MirExpression),
 
+    /// A for loop
     For(Box<Self>, MirExpression, Box<Self>, Vec<Self>),
+    /// A while loop
     While(MirExpression, Vec<Self>),
+    /// An if statement
     If(MirExpression, Vec<Self>),
+    /// An if statement with an else branch
     IfElse(MirExpression, Vec<Self>, Vec<Self>),
 
+    /// Free an address with a given size
     Free(MirExpression, MirExpression),
+    /// Return one or more expressions from a function
     Return(Vec<MirExpression>),
+    /// Use a non-void expression
     Expression(MirExpression),
 }
 
 impl MirStatement {
+    /// Get the type of a statement
     fn get_type(
         &self,
         vars: &BTreeMap<Identifier, MirType>,
@@ -688,8 +706,10 @@ impl MirStatement {
         structs: &BTreeMap<Identifier, MirStructure>,
     ) -> Result<MirType, MirError> {
         if let Self::Expression(expr) = self {
+            // Return the expression's type
             expr.get_type(vars, funcs, structs)
         } else {
+            // Only expressions have a type
             Ok(MirType::void())
         }
     }
@@ -697,10 +717,15 @@ impl MirStatement {
     /// Does the statement return a single, valid expression?
     fn has_valid_return(
         &self,
+        // The name of the function returning, for error message purposes
         func_name: &String,
+        // The expected return type of the function
         return_type: &MirType,
+        // The variables stored in the function
         vars: &BTreeMap<Identifier, MirType>,
+        // The function definitions in the program
         funcs: &BTreeMap<Identifier, MirFunction>,
+        // The structure definitions in the program
         structs: &BTreeMap<Identifier, MirStructure>,
     ) -> Result<bool, MirError> {
         match self {
@@ -1227,47 +1252,79 @@ impl MirStatement {
     }
 }
 
+/// An expression used as a value in
+/// a statement or another expression.
 #[derive(Clone, Debug, PartialEq, PartialOrd)]
 pub enum MirExpression {
+    /// A moved expression
     Move(Box<Self>),
 
+    /// Add two expressions
     Add(Box<Self>, Box<Self>),
+    /// Subtract two expressions
     Subtract(Box<Self>, Box<Self>),
+    /// Multiply two expressions
     Multiply(Box<Self>, Box<Self>),
+    /// Divide two expressions
     Divide(Box<Self>, Box<Self>),
 
+    /// Boolean not an expression
     Not(Box<Self>),
+    /// Boolean and two expressions
     And(Box<Self>, Box<Self>),
+    /// Boolean or two expressions
     Or(Box<Self>, Box<Self>),
 
+    /// `>` two expressions
     Greater(Box<Self>, Box<Self>),
+    /// `<` two expressions
     Less(Box<Self>, Box<Self>),
+    /// `>=` two expressions
     GreaterEqual(Box<Self>, Box<Self>),
+    /// `<=` two expressions
     LessEqual(Box<Self>, Box<Self>),
+    /// `==` two expressions
     Equal(Box<Self>, Box<Self>),
+    /// `!=` two expressions
     NotEqual(Box<Self>, Box<Self>),
 
+    /// A string literal
     String(StringLiteral),
+    /// A float literal
     Float(f64),
+    /// A character literal
     Character(char),
+    /// A boolean true literal
     True,
+    /// A boolean false literal
     False,
+    /// A void literal
     Void,
 
+    /// A variable
     Variable(Identifier),
+    /// A reference to a variable
     Refer(Identifier),
+    /// A dereferenced address
     Deref(Box<Self>),
 
+    /// Change an expressions type
     TypeCast(Box<Self>, MirType),
+    /// Allocated data on the heap
     Alloc(Box<Self>),
 
+    /// Call a function
     Call(Identifier, Vec<Self>),
+    /// Call a foreign function
     ForeignCall(Identifier, Vec<Self>),
+    /// Call a method on an object
     Method(Box<Self>, Identifier, Vec<Self>),
+    /// Index a pointer
     Index(Box<Self>, Box<Self>),
 }
 
 impl MirExpression {
+    /// Get a new variable to store an instance of a method in
     fn get_instance_var(&self, instance_count: &mut i32) -> Identifier {
         *instance_count += 1;
         format!("%INSTANCE_VAR_{}%", *instance_count)
@@ -1292,6 +1349,7 @@ impl MirExpression {
         }
     }
 
+    /// Call the drop method on an object
     fn call_drop(
         &self,
         vars: &BTreeMap<Identifier, MirType>,
@@ -1305,6 +1363,7 @@ impl MirExpression {
         })
     }
 
+    /// Call the copy method on an object
     fn call_copy(
         &self,
         vars: &BTreeMap<Identifier, MirType>,
@@ -1326,6 +1385,7 @@ impl MirExpression {
         return Ok(self.clone());
     }
 
+    /// Does this value have a copy or drop method?
     fn has_copy_and_drop(
         &self,
         vars: &BTreeMap<Identifier, MirType>,
@@ -1333,9 +1393,17 @@ impl MirExpression {
         structs: &BTreeMap<Identifier, MirStructure>,
     ) -> Result<bool, MirError> {
         Ok(if let Self::Move(_) = self {
+            // If the object is marked with move, do not copy or drop.
             false
         } else {
-            !self.get_type(vars, funcs, structs)?.is_primitive()
+            // Otherwise, check if the object is primitive.
+            // Logically, we would use the `is_movable` method,
+            // however all objects that arent primitive automatically
+            // implement copy and drop. So, we don't actually NEED to check
+            // if the object is primitive, just that it isn't primitive.
+            // Additionally, this prevents the `copy` and `drop` methods from
+            // being called on pointers, since MIR pointers are primitive.
+            self.get_type(vars, funcs, structs)?.is_structure()
         })
     }
 
@@ -1519,6 +1587,7 @@ impl MirExpression {
         instance_count: &mut i32,
     ) -> Result<Vec<AsmStatement>, MirError> {
         Ok(match self {
+            /// A move does not change its inner value
             Self::Move(expr) => expr.assemble(vars, funcs, structs, instance_count)?,
 
             Self::True => vec![AsmStatement::Expression(vec![AsmExpression::Float(1.0)])],
@@ -1894,6 +1963,7 @@ impl MirExpression {
         structs: &BTreeMap<Identifier, MirStructure>,
     ) -> Result<MirType, MirError> {
         Ok(match self {
+            /// A move expression does not change the inner type
             Self::Move(expr) => expr.get_type(vars, funcs, structs)?,
 
             Self::True => MirType::boolean(),

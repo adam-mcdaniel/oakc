@@ -16,9 +16,22 @@ use crate::{
 
 #[derive(Clone, Debug)]
 pub enum TirError {
+    /// A copy method must have a very specific type signature:
+    /// fn copy(self: &T) -> T
+    /// This is so that the compiler can properly place
+    /// copy and drop method calls for automatic memory management.
     InvalidCopyTypeSignature(Identifier),
+    /// A drop method must have a very specific type signature:
+    /// fn drop(self: &T) -> void
+    /// This is so that the compiler can properly place
+    /// copy and drop method calls for automatic memory management.
     InvalidDropTypeSignature(Identifier),
+    /// Does a structure use a member with an undefined type?
+    /// If so, then this error is thrown.
     StructureNotDefined(Identifier),
+    /// The user may NOT call the `.copy()` method explicitly
+    /// The compiler is only allowed to call this method.
+    /// This is to prevent memory leaks.
     ExplicitCopy,
 }
 
@@ -61,6 +74,9 @@ impl TirProgram {
     }
 }
 
+/// This is purely a standin for HIR's declaration
+/// type. However, if a `macro` flag is added, it
+/// should be added here.
 #[derive(Clone, Debug)]
 pub enum TirDeclaration {
     DocumentHeader(String),
@@ -116,6 +132,9 @@ impl TirDeclaration {
     }
 }
 
+/// This enum represents a type name in an expression.
+/// Take for example the declaration `fn test(x: num) -> &void`.
+/// `num` and `&void` are both `TirType` instances.
 #[derive(Clone, Debug, PartialEq)]
 pub enum TirType {
     Pointer(Box<Self>),
@@ -127,33 +146,41 @@ pub enum TirType {
 }
 
 impl TirType {
-    fn is_primitive(&self) -> bool {
+    /// Is this type a structure?
+    fn is_structure(&self) -> bool {
         match self {
-            Self::Structure(_) => false,
-            Self::Pointer(ptr) => ptr.is_primitive(),
-            _ => true,
+            Self::Structure(_) => true,
+            _ => false,
         }
     }
 
+    /// Can this type be moved without making a new copy?
     fn is_movable(&self, decls: &Vec<TirDeclaration>) -> Result<bool, TirError> {
         if let Self::Structure(name) = self {
             for decl in decls {
                 if let TirDeclaration::Structure(structure) = decl {
+                    // Find the structure with this type's name,
+                    // and return if it is movable
                     if name == structure.get_name() {
                         return Ok(structure.is_movable(decls)?);
                     }
                 }
             }
+            // If the structure is not defined, then this type is not defined
             return Err(TirError::StructureNotDefined(name.clone()));
         } else {
+            // If this type is not a structure,
+            // it is movable.
             return Ok(true);
         }
     }
 
+    /// Add a reference to this type
     fn refer(&self) -> Self {
         Self::Pointer(Box::new(self.clone()))
     }
 
+    /// Convert this type to an HIR type
     fn to_hir_type(&self) -> Result<HirType, TirError> {
         Ok(match self {
             Self::Pointer(inner) => HirType::Pointer(Box::new(inner.to_hir_type()?)),
@@ -166,12 +193,18 @@ impl TirType {
     }
 }
 
+/// The type that represents a function definition.
 #[derive(Clone, Debug)]
 pub struct TirFunction {
+    /// The function's optional docstring
     doc: Option<String>,
+    /// The function's name
     name: Identifier,
+    /// The function's parameters
     args: Vec<(Identifier, TirType)>,
+    /// The function's return type
     return_type: TirType,
+    /// The function's body statements
     body: Vec<TirStatement>,
 }
 
@@ -192,12 +225,37 @@ impl TirFunction {
         }
     }
 
+    /// A structure in Oak is actually syntactic
+    /// sugar for a method. Take for example the
+    /// following structure definition:
+    /// ```
+    /// struct Date {
+    ///     let month: num,
+    ///         day: num,
+    ///         year: num;
+    /// }
+    /// ```
+    /// This structure gets converted to the following HIR structure
+    /// ```
+    /// struct Date(sizeof(num) + sizeof(num) + sizeof(num)) {
+    ///     fn month(self: &Date) -> &num { return self as &num}
+    ///     fn day(self: &Date) -> &num { return (self + sizeof(num)) as &num}
+    ///     fn year(self: &Date) -> &num { return (self + sizeof(num) + sizeof(num)) as &num}
+    /// }
+    /// ```
     fn member_method(
+        // The type of the structure the method is being defined for
         self_type: &Identifier,
+        // The list of members that came before this member. This is
+        // to determine the offset of the member in the structure's memory.
         previous_member_types: &Vec<TirType>,
+        // The name of this member
         member_name: &Identifier,
+        // This member's type
         member_type: &TirType,
     ) -> Self {
+        // Add the size of all the previous members to the self pointer
+        // to get the address of this member.
         let mut fn_return = TirExpression::Variable(Identifier::from("self"));
         for t in previous_member_types {
             fn_return = TirExpression::Add(
@@ -214,6 +272,7 @@ impl TirFunction {
                 TirType::Pointer(Box::new(TirType::Structure(self_type.clone()))),
             )],
             member_type.refer().clone(),
+            // Then, typecast the address of the member as the member's type.
             vec![TirStatement::Return(vec![TirExpression::TypeCast(
                 Box::new(fn_return),
                 member_type.refer().clone(),
@@ -221,13 +280,20 @@ impl TirFunction {
         )
     }
 
+    /// Generate a copy constructor for a type.
     fn copy_constructor(members: &Vec<(Identifier, TirType)>, structure: &Identifier) -> Self {
         let struct_t = TirType::Structure(structure.clone());
         let mut result = vec![];
 
         if members.len() == 1 {
+            // If the number of members is one, then
+            // the returned value NEEDS to be cast to pass MIR typechecks.
             let member_name = members[0].0.clone();
 
+            // This generates the following code:
+            // ```
+            // return (*self) as T
+            // ```
             result = vec![TirExpression::TypeCast(
                 Box::new(TirExpression::Deref(Box::new(TirExpression::Method(
                     Box::new(TirExpression::Variable(Identifier::from("self"))),
@@ -237,6 +303,13 @@ impl TirFunction {
                 TirType::Structure(structure.clone()),
             )]
         } else {
+            // If the number of members greater than one, then
+            // the typechecks will pass without casting any members.
+
+            // This generates the following code:
+            // ```
+            // return [self->member_1, self->member_2, ...];
+            // ```
             for (member, _) in members {
                 result.push(TirExpression::Deref(Box::new(TirExpression::Method(
                     Box::new(TirExpression::Variable(Identifier::from("self"))),
@@ -246,6 +319,7 @@ impl TirFunction {
             }
         }
 
+        // fn copy(self: &T) -> T { ... }
         Self::new(
             None,
             Identifier::from("copy"),
@@ -255,11 +329,17 @@ impl TirFunction {
         )
     }
 
+    /// Generate a drop destructor for a type
     fn drop_destructor(members: &Vec<(Identifier, TirType)>, structure: &Identifier) -> Self {
+        // Convert a structure to its TIR type
         let struct_t = TirType::Structure(structure.clone());
         let mut result = vec![];
         for (member, t) in members {
-            if !t.is_primitive() {
+            // If the type of the member is a structure, call its drop method.
+            // If the object is a pointer or is primitive, then the drop method
+            // must not be called.
+            if t.is_structure() {
+                // Generate `self->member.drop();`
                 result.push(TirStatement::Expression(TirExpression::Method(
                     Box::new(TirExpression::Method(
                         Box::new(TirExpression::Variable(Identifier::from("self"))),
@@ -281,42 +361,57 @@ impl TirFunction {
         )
     }
 
+    /// Is the type signature of this function a valid copy constructor for a given type?
     fn is_valid_copy(&self, structure: &Identifier) -> Result<bool, TirError> {
+        // The method name must be `copy`
         if &self.name == "copy" {
             let struct_t = TirType::Structure(structure.clone());
+            // If the number of parameters is one,
+            // and the parameter type is &T,
+            // and the result is T, then the type signature is good!
             if self.args.len() == 1
                 && self.args[0].1 == struct_t.refer()
                 && self.return_type == struct_t
             {
                 return Ok(true);
             } else {
+                // Otherwise, throw an error about the copy constructors type signature
                 return Err(TirError::InvalidCopyTypeSignature(structure.clone()));
             }
         }
         return Ok(false);
     }
 
+    /// Is the type signature of this function a valid drop destructor for a given type?
     fn is_valid_drop(&self, structure: &Identifier) -> Result<bool, TirError> {
+        // The method name must be `drop`
         if &self.name == "drop" {
             let struct_t = TirType::Structure(structure.clone());
+            // If the number of parameters is one,
+            // and the parameter type is &T,
+            // and the result is void, then the type signature is good!
             if self.args.len() == 1
                 && self.args[0].1 == struct_t.refer()
                 && self.return_type == TirType::Void
             {
                 return Ok(true);
             } else {
+                // Otherwise, throw an error about the drop destructors type signature
                 return Err(TirError::InvalidDropTypeSignature(structure.clone()));
             }
         }
         return Ok(false);
     }
 
+    /// Convert this function into an HIR function
     fn to_hir_fn(&self, decls: &Vec<TirDeclaration>) -> Result<HirFunction, TirError> {
+        // Convert the parameter types to HIR types
         let mut args = vec![];
         for (arg, t) in &self.args {
             args.push((arg.clone(), t.to_hir_type()?))
         }
 
+        // Convert the function statements to HIR statements
         let mut body = vec![];
         for stmt in &self.body {
             body.push(stmt.to_hir_stmt(decls)?)
@@ -332,11 +427,16 @@ impl TirFunction {
     }
 }
 
+/// The type that represents a structure definition.
 #[derive(Clone, Debug)]
 pub struct TirStructure {
+    /// The optional docstring for the structure
     doc: Option<String>,
+    /// The name of the structure
     name: Identifier,
+    /// The structure's members
     members: Vec<(Identifier, TirType)>,
+    /// The structure's methods
     methods: Vec<TirFunction>,
 }
 
@@ -355,51 +455,76 @@ impl TirStructure {
         }
     }
 
+    /// Get the name of the structure
     fn get_name(&self) -> &Identifier {
         &self.name
     }
 
+    /// Can this type be moved without making a new copy?
     fn is_movable(&self, decls: &Vec<TirDeclaration>) -> Result<bool, TirError> {
+        /// Does this type manually implement copy and drop?
         let mut default_copy = true;
         let mut default_drop = true;
         for method in &self.methods {
+            // If the method is a copy constructor, mark `default_copy` as false
             if method.is_valid_copy(&self.name)? {
                 default_copy = false;
             }
-
+            
+            // If the method is a drop destructor, mark `default_drop` as false
             if method.is_valid_drop(&self.name)? {
                 default_drop = false;
             }
         }
 
-        let mut is_movable = default_copy && default_drop;
         for (_, t) in &self.members {
+            // If any of the structure's members are not movable,
+            // then this structure cannot be movable.
             if !t.is_movable(decls)? {
-                is_movable = false;
+                return Ok(false)
             }
         }
-        Ok(is_movable)
+        // If either a `copy` or `drop` is implemented manually,
+        // then the object cannot be movable.
+        Ok(default_copy && default_drop)
     }
 
     fn to_hir_struct(&mut self, decls: &Vec<TirDeclaration>) -> Result<HirStructure, TirError> {
+        // Check if the structure is movable BEFORE the copy
+        // and drop functions are automatically added. If the 
+        // copy and drop methods are added before the movability is checked,
+        // then `is_movable` will automatically be false.
         let is_movable = self.is_movable(decls)?;
+        // Add the object's `copy` and `drop` methods.
         self.add_copy_and_drop()?;
 
-        let mut previous_member_types = vec![];
-        let mut size = HirConstant::Float(0.0);
+        // Create the list of methods for the new HIR structure
         let mut methods = vec![];
+
+        // Store all the previous member's types for each member
+        // to create a getter/setter method for each member.
+        let mut previous_member_types = vec![];
+        // Keep track of the size of the structure
+
+        let mut size = HirConstant::Float(0.0);
         for (name, t) in &self.members {
+            // Add the member function to the list of methods
             methods.push(
                 TirFunction::member_method(&self.name, &previous_member_types, name, t)
                     .to_hir_fn(decls)?,
             );
+            // Add the size of the member to the size of the structure
             size = HirConstant::Add(
                 Box::new(size.clone()),
                 Box::new(HirConstant::SizeOf(t.to_hir_type()?)),
             );
+            // Add this member's type to the list of
+            // previous member's types.
             previous_member_types.push(t.clone())
         }
 
+        // In addition to the member methods, 
+        // add each of the structures explicit methods
         for method in &self.methods {
             methods.push(method.to_hir_fn(decls)?)
         }
@@ -413,7 +538,11 @@ impl TirStructure {
         ))
     }
 
+    /// Add the default copy and drop methods to this structure
     fn add_copy_and_drop(&mut self) -> Result<(), TirError> {
+        // To prevent multiple method definitions,
+        // determine whether or not the copy and
+        // drop methods have already been defined.
         let mut has_copy = false;
         let mut has_drop = false;
         for method in &self.methods {
@@ -424,11 +553,15 @@ impl TirStructure {
             }
         }
 
+        // If the structure does not have a copy method,
+        // add a default copy constructor to the list of methods.
         if !has_copy {
             self.methods
                 .push(TirFunction::copy_constructor(&self.members, &self.name));
         }
 
+        // If the structure does not have a drop method,
+        // add a default drop destructor to the list of methods.
         if !has_drop {
             self.methods
                 .push(TirFunction::drop_destructor(&self.members, &self.name));
