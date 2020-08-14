@@ -94,12 +94,6 @@ func (vm *machine) load_base_ptr() {
 	vm.push(float64(vm.base_ptr))
 }
 
-func (vm *machine) load_stack_ptr() {
-	// Get the virtual machine's current base pointer value,
-	// and push it onto the stack.
-	vm.push(float64(vm.stack_ptr))
-}
-
 func (vm *machine) establish_stack_frame(arg_size, local_scope_size int) {
 	// Allocate some space to store the arguments' cells for later
 	args := make([]float64, arg_size)

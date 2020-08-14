@@ -120,7 +120,7 @@ machine *machine_new(int global_scope_size, int capacity) {
 
 // Free the virtual machine's memory. This is called at the end of the program.
 void machine_drop(machine *vm) {
-    machine_dump(vm);
+    // machine_dump(vm);
     free(vm->memory);
     free(vm->allocated);
 }
