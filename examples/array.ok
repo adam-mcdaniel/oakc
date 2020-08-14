@@ -1,22 +1,13 @@
 #[std]
 #[memory(512)]
 
-const ARRAY = 3;
-type Array(ARRAY) {
+struct Array {
+    let len: num,
+        elem_size: &num,
+        contents: &void;
+
     fn new(len: num, elem_size: num) -> Array {
         return [len, elem_size, alloc(len * elem_size)]
-    }
-
-    fn len(self: &Array) -> &num {
-        return self as &num
-    }
-
-    fn elem_size(self: &Array) -> &num {
-        return (self + 1) as &num
-    }
-
-    fn contents(self: &Array) -> &&void {
-        return (self + 2) as &&void
     }
 
     fn idx(self: &Array, n: num) -> &void {
@@ -46,18 +37,17 @@ type Array(ARRAY) {
     }
 }
 
-const DATE = 3;
-type Date(DATE) {
+struct Date {
+    let month: num,
+        day: num,
+        year: num;
+
     fn from(ptr: &void) -> &Date { return ptr as &Date }
     fn new(month: num, day: num, year: num) -> Date {
         return [month, day, year];
     }
 
     fn birthday() -> Date { return Date::new(5, 14, 2002) }
-
-    fn month(self: &Date) -> &num { return self as &num }
-    fn day(self: &Date)   -> &num { return (self + 1) as &num }
-    fn year(self: &Date)  -> &num { return (self + 2) as &num }
 
     fn print(self: &Date) -> void {
         prn!(self->month);
@@ -93,7 +83,7 @@ type Date(DATE) {
 }
 
 fn main() -> void {
-    let arr: Array = Array::new(4, DATE);
+    let arr: Array = Array::new(4, sizeof(Date));
     arr.print();
 
     *arr.idx(0) = Date::birthday();

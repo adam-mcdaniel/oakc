@@ -62,60 +62,61 @@ struct String {
     }
 }
 
-
-fn copy_test(str: String) {
-    str.push('!');
-    str.push('!');
-    putstrln(str->ptr);
+fn putstring(s: String) {
+    putstr(s->ptr);
 }
 
+struct Person {
+    let first_name:  String,
+        middle_name: String,
+        last_name:   String;
 
-fn ref_test(str: &String) {
-    str.push('!');
-    str.push('!');
-    putstrln(str->ptr);
-}
-
-
-struct TwoString {
-    let first: String,
-        second: String;
-
-    fn new() -> TwoString {
+    fn new(first:  &char,
+           middle: &char,
+           last:   &char) -> Person {
         return [
-            String::from("first"),
-            String::from("second")
+            String::from(first),
+            String::from(middle),
+            String::from(last),
         ];
+    }
+
+    fn print(self: &Person) {
+        putstring(self->last_name);
+        putstr(", ");
+        putstring(self->first_name);
+        putchar(' ');
+        putchar(
+            ((self->middle_name)->ptr)[0]
+        );
+        putcharln('.');
+    }
+
+    fn copy(self: &Person) -> Person {
+        putstrln("copy!");
+        return [
+            self->first_name,
+            self->middle_name,
+            self->last_name
+        ]
+    }
+
+    fn drop(self: &Person) {
+        putstrln("drop!");
+        (self->first_name).drop();
+        (self->middle_name).drop();
+        (self->last_name).drop();
     }
 }
 
-fn putstringln(s: String) {
-    putstrln(s->ptr);
+fn putperson(p: Person) {
+    p.print();
 }
 
-fn test(s: String) -> String {
-    putstrln(s->ptr);
-    return s
-}
-
-fn puttwostrln(ts: TwoString) {
-    putstringln(ts->first);
-    putstringln(ts->second);
-}
 
 fn main() {
-    let str = String::from("Hello world");
-    copy_test(str);
-    putstrln(str->ptr);
-    ref_test(&str);
-    ref_test(&str);
-    putstrln(str->ptr);
-
-    let ts = TwoString::new();
-    puttwostrln(ts);
-    ref_test(&ts->first);
-    ref_test(&ts->second);
-    puttwostrln(ts);
-    let t = test(String::from("testing"));
-    putstrln(t->ptr);
+    let p = Person::new("Adam", "Ryan", "McDaniel");
+    p.print();
+    putperson(p);
+    p.print();
 }

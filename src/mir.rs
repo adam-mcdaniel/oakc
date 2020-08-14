@@ -80,12 +80,9 @@ pub enum MirError {
     /// A bad typecast due to mismatched sizes in types. For example,
     /// a value with size `3` cannot be cast to a number with size `1`
     MismatchedCastSize(MirExpression, MirType),
-    /// Only one branch of an if-else statement returns in a function
-    OnlyOneBranchReturns(String),
-    /// A single branch if-statement uses a return
-    IfReturns(String),
-    /// Return statement used in a loop in a function
-    LoopReturns(String),
+    /// Attempted to use a return statement in a conditional expression,
+    /// such as a while loop or if statement
+    ConditionalReturn(String),
     /// A non-void function never returns
     NonVoidNoReturn(String),
     /// Prevent memory leaks by preventing the user from calling methods
@@ -187,19 +184,9 @@ impl Display for MirError {
                 "cannot cast expression '{}' to type '{}' due to mismatched sizes",
                 expr, t
             ),
-            Self::OnlyOneBranchReturns(fn_name) => write!(
+            Self::ConditionalReturn(fn_name) => write!(
                 f,
-                "only one branch of an if-else statement returns in the function '{}'",
-                fn_name
-            ),
-            Self::IfReturns(fn_name) => write!(
-                f,
-                "used a return statement in a single branch if statement in the function '{}'",
-                fn_name
-            ),
-            Self::LoopReturns(fn_name) => write!(
-                f,
-                "used a return statement within a loop in the function '{}'",
+                "used a return statement within a conditional statement in the function '{}'",
                 fn_name
             ),
             Self::NonVoidNoReturn(fn_name) => write!(
@@ -235,17 +222,16 @@ impl MirType {
     /// The name of the bool type in Oak code
     pub const BOOLEAN: &'static str = "bool";
 
-    /// Must this type use the drop method?
-    /// Types that use non-default copy OR drop constructors
-    /// must be dropped.
-    pub fn must_drop(&self, structs: &BTreeMap<Identifier, MirStructure>) -> bool {
+    /// Must this type use the drop method? If so, it is not movable.
+    /// Types that have only movable members are also movable.
+    pub fn is_movable(&self, structs: &BTreeMap<Identifier, MirStructure>) -> bool {
         // Primitive types do not need to be dropped
         if self.is_primitive() {
             return false;
         } else if let Some(s) = structs.get(&self.name) {
             // Types only **must** be dropped if the user specifies so
             // with a manual drop definition
-            s.must_drop()
+            s.is_movable()
         } else {
             false
         }
@@ -402,9 +388,21 @@ impl MirProgram {
         let mut result = Vec::new();
         for decl in &decls {
             match decl {
-                MirDeclaration::Function(func) => func.declare(&mut funcs)?,
+                MirDeclaration::Function(func) => {
+                    let name = func.get_name();
+                    if funcs.contains_key(&name) {
+                        return Err(MirError::FunctionRedefined(name));
+                    } else {
+                        funcs.insert(name, func.clone());
+                    }
+                }
                 MirDeclaration::Structure(structure) => {
-                    structure.declare(&mut funcs, &mut structs)?
+                    let name = structure.get_name();
+                    if structs.contains_key(&name) {
+                        return Err(MirError::StructureRedefined(name));
+                    } else {
+                        structs.insert(structure.get_name(), structure.clone());
+                    }
                 }
                 MirDeclaration::Extern(filename) => externs.push(filename.clone()),
             }
@@ -444,34 +442,24 @@ pub struct MirStructure {
     name: Identifier,
     size: i32,
     methods: Vec<MirFunction>,
-    /// Does the user specifiy a `copy` method explicitly or not?
-    default_copy: bool,
-    /// Does the user specifiy a `drop` method explicitly or not?
-    default_drop: bool,
+    movable: bool,
 }
 
 impl MirStructure {
-    pub fn new(
-        name: Identifier,
-        size: i32,
-        methods: Vec<MirFunction>,
-        default_copy: bool,
-        default_drop: bool,
-    ) -> Self {
+    pub fn new(name: Identifier, size: i32, methods: Vec<MirFunction>, movable: bool) -> Self {
         Self {
             name,
             size,
             methods,
-            default_copy,
-            default_drop,
+            movable,
         }
     }
 
     /// Must this type use the drop method?
     /// Types that use non-default copy OR drop constructors
     /// must be dropped.
-    fn must_drop(&self) -> bool {
-        !self.default_copy || !self.default_drop
+    fn is_movable(&self) -> bool {
+        self.movable
     }
 
     fn to_mir_type(&self) -> MirType {
@@ -484,26 +472,6 @@ impl MirStructure {
 
     fn get_size(&self) -> i32 {
         self.size
-    }
-
-    /// Declare the structure to the compiler WITHOUT assembling it
-    fn declare(
-        &self,
-        funcs: &mut BTreeMap<Identifier, MirFunction>,
-        structs: &mut BTreeMap<Identifier, MirStructure>,
-    ) -> Result<(), MirError> {
-        // Check if the structure has already been declared
-        if structs.contains_key(&self.name) {
-            return Err(MirError::StructureRedefined(self.get_name()));
-        } else {
-            structs.insert(self.get_name(), self.clone());
-        }
-        // Iterate over the methods and rename them
-        // to their method names, such as `Date::day`
-        for function in &self.methods {
-            function.as_method(&self.to_mir_type()).declare(funcs)?;
-        }
-        Ok(())
     }
 
     fn assemble(
@@ -521,6 +489,13 @@ impl MirStructure {
 
         let mir_type = self.to_mir_type();
         let mut result = Vec::new();
+
+        // Iterate over the methods and rename them
+        // to their method names, such as `Date::day`
+        for function in &self.methods {
+            let method = function.as_method(&mir_type);
+            funcs.insert(method.get_name(), method.clone());
+        }
 
         // After each function has been declared, go back and assemble them.
         // We do two passes to allow methods to depend on one another.
@@ -564,17 +539,6 @@ impl MirFunction {
         result
     }
 
-    /// Declare this function to the compiler WITHOUT assembling it
-    fn declare(&self, funcs: &mut BTreeMap<Identifier, MirFunction>) -> Result<(), MirError> {
-        // Check if the function has already been declared
-        if funcs.contains_key(&self.name) {
-            Err(MirError::FunctionRedefined(self.get_name()))
-        } else {
-            funcs.insert(self.get_name(), self.clone());
-            Ok(())
-        }
-    }
-
     fn assemble(
         &self,
         funcs: &BTreeMap<Identifier, MirFunction>,
@@ -610,22 +574,43 @@ impl MirFunction {
         // Check return type
         let mut has_returned = false;
         for (i, stmt) in self.body.iter().enumerate() {
-            // Does the statment return a valid value?
-            let valid_return =
-                stmt.has_valid_return(&self.name, &self.return_type, &vars, funcs, structs)?;
-            // If so, check that the function has not already returned
-            if !has_returned && valid_return {
+            if let MirStatement::Return(exprs) = stmt {
+                // If the function has already used a return statement,
+                // throw an error.
+                if has_returned {
+                    return Err(MirError::MultipleReturns(self.name.clone()));
+                }
                 has_returned = true;
-            // If the function has already returned, throw an error
-            } else if valid_return {
-                return Err(MirError::MultipleReturns(self.get_name()));
+
+                // Get the size of the return statement's stack allocation
+                let mut result_size = 0;
+                for expr in exprs {
+                    result_size += expr.get_type(&vars, funcs, structs)?.get_size(structs)?;
+                }
+
+                // If the result's size is not equal to the size of the
+                // return type, throw a type error.
+                if result_size != self.return_type.get_size(structs)? {
+                    return Err(MirError::MismatchedReturnType(self.name.clone()));
+
+                // If there is only one return argument, check the individual
+                // expression's type against the return type.
+                } else if exprs.len() == 1
+                    && self.return_type != exprs[0].get_type(&vars, funcs, structs)?
+                {
+                    return Err(MirError::MismatchedReturnType(self.name.clone()));
+                }
+            // If a statement has a return statement, but is not a return
+            // statement itself, it must be a conditional return statement
+            } else if stmt.has_return() {
+                return Err(MirError::ConditionalReturn(self.name.clone()));
             }
         }
 
         // If the function is non-void and has not returned,
         // then throw an error.
         if !has_returned && self.return_type != MirType::void() {
-            return Err(MirError::NonVoidNoReturn(self.get_name()));
+            return Err(MirError::NonVoidNoReturn(self.name.clone()));
         }
 
         Ok(AsmFunction::new(
@@ -677,105 +662,6 @@ impl MirStatement {
             expr.get_type(vars, funcs, structs)
         } else {
             Ok(MirType::void())
-        }
-    }
-
-    /// Does the statement return a single, valid expression?
-    fn has_valid_return(
-        &self,
-        func_name: &String,
-        return_type: &MirType,
-        vars: &BTreeMap<Identifier, MirType>,
-        funcs: &BTreeMap<Identifier, MirFunction>,
-        structs: &BTreeMap<Identifier, MirStructure>,
-    ) -> Result<bool, MirError> {
-        match self {
-            Self::IfElse(_, then_body, else_body) => {
-                // For each statement in the body, check if the
-                // statement returns a valid expression
-                let mut then_valid = false;
-                for stmt in then_body {
-                    let stmt_valid =
-                        stmt.has_valid_return(func_name, return_type, vars, funcs, structs)?;
-                    // Verify the body hasnt returned yet if this statement returns
-                    if !then_valid && stmt_valid {
-                        then_valid = true;
-                    } else if stmt_valid {
-                        // If this body has returned once already, throw an error
-                        return Err(MirError::MultipleReturns(func_name.clone()));
-                    }
-                }
-
-                // For each statement in the body, check if the
-                // statement returns a valid expression
-                let mut else_valid = false;
-                for stmt in else_body {
-                    let stmt_valid =
-                        stmt.has_valid_return(func_name, return_type, vars, funcs, structs)?;
-                    // Verify the body hasnt returned yet if this statement returns
-                    if !else_valid && stmt_valid {
-                        else_valid = true;
-                    } else if stmt_valid {
-                        // If this body has returned once already, throw an error
-                        return Err(MirError::MultipleReturns(func_name.clone()));
-                    }
-                }
-
-                // If both branches of the if-statement return, then the return is valid
-                if then_valid && else_valid {
-                    Ok(true)
-                // If only one branch returns, throw an error
-                } else if then_valid || else_valid {
-                    Err(MirError::OnlyOneBranchReturns(func_name.clone()))
-                // Otherwise, this branch does not return.
-                } else {
-                    Ok(false)
-                }
-            }
-            Self::Return(exprs) => {
-                // Get the size of the return statement's stack allocation
-                let mut result_size = 0;
-                for expr in exprs {
-                    result_size += expr.get_type(&vars, funcs, structs)?.get_size(structs)?;
-                }
-
-                // If the result's size is not equal to the size of the
-                // return type, throw a type error.
-                if result_size != return_type.get_size(structs)? {
-                    return Err(MirError::MismatchedReturnType(func_name.clone()));
-
-                // If there is only one return argument, check the individual
-                // expression's type against the return type.
-                } else if exprs.len() == 1
-                    && return_type != &exprs[0].get_type(&vars, funcs, structs)?
-                {
-                    return Err(MirError::MismatchedReturnType(func_name.clone()));
-                }
-
-                // If all the above checks passed, this statement returns a valid expression
-                Ok(true)
-            }
-            Self::If(_, body) => {
-                // Check each statement for a return. A single branch if
-                // MUST NOT return.
-                for stmt in body {
-                    if stmt.has_return() {
-                        return Err(MirError::IfReturns(func_name.clone()));
-                    }
-                }
-                Ok(false)
-            }
-
-            // Loops MUST NOT return.
-            Self::While(_, body) | Self::For(_, _, _, body) => {
-                for stmt in body {
-                    if stmt.has_return() {
-                        return Err(MirError::LoopReturns(func_name.clone()));
-                    }
-                }
-                Ok(false)
-            }
-            _ => Ok(false),
         }
     }
 
@@ -1215,7 +1101,7 @@ impl MirStatement {
 
 #[derive(Clone, Debug, PartialEq, PartialOrd)]
 pub enum MirExpression {
-    SizeOf(MirType),
+    Move(Box<Self>),
 
     Add(Box<Self>, Box<Self>),
     Subtract(Box<Self>, Box<Self>),
@@ -1243,7 +1129,6 @@ pub enum MirExpression {
     Variable(Identifier),
     Refer(Identifier),
     Deref(Box<Self>),
-    Move(Box<Self>),
 
     TypeCast(Box<Self>, MirType),
     Alloc(Box<Self>),
@@ -1263,13 +1148,13 @@ impl MirExpression {
     /// Must this type use the drop method?
     /// Types that use non-default copy OR drop constructors
     /// must be dropped.
-    fn must_drop(
+    fn is_movable(
         &self,
         vars: &BTreeMap<Identifier, MirType>,
         funcs: &BTreeMap<Identifier, MirFunction>,
         structs: &BTreeMap<Identifier, MirStructure>,
     ) -> Result<bool, MirError> {
-        Ok(self.get_type(vars, funcs, structs)?.must_drop(structs))
+        Ok(self.get_type(vars, funcs, structs)?.is_movable(structs))
     }
 
     fn is_a_copy(&self) -> bool {
@@ -1486,7 +1371,6 @@ impl MirExpression {
 
             // Typecheck atomic expressions
             Self::ForeignCall(_, _)
-            | Self::SizeOf(_)
             | Self::Refer(_)
             | Self::Variable(_)
             | Self::String(_)
@@ -1508,9 +1392,6 @@ impl MirExpression {
     ) -> Result<Vec<AsmStatement>, MirError> {
         Ok(match self {
             Self::Move(expr) => expr.assemble(vars, funcs, structs, instance_count)?,
-            Self::SizeOf(t) => vec![AsmStatement::Expression(vec![AsmExpression::Float(
-                t.get_size(structs)? as f64,
-            )])],
 
             Self::True => vec![AsmStatement::Expression(vec![AsmExpression::Float(1.0)])],
             Self::False => vec![AsmStatement::Expression(vec![AsmExpression::Float(0.0)])],
@@ -1781,7 +1662,7 @@ impl MirExpression {
                     )?
                 } else if method_name == "copy"
                     || method_name == "drop"
-                    || !expr.must_drop(vars, funcs, structs)?
+                    || instance_type.is_movable(structs)
                 {
                     // Reference the variable storing the object
                     let instance_var = self.get_instance_var(instance_count);
@@ -1808,6 +1689,66 @@ impl MirExpression {
                     )?);
 
                     result
+                } else if let Self::Method(super_instance, _, _) = *expr.clone() {
+                    if super_instance.get_type(vars, funcs, structs)?.is_pointer() {
+                        // Reference the variable storing the object
+                        let instance_var = self.get_instance_var(instance_count);
+
+                        let mut result = Vec::new();
+                        // Push the instance object
+                        result.extend(expr.assemble(vars, funcs, structs, instance_count)?);
+
+                        let self_type = instance_type.to_asm_type(structs)?;
+                        result.extend(vec![
+                            // Store the instance object into a stack variable
+                            AsmStatement::Define(instance_var.clone(), self_type),
+                            AsmStatement::Assign(self_type),
+                        ]);
+
+                        let mut call_args = vec![Self::Refer(instance_var.clone())];
+                        call_args.extend(args.clone());
+
+                        result.extend(Self::Call(func_name, call_args).assemble(
+                            vars,
+                            funcs,
+                            structs,
+                            instance_count,
+                        )?);
+
+                        result
+                    } else {
+                        return Err(MirError::MethodOnUnboundCopyDrop(self.clone()));
+                    }
+                } else if let Self::Deref(super_instance) = *expr.clone() {
+                    if let Self::Method(super_instance, _, _) = *super_instance {
+                        // Reference the variable storing the object
+                        let instance_var = self.get_instance_var(instance_count);
+
+                        let mut result = Vec::new();
+                        // Push the instance object
+                        result.extend(expr.assemble(vars, funcs, structs, instance_count)?);
+
+                        let self_type = instance_type.to_asm_type(structs)?;
+                        result.extend(vec![
+                            // Store the instance object into a stack variable
+                            AsmStatement::Define(instance_var.clone(), self_type),
+                            AsmStatement::Assign(self_type),
+                        ]);
+
+                        let mut call_args = vec![Self::Refer(instance_var.clone())];
+                        call_args.extend(args.clone());
+
+                        result.extend(Self::Call(func_name, call_args).assemble(
+                            vars,
+                            funcs,
+                            structs,
+                            instance_count,
+                        )?);
+
+                        result
+                    } else {
+                        return Err(MirError::MethodOnUnboundCopyDrop(self.clone()));
+                    }
                 } else {
                     return Err(MirError::MethodOnUnboundCopyDrop(self.clone()));
                 }
@@ -1846,7 +1787,6 @@ impl MirExpression {
     ) -> Result<MirType, MirError> {
         Ok(match self {
             Self::Move(expr) => expr.get_type(vars, funcs, structs)?,
-            Self::SizeOf(_) => MirType::float(),
 
             Self::True => MirType::boolean(),
             Self::False => MirType::boolean(),
@@ -1949,7 +1889,6 @@ impl Display for MirExpression {
     fn fmt(&self, f: &mut Formatter) -> Result<(), Error> {
         match self {
             Self::Move(expr) => write!(f, "move({})", expr),
-            Self::SizeOf(t) => write!(f, "sizeof({})", t),
 
             Self::True => write!(f, "true"),
             Self::False => write!(f, "false"),

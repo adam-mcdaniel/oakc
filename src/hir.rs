@@ -32,13 +32,9 @@ impl HirProgram {
         self.0.extend(decls.clone())
     }
 
-    pub fn get_memory_size(&self) -> i32 {
+    fn get_memory_size(&self) -> i32 {
         let Self(_, memory_size) = self;
         *memory_size
-    }
-
-    fn set_memory_size(&mut self, size: i32) {
-        self.1 = size;
     }
 
     pub fn use_std(&self) -> bool {
@@ -355,6 +351,8 @@ pub enum HirDeclaration {
     Memory(i32),
     RequireStd,
     NoStd,
+    /// Empty HirDeclaration
+    Pass,
 }
 
 #[derive(Clone, Debug)]
@@ -363,8 +361,7 @@ pub struct HirStructure {
     name: Identifier,
     size: HirConstant,
     methods: Vec<HirFunction>,
-    default_copy: bool,
-    default_drop: bool,
+    is_movable: bool,
 }
 
 impl HirStructure {
@@ -373,25 +370,22 @@ impl HirStructure {
         name: Identifier,
         size: HirConstant,
         methods: Vec<HirFunction>,
+        is_movable: bool,
     ) -> Self {
         Self {
             doc,
             name,
             size,
             methods,
-            default_copy: false,
-            default_drop: false,
+            is_movable,
         }
-    }
-
-    fn to_type(&self) -> HirType {
-        HirType::Structure(self.name.clone())
     }
 
     fn get_name(&self) -> &Identifier {
         &self.name
     }
-    pub fn get_size(
+
+    fn get_size(
         &self,
         decls: &Vec<HirDeclaration>,
         constants: &BTreeMap<Identifier, HirConstant>,
@@ -402,7 +396,7 @@ impl HirStructure {
             .and_then(|n| Ok(n as i32))
     }
 
-    pub fn generate_docs(&self) -> String {
+    fn generate_docs(&self) -> String {
         let mut result = format!(
             "## *type* **{}** *with size* **{}**\n",
             self.name, self.size
@@ -416,7 +410,7 @@ impl HirStructure {
         result
     }
 
-    pub fn to_mir_struct(
+    fn to_mir_struct(
         &self,
         decls: &Vec<HirDeclaration>,
         constants: &BTreeMap<Identifier, HirConstant>,
@@ -431,8 +425,7 @@ impl HirStructure {
             self.name.clone(),
             self.size.to_value(decls, constants, target)? as i32,
             mir_methods,
-            self.default_copy,
-            self.default_drop,
+            self.is_movable,
         ))
     }
 }
@@ -461,10 +454,6 @@ impl HirFunction {
             return_type,
             body,
         }
-    }
-
-    fn get_name(&self) -> &Identifier {
-        &self.name
     }
 
     fn generate_docs(&self, is_method: bool) -> String {
@@ -497,7 +486,7 @@ impl HirFunction {
         result
     }
 
-    pub fn to_mir_fn(
+    fn to_mir_fn(
         &self,
         decls: &Vec<HirDeclaration>,
         constants: &BTreeMap<Identifier, HirConstant>,
@@ -578,7 +567,7 @@ impl Display for HirConstant {
 }
 
 impl HirConstant {
-    pub fn to_value(
+    fn to_value(
         &self,
         decls: &Vec<HirDeclaration>,
         constants: &BTreeMap<Identifier, Self>,
@@ -730,7 +719,7 @@ pub enum HirStatement {
 
 impl HirStatement {
     /// Lower an HIR statement into an equivalent MIR statement
-    pub fn to_mir_stmt(
+    fn to_mir_stmt(
         &self,
         decls: &Vec<HirDeclaration>,
         constants: &BTreeMap<Identifier, HirConstant>,
@@ -862,7 +851,7 @@ pub enum HirExpression {
 }
 
 impl HirExpression {
-    pub fn is_literal(&self) -> bool {
+    fn is_literal(&self) -> bool {
         match self {
             Self::Void
             | Self::True
@@ -874,7 +863,7 @@ impl HirExpression {
         }
     }
 
-    pub fn to_mir_expr(
+    fn to_mir_expr(
         &self,
         decls: &Vec<HirDeclaration>,
         constants: &BTreeMap<Identifier, HirConstant>,
@@ -884,7 +873,7 @@ impl HirExpression {
             Self::Move(expr) => {
                 MirExpression::Move(Box::new(expr.to_mir_expr(decls, constants, target)?))
             }
-            Self::SizeOf(t) => MirExpression::SizeOf(t.to_mir_type()),
+            Self::SizeOf(t) => MirExpression::Float(t.get_size(decls, constants, target)? as f64),
 
             /// Convert a constant expression into a float literal
             Self::Constant(constant) => {

@@ -9,4 +9,4 @@
     }]
 }]
 
-fn test() { test!() }
+fn test() { test@() }
