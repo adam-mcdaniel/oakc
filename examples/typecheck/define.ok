@@ -1,11 +1,15 @@
 
-type Point(2) {
+struct Point {
+    let x: num, y: num;
+
     fn new(x: num, y: num) -> Point {
         return [x, y]
     }
 }
 
-type Test(2) {}
+struct Test {
+    let x: num, y: num;
+}
 
 fn main() {
     let p: Test = Point::new(5, 6);

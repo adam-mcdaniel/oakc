@@ -16,32 +16,15 @@ use crate::{
 
 #[derive(Clone, Debug)]
 pub enum TirError {
-    TooFewMacroArguments(Identifier),
-    TooManyMacroArguments(Identifier),
-    InvalidMacroArgument(Identifier),
-    InvalidMacroUse(Identifier),
     InvalidCopyTypeSignature(Identifier),
     InvalidDropTypeSignature(Identifier),
     StructureNotDefined(Identifier),
-    MacroNotDefined(Identifier),
     ExplicitCopy,
 }
 
 impl Display for TirError {
     fn fmt(&self, f: &mut Formatter) -> Result<(), Error> {
         match self {
-            Self::TooFewMacroArguments(macro_name) => {
-                write!(f, "too few arguments supplied to macro '{}'", macro_name)
-            }
-            Self::TooManyMacroArguments(macro_name) => {
-                write!(f, "too many arguments supplied to macro '{}'", macro_name)
-            }
-            Self::InvalidMacroArgument(macro_name) => {
-                write!(f, "invalid argument supplied to macro '{}'", macro_name)
-            }
-            Self::InvalidMacroUse(macro_name) => {
-                write!(f, "invalid use of macro '{}'", macro_name)
-            }
             Self::InvalidCopyTypeSignature(type_name) => write!(
                 f,
                 "invalid copy constructor type signature for type '{}'",
@@ -54,9 +37,6 @@ impl Display for TirError {
             ),
             Self::StructureNotDefined(type_name) => {
                 write!(f, "type '{}' is not defined", type_name)
-            }
-            Self::MacroNotDefined(macro_name) => {
-                write!(f, "macro '{}' is not defined", macro_name)
             }
             Self::ExplicitCopy => write!(f, "cannot explicitly call copy constructors"),
         }
@@ -81,122 +61,11 @@ impl TirProgram {
     }
 }
 
-#[derive(Clone, Debug)]
-pub enum TirMacroArgument {
-    Identifier(Identifier),
-    Expression(TirExpression),
-    Statement(TirStatement),
-    Type(TirType),
-}
-
-impl TirMacroArgument {
-    fn replace_macro_args(
-        &self,
-        macro_name: &Identifier,
-        arg_name: &Identifier,
-        arg: &TirMacroArgument,
-    ) -> Result<Self, TirError> {
-        Ok(match self {
-            Self::Identifier(name) => {
-                let mut result_name = name.clone();
-                if name == arg_name {
-                    result_name = arg.as_ident(macro_name)?
-                }
-
-                Self::Identifier(result_name)
-            },
-            Self::Expression(expr) => Self::Expression(expr.replace_macro_args(macro_name, arg_name, arg)?),
-            Self::Statement(stmt) => Self::Statement(stmt.replace_macro_args(macro_name, arg_name, arg)?),
-            Self::Type(t) => Self::Type(t.replace_macro_args(macro_name, arg_name, arg)?),
-        })
-    }
-
-    fn as_ident(&self, macro_name: &Identifier) -> Result<Identifier, TirError> {
-        if let Self::Identifier(name) = self {
-            Ok(name.clone())
-        } else {
-            Err(TirError::InvalidMacroArgument(macro_name.clone()))
-        }
-    }
-    
-    fn as_expr(&self, macro_name: &Identifier) -> Result<TirExpression, TirError> {
-        if let Self::Expression(expr) = self {
-            Ok(expr.clone())
-        } else {
-            Err(TirError::InvalidMacroArgument(macro_name.clone()))
-        }
-    }
-    
-    fn as_stmt(&self, macro_name: &Identifier) -> Result<TirStatement, TirError> {
-        if let Self::Statement(stmt) = self {
-            Ok(stmt.clone())
-        } else {
-            Err(TirError::InvalidMacroArgument(macro_name.clone()))
-        }
-    }
-    
-    fn as_type(&self, macro_name: &Identifier) -> Result<TirType, TirError> {
-        if let Self::Type(t) = self {
-            Ok(t.clone())
-        } else {
-            Err(TirError::InvalidMacroArgument(macro_name.clone()))
-        }
-    }
-}
-
-#[derive(Clone, Debug)]
-pub enum TirMacroResult {
-    Expression(TirExpression),
-    Statement(TirStatement),
-    Declaration(TirDeclaration),
-}
-
-impl TirMacroResult {
-    fn replace_macro_args(
-        &self,
-        macro_name: &Identifier,
-        arg_name: &Identifier,
-        arg: &TirMacroArgument,
-    ) -> Result<Self, TirError> {
-        Ok(match self {
-            Self::Expression(expr) => Self::Expression(expr.replace_macro_args(macro_name, arg_name, arg)?),
-            Self::Statement(stmt) => Self::Statement(stmt.replace_macro_args(macro_name, arg_name, arg)?),
-            Self::Declaration(decl) => Self::Declaration(decl.replace_macro_args(macro_name, arg_name, arg)?),
-        })
-    }
-
-    fn as_expr(&self, macro_name: &Identifier) -> Result<TirExpression, TirError> {
-        if let Self::Expression(expr) = self {
-            Ok(expr.clone())
-        } else {
-            Err(TirError::InvalidMacroArgument(macro_name.clone()))
-        }
-    }
-    
-    fn as_stmt(&self, macro_name: &Identifier) -> Result<TirStatement, TirError> {
-        if let Self::Statement(stmt) = self {
-            Ok(stmt.clone())
-        } else {
-            Err(TirError::InvalidMacroArgument(macro_name.clone()))
-        }
-    }
-    
-    fn as_decl(&self, macro_name: &Identifier) -> Result<TirDeclaration, TirError> {
-        if let Self::Declaration(decl) = self {
-            Ok(decl.clone())
-        } else {
-            Err(TirError::InvalidMacroArgument(macro_name.clone()))
-        }
-    }
-}
-
 
 
 #[derive(Clone, Debug)]
 pub enum TirDeclaration {
     DocumentHeader(String),
-    Macro(Identifier, Vec<Identifier>, Box<TirMacroResult>),
-    MacroCall(Identifier, Vec<TirMacroArgument>),
     Constant(Option<String>, Identifier, TirConstant),
     Function(TirFunction),
     Structure(TirStructure),
@@ -212,79 +81,8 @@ pub enum TirDeclaration {
 }
 
 impl TirDeclaration {
-    fn replace_macro_args(
-        &self,
-        macro_name: &Identifier,
-        arg_name: &Identifier,
-        arg: &TirMacroArgument,
-    ) -> Result<Self, TirError> {
-        Ok(match self {
-            Self::DocumentHeader(header) => Self::DocumentHeader(header.clone()),
-            Self::Assert(_)
-            | Self::Constant(_, _, _)
-            | Self::If(_, _)
-            | Self::IfElse(_, _, _)
-            | Self::Error(_)
-            | Self::Extern(_)
-            | Self::Include(_)
-            | Self::Memory(_)
-            | Self::RequireStd
-            | Self::NoStd => self.clone(),
-            Self::Function(function) => Self::Function(function.replace_macro_args(macro_name, arg_name, arg)?),
-            Self::Structure(structure) => Self::Structure(structure.replace_macro_args(macro_name, arg_name, arg)?),
-
-            Self::Macro(name, params, output) => {
-                let mut result_name = name.clone();
-                if name == arg_name {
-                    result_name = arg.as_ident(macro_name)?
-                }
-
-                let mut result_params = vec![];
-                for param in params {
-                    result_params.push(if name == arg_name {
-                        arg.as_ident(macro_name)?
-                    } else {
-                        name.clone()
-                    });
-                }
-                
-                Self::Macro(result_name, result_params, Box::new(output.replace_macro_args(macro_name, arg_name, arg)?))
-            }
-
-            Self::MacroCall(name, call_args) => {
-                let mut result_name = name.clone();
-                if name == arg_name {
-                    result_name = arg.as_ident(macro_name)?
-                }
-
-                let mut result_args = vec![];
-                for call_arg in call_args {
-                    result_args.push(call_arg.replace_macro_args(macro_name, arg_name, arg)?);
-                }
-
-                Self::MacroCall(result_name, result_args)
-            }
-        })
-    }
-
     fn to_hir_decl(&self, decls: &Vec<TirDeclaration>) -> Result<HirDeclaration, TirError> {
         Ok(match self {
-            Self::Macro(_, _, _) => HirDeclaration::Pass,
-            Self::MacroCall(macro_name, args) => {
-                for decl in decls {
-                    if let Self::Macro(name, params, output) = decl {
-                        if name == macro_name {
-                            let mut result = *output.clone();
-                            for (arg_name, arg) in params.iter().zip(args) {
-                                result = result.replace_macro_args(macro_name, arg_name, arg)?;
-                            }
-
-                            return result.as_decl(macro_name)?.to_hir_decl(decls)
-                        }
-                    }
-                }
-                return Err(TirError::MacroNotDefined(macro_name.clone()))
-            },
             Self::DocumentHeader(header) => HirDeclaration::DocumentHeader(header.clone()),
             Self::Constant(doc, name, constant) => {
                 HirDeclaration::Constant(doc.clone(), name.clone(), constant.to_hir_const(decls)?)
@@ -331,21 +129,6 @@ pub enum TirType {
 }
 
 impl TirType {
-    fn replace_macro_args(
-        &self,
-        macro_name: &Identifier,
-        arg_name: &Identifier,
-        arg: &TirMacroArgument,
-    ) -> Result<Self, TirError> {
-        Ok(match self {
-            Self::Pointer(inner) => Self::Pointer(Box::new(
-                inner.replace_macro_args(macro_name, arg_name, arg)?,
-            )),
-            Self::Structure(name) if name == arg_name => arg.as_type(macro_name)?,
-            _ => self.clone(),
-        })
-    }
-
     fn is_primitive(&self) -> bool {
         match self {
             Self::Structure(_) => false,
@@ -409,43 +192,6 @@ impl TirFunction {
             return_type,
             body,
         }
-    }
-
-    fn replace_macro_args(
-        &self,
-        macro_name: &Identifier,
-        arg_name: &Identifier,
-        arg: &TirMacroArgument,
-    ) -> Result<Self, TirError> {
-        let mut result_name = self.name.clone();
-        if &self.name == arg_name {
-            result_name = arg.as_ident(macro_name)?
-        }
-        
-        let mut result_args = vec![];
-        for (name, t) in &self.args {
-            result_args.push((
-                if name == arg_name {
-                    arg.as_ident(macro_name)?
-                } else {
-                    name.clone()
-                },
-                t.replace_macro_args(macro_name, arg_name, arg)?
-            ))
-        }
-        
-        let mut result_body = vec![];
-        for stmt in &self.body {
-            result_body.push(stmt.replace_macro_args(macro_name, arg_name, arg)?)
-        }
-
-        Ok(Self::new(
-            self.doc.clone(),
-            result_name,
-            result_args,
-            self.return_type.replace_macro_args(macro_name, arg_name, arg)?,
-            result_body
-        ))
     }
 
     fn member_method(
@@ -609,44 +355,6 @@ impl TirStructure {
             members,
             methods,
         }
-    }
-
-    fn replace_macro_args(
-        &self,
-        macro_name: &Identifier,
-        arg_name: &Identifier,
-        arg: &TirMacroArgument,
-    ) -> Result<Self, TirError> {
-        let mut result_name = self.name.clone();
-        if &self.name == arg_name {
-            result_name = arg.as_ident(macro_name)?
-        }
-        
-        let mut result_members = vec![];
-        for (name, t) in &self.members {
-            result_members.push((
-                if name == arg_name {
-                    arg.as_ident(macro_name)?
-                } else {
-                    name.clone()
-                },
-                t.replace_macro_args(macro_name, arg_name, arg)?
-            ))
-        }
-        
-        let mut result_methods = vec![];
-        for method in &self.methods {
-            result_methods.push(
-                method.replace_macro_args(macro_name, arg_name, arg)?
-            )
-        }
-        
-        Ok(Self::new(
-            self.doc.clone(),
-            result_name,
-            result_members,
-            result_methods
-        ))
     }
 
     fn get_name(&self) -> &Identifier {
@@ -872,288 +580,13 @@ pub enum TirStatement {
     /// Return one or more values at the end of a function
     Return(Vec<TirExpression>),
 
-    MacroCall(Identifier, Vec<TirMacroArgument>),
-
     /// Any expression
     Expression(TirExpression),
 }
 
 impl TirStatement {
-    fn replace_macro_args(
-        &self,
-        macro_name: &Identifier,
-        arg_name: &Identifier,
-        arg: &TirMacroArgument,
-    ) -> Result<Self, TirError> {
-        Ok(match self {
-            Self::Expression(expr) => match expr {
-                TirExpression::Variable(name) if name == arg_name => arg.as_stmt(macro_name)?,
-                _ => TirStatement::Expression(expr.replace_macro_args(macro_name, arg_name, arg)?)
-            }
-
-            Self::MacroCall(name, call_args) => {
-                let mut result_name = name.clone();
-                if name == arg_name {
-                    result_name = arg.as_ident(macro_name)?
-                }
-
-                let mut result_args = vec![];
-                for call_arg in call_args {
-                    let mut result_arg = call_arg.clone();
-                    if let TirMacroArgument::Identifier(ident) = call_arg {
-                        if ident == arg_name {
-                            result_arg = arg.clone();
-                        }
-                    }
-
-                    result_args.push(result_arg)
-                }
-                Self::MacroCall(result_name, result_args)
-            }
-
-            Self::Define(def_name, t, expr) => {
-                let mut result_name = def_name.clone();
-                if def_name == arg_name {
-                    result_name = arg.as_ident(macro_name)?
-                }
-
-                Self::Define(
-                    result_name,
-                    t.replace_macro_args(macro_name, arg_name, arg)?,
-                    expr.replace_macro_args(macro_name, arg_name, arg)?,
-                )
-            }
-
-            Self::AutoDefine(def_name, expr) => {
-                let mut result_name = def_name.clone();
-                if def_name == arg_name {
-                    result_name = arg.as_ident(macro_name)?
-                }
-
-                Self::AutoDefine(
-                    result_name,
-                    expr.replace_macro_args(macro_name, arg_name, arg)?,
-                )
-            }
-
-            Self::Free(addr, size) => Self::Free(
-                addr.replace_macro_args(macro_name, arg_name, arg)?,
-                size.replace_macro_args(macro_name, arg_name, arg)?,
-            ),
-
-            Self::Return(exprs) => {
-                let mut result = vec![];
-                for expr in exprs {
-                    result.push(expr.replace_macro_args(macro_name, arg_name, arg)?)
-                }
-                Self::Return(result)
-            }
-
-            Self::If(cond, body) => {
-                Self::If(cond.replace_macro_args(macro_name, arg_name, arg)?, {
-                    let mut result = vec![];
-                    for stmt in body {
-                        result.push(stmt.replace_macro_args(macro_name, arg_name, arg)?)
-                    }
-                    result
-                })
-            }
-
-            Self::IfElse(cond, then_body, else_body) => Self::IfElse(
-                cond.replace_macro_args(macro_name, arg_name, arg)?,
-                {
-                    let mut result = vec![];
-                    for stmt in then_body {
-                        result.push(stmt.replace_macro_args(macro_name, arg_name, arg)?)
-                    }
-                    result
-                },
-                {
-                    let mut result = vec![];
-                    for stmt in else_body {
-                        result.push(stmt.replace_macro_args(macro_name, arg_name, arg)?)
-                    }
-                    result
-                },
-            ),
-
-            Self::IfElifElse(cond, then_body, elifs, else_body) => Self::IfElifElse(
-                cond.replace_macro_args(macro_name, arg_name, arg)?,
-                {
-                    let mut result = vec![];
-                    for stmt in then_body {
-                        result.push(stmt.replace_macro_args(macro_name, arg_name, arg)?)
-                    }
-                    result
-                },
-                {
-                    let mut result = vec![];
-                    for (elif_cond, elif_body) in elifs {
-                        let mut result_elif_body = vec![];
-                        for stmt in elif_body {
-                            result_elif_body
-                                .push(stmt.replace_macro_args(macro_name, arg_name, arg)?)
-                        }
-
-                        result.push((
-                            elif_cond.replace_macro_args(macro_name, arg_name, arg)?,
-                            result_elif_body,
-                        ))
-                    }
-                    result
-                },
-                {
-                    let mut result = vec![];
-                    for stmt in else_body {
-                        result.push(stmt.replace_macro_args(macro_name, arg_name, arg)?)
-                    }
-                    result
-                },
-            ),
-
-            Self::While(cond, body) => {
-                Self::While(cond.replace_macro_args(macro_name, arg_name, arg)?, {
-                    let mut result = vec![];
-                    for stmt in body {
-                        result.push(stmt.replace_macro_args(macro_name, arg_name, arg)?)
-                    }
-                    result
-                })
-            }
-
-            Self::For(pre, cond, post, body) => Self::For(
-                Box::new(pre.replace_macro_args(macro_name, arg_name, arg)?),
-                cond.replace_macro_args(macro_name, arg_name, arg)?,
-                Box::new(post.replace_macro_args(macro_name, arg_name, arg)?),
-                {
-                    let mut result = vec![];
-                    for stmt in body {
-                        result.push(stmt.replace_macro_args(macro_name, arg_name, arg)?)
-                    }
-                    result
-                },
-            ),
-
-            Self::ForRange(var, from, to, body) => Self::ForRange(
-                if var == arg_name {
-                    arg.as_ident(macro_name)?
-                } else {
-                    var.clone()
-                },
-                from.replace_macro_args(macro_name, arg_name, arg)?,
-                to.replace_macro_args(macro_name, arg_name, arg)?,
-                {
-                    let mut result = vec![];
-                    for stmt in body {
-                        result.push(stmt.replace_macro_args(macro_name, arg_name, arg)?)
-                    }
-                    result
-                },
-            ),
-
-            Self::AssignVariable(name, expr) => {
-                let mut result_name = name.clone();
-                if name == arg_name {
-                    result_name = arg.as_ident(macro_name)?;
-                }
-
-                Self::AssignVariable(
-                    result_name,
-                    expr.replace_macro_args(macro_name, arg_name, arg)?,
-                )
-            }
-
-            Self::AddAssignVariable(name, expr) => {
-                let mut result_name = name.clone();
-                if name == arg_name {
-                    result_name = arg.as_ident(macro_name)?
-                }
-
-                Self::AddAssignVariable(
-                    result_name,
-                    expr.replace_macro_args(macro_name, arg_name, arg)?,
-                )
-            }
-            Self::SubtractAssignVariable(name, expr) => {
-                let mut result_name = name.clone();
-                if name == arg_name {
-                    result_name = arg.as_ident(macro_name)?
-                }
-
-                Self::SubtractAssignVariable(
-                    result_name,
-                    expr.replace_macro_args(macro_name, arg_name, arg)?,
-                )
-            }
-            Self::MultiplyAssignVariable(name, expr) => {
-                let mut result_name = name.clone();
-                if name == arg_name {
-                    result_name = arg.as_ident(macro_name)?
-                }
-
-                Self::MultiplyAssignVariable(
-                    result_name,
-                    expr.replace_macro_args(macro_name, arg_name, arg)?,
-                )
-            }
-            Self::DivideAssignVariable(name, expr) => {
-                let mut result_name = name.clone();
-                if name == arg_name {
-                    result_name = arg.as_ident(macro_name)?
-                }
-
-                Self::DivideAssignVariable(
-                    result_name,
-                    expr.replace_macro_args(macro_name, arg_name, arg)?,
-                )
-            }
-            Self::AssignAddress(addr, expr) => Self::AssignAddress(
-                addr.replace_macro_args(macro_name, arg_name, arg)?,
-                expr.replace_macro_args(macro_name, arg_name, arg)?,
-            ),
-            Self::AddAssignAddress(addr, expr) => Self::AddAssignAddress(
-                addr.replace_macro_args(macro_name, arg_name, arg)?,
-                expr.replace_macro_args(macro_name, arg_name, arg)?,
-            ),
-            Self::SubtractAssignAddress(addr, expr) => Self::SubtractAssignAddress(
-                addr.replace_macro_args(macro_name, arg_name, arg)?,
-                expr.replace_macro_args(macro_name, arg_name, arg)?,
-            ),
-            Self::MultiplyAssignAddress(addr, expr) => Self::MultiplyAssignAddress(
-                addr.replace_macro_args(macro_name, arg_name, arg)?,
-                expr.replace_macro_args(macro_name, arg_name, arg)?,
-            ),
-            Self::DivideAssignAddress(addr, expr) => Self::DivideAssignAddress(
-                addr.replace_macro_args(macro_name, arg_name, arg)?,
-                expr.replace_macro_args(macro_name, arg_name, arg)?,
-            ),
-        })
-    }
-
     fn to_hir_stmt(&self, decls: &Vec<TirDeclaration>) -> Result<HirStatement, TirError> {
         Ok(match self {
-            Self::MacroCall(macro_name, args) => {
-                for decl in decls {
-                    if let TirDeclaration::Macro(name, params, output) = decl {
-                        if name == macro_name {
-                            if args.len() < params.len() {
-                                return Err(TirError::TooFewMacroArguments(macro_name.clone()))
-                            } else if args.len() > params.len() {
-                                return Err(TirError::TooManyMacroArguments(macro_name.clone()))
-                            }
-                            
-                            let mut result = *output.clone();
-                            for (param, arg) in params.iter().zip(args) {
-                                result = result.replace_macro_args(macro_name, param, arg)?;
-                            }
-                            return result.as_stmt(macro_name)?
-                                         .to_hir_stmt(decls)
-                        }
-                    }
-                }
-
-                return Err(TirError::MacroNotDefined(macro_name.clone()))
-            },
             Self::Define(name, t, expr) => {
                 HirStatement::Define(name.clone(), t.to_hir_type()?, expr.to_hir_expr(decls)?)
             }
@@ -1319,7 +752,7 @@ impl TirStatement {
                 result
             }),
 
-            Self::Expression(expr) => HirStatement::Expression(expr.to_hir_expr(decls)?)
+            Self::Expression(expr) => HirStatement::Expression(expr.to_hir_expr(decls)?),
         })
     }
 }
@@ -1361,206 +794,14 @@ pub enum TirExpression {
     Alloc(Box<Self>),
 
     Call(Identifier, Vec<Self>),
-    MacroCall(Identifier, Vec<TirMacroArgument>),
     ForeignCall(Identifier, Vec<Self>),
     Method(Box<Self>, Identifier, Vec<Self>),
     Index(Box<Self>, Box<Self>),
 }
 
 impl TirExpression {
-    fn replace_macro_args(
-        &self,
-        macro_name: &Identifier,
-        arg_name: &Identifier,
-        arg: &TirMacroArgument,
-    ) -> Result<Self, TirError> {
-        Ok(match self {
-            Self::MacroCall(name, call_args) => {
-                let mut result_name = name.clone();
-                if name == arg_name {
-                    result_name = arg.as_ident(macro_name)?
-                }
-
-                let mut result_args = vec![];
-                for call_arg in call_args {
-                    let mut result_arg = call_arg.clone();
-                    if let TirMacroArgument::Identifier(ident) = call_arg {
-                        if ident == arg_name {
-                            result_arg = arg.clone();
-                        }
-                    }
-
-                    result_args.push(result_arg)
-                }
-                Self::MacroCall(result_name, result_args)
-            }
-
-            Self::Void
-            | Self::True
-            | Self::False
-            | Self::String(_)
-            | Self::Character(_)
-            | Self::Constant(_) => self.clone(),
-            Self::Index(ptr, idx) => Self::Index(
-                Box::new(ptr.replace_macro_args(macro_name, arg_name, arg)?),
-                Box::new(idx.replace_macro_args(macro_name, arg_name, arg)?),
-            ),
-            Self::Method(instance, method_name, call_args) => {
-                let mut result_name = method_name.clone();
-                if method_name == arg_name {
-                    result_name = arg.as_ident(macro_name)?
-                }
-
-                let mut result_args = vec![];
-                for call_arg in call_args {
-                    result_args.push(call_arg.replace_macro_args(macro_name, arg_name, arg)?)
-                }
-
-                Self::Method(
-                    Box::new(instance.replace_macro_args(macro_name, arg_name, arg)?),
-                    result_name,
-                    result_args,
-                )
-            }
-
-            Self::ForeignCall(name, call_args) => {
-                let mut result_name = name.clone();
-                if name == arg_name {
-                    result_name = arg.as_ident(macro_name)?
-                }
-
-                let mut result_args = vec![];
-                for call_arg in call_args {
-                    result_args.push(call_arg.replace_macro_args(macro_name, arg_name, arg)?)
-                }
-
-                Self::ForeignCall(result_name, result_args)
-            }
-
-            Self::Call(name, call_args) => {
-                let mut result_name = name.clone();
-                if name == arg_name {
-                    result_name = arg.as_ident(macro_name)?
-                }
-
-                let mut result_args = vec![];
-                for call_arg in call_args {
-                    result_args.push(call_arg.replace_macro_args(macro_name, arg_name, arg)?)
-                }
-
-                Self::Call(result_name, result_args)
-            }
-            Self::Alloc(expr) => Self::Alloc(Box::new(
-                expr.replace_macro_args(macro_name, arg_name, arg)?,
-            )),
-            Self::Deref(expr) => Self::Deref(Box::new(
-                expr.replace_macro_args(macro_name, arg_name, arg)?,
-            )),
-            
-            Self::Variable(name) => {
-                if name == arg_name {
-                    arg.as_expr(macro_name)?
-                } else {
-                    self.clone()
-                }
-            }
-
-            Self::Refer(name) => {
-                let mut result_name = name.clone();
-                if name == arg_name {
-                    result_name = arg.as_ident(macro_name)?
-                }
-
-                Self::Refer(result_name)
-            }
-            Self::IsMovable(t) => Self::IsMovable(t.replace_macro_args(macro_name, arg_name, arg)?),
-            Self::SizeOf(t) => Self::SizeOf(t.replace_macro_args(macro_name, arg_name, arg)?),
-            Self::Move(expr) => Self::Move(Box::new(
-                expr.replace_macro_args(macro_name, arg_name, arg)?,
-            )),
-            Self::TypeCast(expr, t) => Self::TypeCast(
-                Box::new(expr.replace_macro_args(macro_name, arg_name, arg)?),
-                t.replace_macro_args(macro_name, arg_name, arg)?,
-            ),
-            Self::Add(lhs, rhs) => Self::Add(
-                Box::new(lhs.replace_macro_args(macro_name, arg_name, arg)?),
-                Box::new(rhs.replace_macro_args(macro_name, arg_name, arg)?),
-            ),
-            Self::Subtract(lhs, rhs) => Self::Subtract(
-                Box::new(lhs.replace_macro_args(macro_name, arg_name, arg)?),
-                Box::new(rhs.replace_macro_args(macro_name, arg_name, arg)?),
-            ),
-            Self::Multiply(lhs, rhs) => Self::Multiply(
-                Box::new(lhs.replace_macro_args(macro_name, arg_name, arg)?),
-                Box::new(rhs.replace_macro_args(macro_name, arg_name, arg)?),
-            ),
-            Self::Divide(lhs, rhs) => Self::Divide(
-                Box::new(lhs.replace_macro_args(macro_name, arg_name, arg)?),
-                Box::new(rhs.replace_macro_args(macro_name, arg_name, arg)?),
-            ),
-            Self::Greater(lhs, rhs) => Self::Greater(
-                Box::new(lhs.replace_macro_args(macro_name, arg_name, arg)?),
-                Box::new(rhs.replace_macro_args(macro_name, arg_name, arg)?),
-            ),
-            Self::GreaterEqual(lhs, rhs) => Self::GreaterEqual(
-                Box::new(lhs.replace_macro_args(macro_name, arg_name, arg)?),
-                Box::new(rhs.replace_macro_args(macro_name, arg_name, arg)?),
-            ),
-            Self::Less(lhs, rhs) => Self::Less(
-                Box::new(lhs.replace_macro_args(macro_name, arg_name, arg)?),
-                Box::new(rhs.replace_macro_args(macro_name, arg_name, arg)?),
-            ),
-            Self::LessEqual(lhs, rhs) => Self::LessEqual(
-                Box::new(lhs.replace_macro_args(macro_name, arg_name, arg)?),
-                Box::new(rhs.replace_macro_args(macro_name, arg_name, arg)?),
-            ),
-            Self::Equal(lhs, rhs) => Self::Equal(
-                Box::new(lhs.replace_macro_args(macro_name, arg_name, arg)?),
-                Box::new(rhs.replace_macro_args(macro_name, arg_name, arg)?),
-            ),
-            Self::NotEqual(lhs, rhs) => Self::NotEqual(
-                Box::new(lhs.replace_macro_args(macro_name, arg_name, arg)?),
-                Box::new(rhs.replace_macro_args(macro_name, arg_name, arg)?),
-            ),
-            Self::Not(expr) => Self::Not(Box::new(
-                expr.replace_macro_args(macro_name, arg_name, arg)?,
-            )),
-            Self::Or(lhs, rhs) => Self::Or(
-                Box::new(lhs.replace_macro_args(macro_name, arg_name, arg)?),
-                Box::new(rhs.replace_macro_args(macro_name, arg_name, arg)?),
-            ),
-            Self::And(lhs, rhs) => Self::And(
-                Box::new(lhs.replace_macro_args(macro_name, arg_name, arg)?),
-                Box::new(rhs.replace_macro_args(macro_name, arg_name, arg)?),
-            ),
-        })
-    }
-
     pub fn to_hir_expr(&self, decls: &Vec<TirDeclaration>) -> Result<HirExpression, TirError> {
         Ok(match self {
-            Self::MacroCall(macro_name, args) => {
-                for decl in decls {
-                    if let TirDeclaration::Macro(name, params, output) = decl {
-                        if name == macro_name {
-                            if args.len() < params.len() {
-                                return Err(TirError::TooFewMacroArguments(macro_name.clone()))
-                            } else if args.len() > params.len() {
-                                return Err(TirError::TooManyMacroArguments(macro_name.clone()))
-                            }
-                            
-                            let mut result = *output.clone();
-                            for (param, arg) in params.iter().zip(args) {
-                                result = result.replace_macro_args(macro_name, param, arg)?;
-                            }
-                            return result.as_expr(macro_name)?
-                                         .to_hir_expr(decls)
-                        }
-                    }
-                }
-
-                return Err(TirError::MacroNotDefined(macro_name.clone()))
-            },
-
             Self::IsMovable(t) => {
                 if t.is_movable(decls)? {
                     HirExpression::True
@@ -1573,7 +814,6 @@ impl TirExpression {
             Self::False => HirExpression::False,
             Self::Character(ch) => HirExpression::Character(*ch),
             Self::String(s) => HirExpression::String(s.clone()),
-
             Self::Variable(name) => HirExpression::Variable(name.clone()),
 
             Self::Move(expr) => HirExpression::Move(Box::new(expr.to_hir_expr(decls)?)),

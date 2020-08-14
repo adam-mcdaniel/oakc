@@ -1,6 +1,8 @@
 
 
-type Test(1) {
+struct Test {
+    let _: num;
+
     fn copy(testing: num) {}
 }
 

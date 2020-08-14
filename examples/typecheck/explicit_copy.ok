@@ -1,7 +1,8 @@
 
 
 
-type Test(1) {
+struct Test {
+    let n: num;
     fn new() -> Test { return 0 as Test; }
 }
 

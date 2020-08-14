@@ -22,6 +22,8 @@ pub enum MirError {
     FunctionRedefined(Identifier),
     /// Using a variable without defining it
     VariableNotDefined(Identifier),
+    /// Defining a method multiple times for a type
+    MethodRedefined(MirType, Identifier),
     /// Calling a method for a type where it is not defined
     MethodNotDefined(MirType, Identifier),
     /// Using a structure name as a type without defining it
@@ -106,6 +108,9 @@ impl Display for MirError {
                 write!(f, "attempted to define structure with the primitive type name '{}'", name)
             }
             Self::VariableNotDefined(name) => write!(f, "variable '{}' is not defined", name),
+            Self::MethodRedefined(t, name) => {
+                write!(f, "method '{}' is defined multiple times for type '{}'", name, t)
+            }
             Self::MethodNotDefined(t, name) => {
                 write!(f, "method '{}' is not defined for type '{}'", name, t)
             }
@@ -494,6 +499,9 @@ impl MirStructure {
         // to their method names, such as `Date::day`
         for function in &self.methods {
             let method = function.as_method(&mir_type);
+            if funcs.contains_key(&method.get_name()) {
+                return Err(MirError::MethodRedefined(self.to_mir_type(), function.get_name()))
+            }
             funcs.insert(method.get_name(), method.clone());
         }
 

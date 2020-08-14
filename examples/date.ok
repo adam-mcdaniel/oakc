@@ -1,8 +1,11 @@
 #[std]
 
 // The number of memory cells the `Date` type consumes
-const DATE = 3;
-type Date(DATE) {
+struct Date {
+    let month: num,
+        day: num,
+        year: num;
+
     fn new(month: num, day: num, year: num) -> Date {
         return [month, day, year]
     }
@@ -11,10 +14,6 @@ type Date(DATE) {
         return Date::new(5, 14, 2002);
     }
     
-    fn month(self: &Date) -> &num { return self as &num; }
-    fn day(self: &Date)   -> &num { return (self + 1) as &num; }
-    fn year(self: &Date)  -> &num { return (self + 2) as &num; }
-
     fn tomorrow(self: &Date)  { self->day = self->day + 1; }
     fn yesterday(self: &Date) { self->day = self->day - 1; }
 

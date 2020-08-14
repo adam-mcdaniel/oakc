@@ -1,12 +1,14 @@
 #[std]
 #[memory(128)]
 
-fn inc(n: &num) -> void {
-    *n = (*n) + 1;
-}
-
 fn main() -> void {
-    for (let i=0; i<10; inc(&i)) {
+    let start = 0;
+    let end = 10;
+    for i in start..end {
         putnumln(i);
+    }
+
+    for i in 0..10 {
+        putnumln(i * 10);
     }
 }

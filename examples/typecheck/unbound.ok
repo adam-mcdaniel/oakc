@@ -1,12 +1,12 @@
 #[std]
 
 
-type Test(1) {
+struct Test {
+    let item: num;
+    
     fn new(n: num) -> Test {
         return n as Test;
     }
-
-    fn item(self: &Test) -> &num { return self as &num }
 
     // No copy or drop methods are defined, so `Test`
     // can't possibly manage memory.

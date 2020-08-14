@@ -1,6 +1,8 @@
 
 
-type Test(1) {
+struct Test {
+    let _: void;
+    
     fn drop(_: &num) {}
 }
 

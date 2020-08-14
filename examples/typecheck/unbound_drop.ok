@@ -1,12 +1,12 @@
 #[std]
 
 
-type Test(1) {
+struct Test {
+    let item: num;
+    
     fn new(n: num) -> Test {
         return n as Test;
     }
-
-    fn item(self: &Test) -> &num { return self as &num }
 
     // Defining either the `copy` or `drop` methods for a type will prevent
     // the user from copy-constructing unbound objects.

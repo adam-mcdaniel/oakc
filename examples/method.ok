@@ -1,6 +1,9 @@
 #[std]
 
-type Date(3) {
+struct Date {
+    let month: num,
+        day: num,
+        year: num;
     fn new(month: num, day: num, year: num) -> Date {
         return [month, day, year]
     }
@@ -8,10 +11,6 @@ type Date(3) {
     fn birthday() -> Date {
         return Date::new(5, 14, 2002)
     }
-
-    fn month(self: &Date) -> &num { return self as &num; }
-    fn day(self: &Date)   -> &num { return (self + 1) as &num; }
-    fn year(self: &Date)  -> &num { return (self + 2) as &num; }
 
     fn tmrw(self: &Date) -> Date {
         return Date::new(self->month, self->day + 1, self->year);
@@ -24,9 +23,9 @@ type Date(3) {
     }
 }
 
-type Test(1) {
+struct Test {
+    let n: num;
     fn new(n: num) -> Test { return n as Test; }
-    fn n(self: &Test) -> &num { return self as &num; }
 
     fn print(self: &Test) {
         prs!("test: "); prn!(self->n); prend!();

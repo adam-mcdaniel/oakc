@@ -1,10 +1,10 @@
 #[std]
 
-type Thing(1) {
+struct Thing {
+    let member: num;
     fn new(n: num) -> Thing {
         return n as Thing;
     }
-    fn member(self: &Thing) -> &num { return self as &num }
 }
 
 fn main() {
