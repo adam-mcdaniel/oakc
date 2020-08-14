@@ -61,8 +61,6 @@ impl TirProgram {
     }
 }
 
-
-
 #[derive(Clone, Debug)]
 pub enum TirDeclaration {
     DocumentHeader(String),

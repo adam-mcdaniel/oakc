@@ -500,7 +500,10 @@ impl MirStructure {
         for function in &self.methods {
             let method = function.as_method(&mir_type);
             if funcs.contains_key(&method.get_name()) {
-                return Err(MirError::MethodRedefined(self.to_mir_type(), function.get_name()))
+                return Err(MirError::MethodRedefined(
+                    self.to_mir_type(),
+                    function.get_name(),
+                ));
             }
             funcs.insert(method.get_name(), method.clone());
         }
