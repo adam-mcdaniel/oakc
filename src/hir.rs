@@ -351,8 +351,6 @@ pub enum HirDeclaration {
     Memory(i32),
     RequireStd,
     NoStd,
-    /// Empty HirDeclaration
-    Pass,
 }
 
 #[derive(Clone, Debug)]
