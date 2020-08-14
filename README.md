@@ -196,3 +196,6 @@ main.exe
 
 **Go backend**
     - Golang 1.14 compiler
+
+**TypeScript backend**
+	- TypeScript 3.9 compiler

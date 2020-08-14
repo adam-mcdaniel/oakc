@@ -291,10 +291,6 @@ impl Display for HirType {
 }
 
 impl HirType {
-    fn refer(&self) -> Self {
-        Self::Pointer(Box::new(self.clone()))
-    }
-
     pub fn get_size(
         &self,
         decls: &Vec<HirDeclaration>,
