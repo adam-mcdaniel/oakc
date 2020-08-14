@@ -82,9 +82,12 @@ pub enum MirError {
     /// A bad typecast due to mismatched sizes in types. For example,
     /// a value with size `3` cannot be cast to a number with size `1`
     MismatchedCastSize(MirExpression, MirType),
-    /// Attempted to use a return statement in a conditional expression,
-    /// such as a while loop or if statement
-    ConditionalReturn(String),
+    /// Only one branch of an if-else statement returns in a function
+    OnlyOneBranchReturns(String),
+    /// A single branch if-statement uses a return
+    IfReturns(String),
+    /// Return statement used in a loop in a function
+    LoopReturns(String),
     /// A non-void function never returns
     NonVoidNoReturn(String),
     /// Prevent memory leaks by preventing the user from calling methods
@@ -96,6 +99,21 @@ pub enum MirError {
 impl Display for MirError {
     fn fmt(&self, f: &mut Formatter) -> Result<(), Error> {
         match self {
+            Self::OnlyOneBranchReturns(fn_name) => write!(
+                f,
+                "only one branch of an if-else statement returns in the function '{}'",
+                fn_name
+            ),
+            Self::IfReturns(fn_name) => write!(
+                f,
+                "used a return statement in a single branch if statement in the function '{}'",
+                fn_name
+            ),
+            Self::LoopReturns(fn_name) => write!(
+                f,
+                "used a return statement within a loop in the function '{}'",
+                fn_name
+            ),
             Self::FunctionNotDefined(name) => write!(f, "function '{}' is not defined", name),
             Self::FunctionRedefined(name) => {
                 write!(f, "function '{}' is defined multiple times", name)
@@ -188,11 +206,6 @@ impl Display for MirError {
                 f,
                 "cannot cast expression '{}' to type '{}' due to mismatched sizes",
                 expr, t
-            ),
-            Self::ConditionalReturn(fn_name) => write!(
-                f,
-                "used a return statement within a conditional statement in the function '{}'",
-                fn_name
             ),
             Self::NonVoidNoReturn(fn_name) => write!(
                 f,
@@ -393,21 +406,9 @@ impl MirProgram {
         let mut result = Vec::new();
         for decl in &decls {
             match decl {
-                MirDeclaration::Function(func) => {
-                    let name = func.get_name();
-                    if funcs.contains_key(&name) {
-                        return Err(MirError::FunctionRedefined(name));
-                    } else {
-                        funcs.insert(name, func.clone());
-                    }
-                }
+                MirDeclaration::Function(func) => func.declare(&mut funcs)?,
                 MirDeclaration::Structure(structure) => {
-                    let name = structure.get_name();
-                    if structs.contains_key(&name) {
-                        return Err(MirError::StructureRedefined(name));
-                    } else {
-                        structs.insert(structure.get_name(), structure.clone());
-                    }
+                    structure.declare(&mut funcs, &mut structs)?
                 }
                 MirDeclaration::Extern(filename) => externs.push(filename.clone()),
             }
@@ -471,6 +472,26 @@ impl MirStructure {
         MirType::structure(self.name.clone())
     }
 
+    /// Declare the structure to the compiler WITHOUT assembling it
+    fn declare(
+        &self,
+        funcs: &mut BTreeMap<Identifier, MirFunction>,
+        structs: &mut BTreeMap<Identifier, MirStructure>,
+    ) -> Result<(), MirError> {
+        // Check if the structure has already been declared
+        if structs.contains_key(&self.name) {
+            return Err(MirError::StructureRedefined(self.get_name()));
+        } else {
+            structs.insert(self.get_name(), self.clone());
+        }
+        // Iterate over the methods and rename them
+        // to their method names, such as `Date::day`
+        for function in &self.methods {
+            function.as_method(&self.to_mir_type()).declare(funcs)?;
+        }
+        Ok(())
+    }
+
     fn get_name(&self) -> Identifier {
         self.name.clone()
     }
@@ -496,15 +517,22 @@ impl MirStructure {
         let mut result = Vec::new();
 
         // Iterate over the methods and rename them
-        // to their method names, such as `Date::day`
+        // to their method names, such as `Date::day`.
+        // Add each name to a list to check if any method
+        // is defined more than once.
+        let mut method_names = vec![];
         for function in &self.methods {
             let method = function.as_method(&mir_type);
-            if funcs.contains_key(&method.get_name()) {
+            // If the method name has already been used,
+            // throw an error.
+            if method_names.contains(&method.get_name()) {
                 return Err(MirError::MethodRedefined(
                     self.to_mir_type(),
                     function.get_name(),
                 ));
             }
+            // Add the method to the list of names
+            method_names.push(method.get_name());
             funcs.insert(method.get_name(), method.clone());
         }
 
@@ -550,6 +578,17 @@ impl MirFunction {
         result
     }
 
+    /// Declare this function to the compiler WITHOUT assembling it
+    fn declare(&self, funcs: &mut BTreeMap<Identifier, MirFunction>) -> Result<(), MirError> {
+        // Check if the function has already been declared
+        if funcs.contains_key(&self.name) {
+            Err(MirError::FunctionRedefined(self.get_name()))
+        } else {
+            funcs.insert(self.get_name(), self.clone());
+            Ok(())
+        }
+    }
+
     fn assemble(
         &self,
         funcs: &BTreeMap<Identifier, MirFunction>,
@@ -585,43 +624,22 @@ impl MirFunction {
         // Check return type
         let mut has_returned = false;
         for (i, stmt) in self.body.iter().enumerate() {
-            if let MirStatement::Return(exprs) = stmt {
-                // If the function has already used a return statement,
-                // throw an error.
-                if has_returned {
-                    return Err(MirError::MultipleReturns(self.name.clone()));
-                }
+            // Does the statment return a valid value?
+            let valid_return =
+                stmt.has_valid_return(&self.name, &self.return_type, &vars, funcs, structs)?;
+            // If so, check that the function has not already returned
+            if !has_returned && valid_return {
                 has_returned = true;
-
-                // Get the size of the return statement's stack allocation
-                let mut result_size = 0;
-                for expr in exprs {
-                    result_size += expr.get_type(&vars, funcs, structs)?.get_size(structs)?;
-                }
-
-                // If the result's size is not equal to the size of the
-                // return type, throw a type error.
-                if result_size != self.return_type.get_size(structs)? {
-                    return Err(MirError::MismatchedReturnType(self.name.clone()));
-
-                // If there is only one return argument, check the individual
-                // expression's type against the return type.
-                } else if exprs.len() == 1
-                    && self.return_type != exprs[0].get_type(&vars, funcs, structs)?
-                {
-                    return Err(MirError::MismatchedReturnType(self.name.clone()));
-                }
-            // If a statement has a return statement, but is not a return
-            // statement itself, it must be a conditional return statement
-            } else if stmt.has_return() {
-                return Err(MirError::ConditionalReturn(self.name.clone()));
+            // If the function has already returned, throw an error
+            } else if valid_return {
+                return Err(MirError::MultipleReturns(self.get_name()));
             }
         }
 
         // If the function is non-void and has not returned,
         // then throw an error.
         if !has_returned && self.return_type != MirType::void() {
-            return Err(MirError::NonVoidNoReturn(self.name.clone()));
+            return Err(MirError::NonVoidNoReturn(self.get_name()));
         }
 
         Ok(AsmFunction::new(
@@ -673,6 +691,105 @@ impl MirStatement {
             expr.get_type(vars, funcs, structs)
         } else {
             Ok(MirType::void())
+        }
+    }
+
+    /// Does the statement return a single, valid expression?
+    fn has_valid_return(
+        &self,
+        func_name: &String,
+        return_type: &MirType,
+        vars: &BTreeMap<Identifier, MirType>,
+        funcs: &BTreeMap<Identifier, MirFunction>,
+        structs: &BTreeMap<Identifier, MirStructure>,
+    ) -> Result<bool, MirError> {
+        match self {
+            Self::IfElse(_, then_body, else_body) => {
+                // For each statement in the body, check if the
+                // statement returns a valid expression
+                let mut then_valid = false;
+                for stmt in then_body {
+                    let stmt_valid =
+                        stmt.has_valid_return(func_name, return_type, vars, funcs, structs)?;
+                    // Verify the body hasnt returned yet if this statement returns
+                    if !then_valid && stmt_valid {
+                        then_valid = true;
+                    } else if stmt_valid {
+                        // If this body has returned once already, throw an error
+                        return Err(MirError::MultipleReturns(func_name.clone()));
+                    }
+                }
+
+                // For each statement in the body, check if the
+                // statement returns a valid expression
+                let mut else_valid = false;
+                for stmt in else_body {
+                    let stmt_valid =
+                        stmt.has_valid_return(func_name, return_type, vars, funcs, structs)?;
+                    // Verify the body hasnt returned yet if this statement returns
+                    if !else_valid && stmt_valid {
+                        else_valid = true;
+                    } else if stmt_valid {
+                        // If this body has returned once already, throw an error
+                        return Err(MirError::MultipleReturns(func_name.clone()));
+                    }
+                }
+
+                // If both branches of the if-statement return, then the return is valid
+                if then_valid && else_valid {
+                    Ok(true)
+                // If only one branch returns, throw an error
+                } else if then_valid || else_valid {
+                    Err(MirError::OnlyOneBranchReturns(func_name.clone()))
+                // Otherwise, this branch does not return.
+                } else {
+                    Ok(false)
+                }
+            }
+            Self::Return(exprs) => {
+                // Get the size of the return statement's stack allocation
+                let mut result_size = 0;
+                for expr in exprs {
+                    result_size += expr.get_type(&vars, funcs, structs)?.get_size(structs)?;
+                }
+
+                // If the result's size is not equal to the size of the
+                // return type, throw a type error.
+                if result_size != return_type.get_size(structs)? {
+                    return Err(MirError::MismatchedReturnType(func_name.clone()));
+
+                // If there is only one return argument, check the individual
+                // expression's type against the return type.
+                } else if exprs.len() == 1
+                    && return_type != &exprs[0].get_type(&vars, funcs, structs)?
+                {
+                    return Err(MirError::MismatchedReturnType(func_name.clone()));
+                }
+
+                // If all the above checks passed, this statement returns a valid expression
+                Ok(true)
+            }
+            Self::If(_, body) => {
+                // Check each statement for a return. A single branch if
+                // MUST NOT return.
+                for stmt in body {
+                    if stmt.has_return() {
+                        return Err(MirError::IfReturns(func_name.clone()));
+                    }
+                }
+                Ok(false)
+            }
+
+            // Loops MUST NOT return.
+            Self::While(_, body) | Self::For(_, _, _, body) => {
+                for stmt in body {
+                    if stmt.has_return() {
+                        return Err(MirError::LoopReturns(func_name.clone()));
+                    }
+                }
+                Ok(false)
+            }
+            _ => Ok(false),
         }
     }
 
@@ -1377,7 +1494,7 @@ impl MirExpression {
                 }
             }
 
-            // Typecheck a dereference expression
+            // Typecheck a dereference or move expression
             Self::Deref(expr) | Self::Move(expr) => expr.type_check(vars, funcs, structs)?,
 
             // Typecheck atomic expressions
@@ -1671,6 +1788,13 @@ impl MirExpression {
                         structs,
                         instance_count,
                     )?
+
+                // If the method is being called on a concrete type that isnt a variable,
+                // then the only method names allowed to be called are copy and drop.
+                // This is because the `drop` method be called on a value not bound by a
+                // variable, because the compiler loses it to the stack.
+                // If the object is MOVABLE however, then there's no need to drop the object,
+                // and the method can be called.
                 } else if method_name == "copy"
                     || method_name == "drop"
                     || instance_type.is_movable(structs)
@@ -1700,36 +1824,9 @@ impl MirExpression {
                     )?);
 
                     result
-                } else if let Self::Method(super_instance, _, _) = *expr.clone() {
-                    if super_instance.get_type(vars, funcs, structs)?.is_pointer() {
-                        // Reference the variable storing the object
-                        let instance_var = self.get_instance_var(instance_count);
-
-                        let mut result = Vec::new();
-                        // Push the instance object
-                        result.extend(expr.assemble(vars, funcs, structs, instance_count)?);
-
-                        let self_type = instance_type.to_asm_type(structs)?;
-                        result.extend(vec![
-                            // Store the instance object into a stack variable
-                            AsmStatement::Define(instance_var.clone(), self_type),
-                            AsmStatement::Assign(self_type),
-                        ]);
-
-                        let mut call_args = vec![Self::Refer(instance_var.clone())];
-                        call_args.extend(args.clone());
-
-                        result.extend(Self::Call(func_name, call_args).assemble(
-                            vars,
-                            funcs,
-                            structs,
-                            instance_count,
-                        )?);
-
-                        result
-                    } else {
-                        return Err(MirError::MethodOnUnboundCopyDrop(self.clone()));
-                    }
+                // If the instance being called on is a dereferenced value, then we know
+                // that the original value is bound. Because of this, we don't need to
+                // worry about the drop method here.
                 } else if let Self::Deref(super_instance) = *expr.clone() {
                     if let Self::Method(super_instance, _, _) = *super_instance {
                         // Reference the variable storing the object
