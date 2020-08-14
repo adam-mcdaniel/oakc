@@ -1,6 +1,6 @@
 #[std]
 
-// Assertion fails on Go target
+// Assertion fails on non-C target
 #[assert(TARGET == 'c')]
 
 fn main() {
