@@ -1,0 +1,121 @@
+#[std]
+#[memory(512)]
+
+fn realloc(old_ptr: &char, old_size: num, new_size: num) -> &char {
+    let new_ptr = alloc(new_size) as &char;
+
+    for (let i=0; i<old_size; i=i+1) {
+        new_ptr[i] = old_ptr[i];
+    }
+
+    free old_ptr: old_size;
+
+    return new_ptr
+}
+
+fn strcpy(dst: &char, src: &char) {
+    for (let i=0; src[i] != '\0'; i=i+1) {
+        dst[i] = src[i];
+    }
+    dst[i] = '\0';
+}
+
+fn strlen(str: &char) -> num {
+    for (let i=0; str[i] != '\0'; i=i+1) {}
+    return i
+}
+
+fn strsize(str: &char) -> num { return strlen(str) + 1 }
+
+struct String {
+    let ptr: &char,
+        len: num;
+
+    fn new() -> String {
+        return [alloc(1), 0];
+    }
+
+    fn from(str: &char) -> String {
+        let result = String::new();
+        for (let i=0; str[i] != '\0'; i=i+1) {
+            result.push(str[i]);
+        }
+
+        return result
+    }
+
+    fn push(self: &String, ch: char) {
+        self->len = self->len + 1;
+        self->ptr = realloc(self->ptr, self->len, self->len + 1);
+        (self->ptr)[self->len - 1] = ch;
+        (self->ptr)[self->len] = '\0';
+    }
+
+    fn copy(self: &String) -> String {
+        let ptr = alloc(self->len+1) as &char;
+        strcpy(ptr, self->ptr);
+        return [ptr, self->len]
+    }
+
+    fn drop(self: &String) {
+        free self->ptr: self->len + 1;
+    }
+}
+
+
+fn copy_test(str: String) {
+    str.push('!');
+    str.push('!');
+    putstrln(str->ptr);
+}
+
+
+fn ref_test(str: &String) {
+    str.push('!');
+    str.push('!');
+    putstrln(str->ptr);
+}
+
+
+struct TwoString {
+    let first: String,
+        second: String;
+
+    fn new() -> TwoString {
+        return [
+            String::from("first"),
+            String::from("second")
+        ];
+    }
+}
+
+fn putstringln(s: String) {
+    putstrln(s->ptr);
+}
+
+fn test(s: String) -> String {
+    putstrln(s->ptr);
+    return s
+}
+
+fn puttwostrln(ts: TwoString) {
+    putstringln(ts->first);
+    putstringln(ts->second);
+}
+
+fn main() {
+    let str = String::from("Hello world");
+    copy_test(str);
+    putstrln(str->ptr);
+    ref_test(&str);
+    ref_test(&str);
+    putstrln(str->ptr);
+
+    let ts = TwoString::new();
+    puttwostrln(ts);
+    ref_test(&ts->first);
+    ref_test(&ts->second);
+    puttwostrln(ts);
+    let t = test(String::from("testing"));
+    putstrln(t->ptr);
+}

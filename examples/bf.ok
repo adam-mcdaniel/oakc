@@ -24,7 +24,14 @@ const MAX_LOOP_DEPTH = 32;
 const TAPE_SIZE = 128;
 const MACHINE = 6;
 
-type Machine(MACHINE) {
+struct Machine {
+	let jmp_stack: &num,
+		jmp_counter: num,
+		val_ptr: num,
+		ins_ptr: num,
+		tape: &num,
+		code: &char;
+		
 	fn new(source_code: &char) -> Machine {
 		let jmp_stack = alloc(MAX_LOOP_DEPTH) as &num;
 		let jmp_counter = 0;
@@ -44,12 +51,6 @@ type Machine(MACHINE) {
 		];
 	}
 
-	fn jmp_stack(self: &Machine)   -> &&num  { return self as &&num }
-	fn jmp_counter(self: &Machine) -> &num   { return (self + 1) as &num }
-	fn val_ptr(self: &Machine)     -> &num   { return (self + 2) as &num }
-	fn ins_ptr(self: &Machine)     -> &num   { return (self + 3) as &num }
-	fn tape(self: &Machine)        -> &&num  { return (self + 4) as &&num }
-	fn code(self: &Machine)        -> &&char { return (self + 5) as &&char }
 	fn token(self: &Machine)       -> &char  { return self->code + self->ins_ptr }
 
 	fn plus(self: &Machine)   { self->val = self->val + 1 }
@@ -57,7 +58,7 @@ type Machine(MACHINE) {
 	fn left(self: &Machine)   { self->val_ptr = self->val_ptr - 1 }
 	fn right(self: &Machine)  { self->val_ptr = self->val_ptr + 1 }
 
-	fn in(self: &Machine)  { self->val = get_char() }
+	fn input(self: &Machine)  { self->val = get_char() }
 	fn out(self: &Machine) {
 		if self->val != EOF {
 			putchar((self->val) as char)
@@ -107,7 +108,7 @@ type Machine(MACHINE) {
 			if self->token == '-' { self.minus() }
 			if self->token == '<' { self.left() }
 			if self->token == '>' { self.right() }
-			if self->token == ',' { self.in() }
+			if self->token == ',' { self.input() }
 			if self->token == '.' { self.out() }
 			if self->token == '[' { self.loop() }
 			if self->token == ']' { self.end() }

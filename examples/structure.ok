@@ -1,0 +1,34 @@
+#[std]
+
+
+struct Date {
+    let month: num,
+        day: num,
+        year: num;
+
+    fn new(month: num,
+        day: num,
+        year: num) -> Date {
+        return [ month, day, year ];
+    }
+
+    fn birthday() -> Date {
+        return Date::new(5, 14, 2002);
+    }
+
+    fn print(self: &Date) {
+        putnum(self->month);
+        putchar('/');
+        putnum(self->day);
+        putchar('/');
+        putnumln(self->year);
+    }
+}
+
+
+fn main() {
+    let d = Date::birthday();
+    d.print();
+    d->day += 1;
+    d.print();
+}

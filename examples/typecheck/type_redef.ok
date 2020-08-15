@@ -1,8 +1,8 @@
 
 
 
-type Test(1) {}
-type Test(2) {}
+struct Test { let x: num; }
+struct Test { let x: num; }
 
 fn main() {
     
