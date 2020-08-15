@@ -1,11 +1,8 @@
 
-struct Two {
-    let a: num, b: num;
+type Two(2) {
     fn new() -> Two { return [2, 2] }
 }
-
-struct Three {
-    let a: num, b: num, c: num;
+type Three(3) {
     fn new() -> Three { return [3, 3, 3] }
 }
 

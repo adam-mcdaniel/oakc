@@ -1,10 +1,6 @@
 
 
-struct Date {
-    let month: num,
-        day: num,
-        year: num;
-        
+type Date(3) {
     fn new(m: num, d: num, y: num) -> Date {
         return [m, d, y]
     }

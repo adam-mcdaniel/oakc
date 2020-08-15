@@ -1,13 +1,22 @@
 #[std]
-#[memory(512)]
+#[memory(2048)]
 
-struct Array {
-    let len: num,
-        elem_size: &num,
-        contents: &void;
-
+const ARRAY = 3;
+type Array(ARRAY) {
     fn new(len: num, elem_size: num) -> Array {
         return [len, elem_size, alloc(len * elem_size)]
+    }
+
+    fn len(self: &Array) -> &num {
+        return self as &num
+    }
+
+    fn elem_size(self: &Array) -> &num {
+        return (self + 1) as &num
+    }
+
+    fn contents(self: &Array) -> &&void {
+        return (self + 2) as &&void
     }
 
     fn idx(self: &Array, n: num) -> &void {
@@ -22,32 +31,23 @@ struct Array {
         prend!();
     }
 
-    fn copy(self: &Array) -> Array {
-        let size = (self->len) * (self->elem_size);
-        let ptr = alloc(size) as &char;
-        let self_ptr = (self->contents) as &char;
-        for (let i=0; i < size; i=i+1) {
-            ptr[i] = self_ptr[i];
-        }
-        return [self->len, self->elem_size, self_ptr]
-    }
-
     fn drop(self: &Array) -> void {
         free self->contents: ((self->len) * (self->elem_size));
     }
 }
 
-struct Date {
-    let month: num,
-        day: num,
-        year: num;
-
+const DATE = 3;
+type Date(DATE) {
     fn from(ptr: &void) -> &Date { return ptr as &Date }
     fn new(month: num, day: num, year: num) -> Date {
-        return [month, day, year];
+        return [month, day, year]
     }
 
     fn birthday() -> Date { return Date::new(5, 14, 2002) }
+
+    fn month(self: &Date) -> &num { return self as &num }
+    fn day(self: &Date)   -> &num { return (self + 1) as &num }
+    fn year(self: &Date)  -> &num { return (self + 2) as &num }
 
     fn print(self: &Date) -> void {
         prn!(self->month);
@@ -83,15 +83,17 @@ struct Date {
 }
 
 fn main() -> void {
-    let arr: Array = Array::new(4, sizeof(Date));
+    let arr: Array = Array::new(4, DATE);
     arr.print();
 
     *arr.idx(0) = Date::birthday();
     *arr.idx(1) = Date::birthday().tomorrow();
     *arr.idx(2) = Date::birthday().yesterday();
     *arr.idx(3) = (Date::birthday().next_week()).next_month();
+    // Date::from(arr.idx(1)).print();
     for (let i:num=0; i < arr->len; i=i+1) {
         Date::from(arr.idx(i)).print();
     }
+
     arr.drop();
 }

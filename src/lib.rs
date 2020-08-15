@@ -1,12 +1,11 @@
 #![allow(warnings, clippy, unknown_lints)]
-use std::{collections::BTreeMap, fmt::Display, io::Result, path::PathBuf, process::exit};
+use std::{collections::BTreeMap, io::Result, path::PathBuf, process::exit};
 pub type Identifier = String;
 pub type StringLiteral = String;
 
 pub mod asm;
 pub mod hir;
 pub mod mir;
-pub mod tir;
 use hir::HirProgram;
 
 mod target;
@@ -20,11 +19,6 @@ lalrpop_mod!(pub parser);
 
 pub fn generate_docs(input: impl ToString, filename: impl ToString, target: impl Target) -> String {
     parse(input).generate_docs(filename.to_string(), &target, &mut BTreeMap::new(), false)
-}
-
-fn print_compile_error(e: impl Display) -> ! {
-    eprintln!("compilation error: {}", e.bright_red().underline());
-    exit(1);
 }
 
 pub fn compile(cwd: &PathBuf, input: impl ToString, target: impl Target) -> Result<()> {
@@ -42,11 +36,20 @@ pub fn compile(cwd: &PathBuf, input: impl ToString, target: impl Target) -> Resu
                 } else {
                     target.core_prelude() + &result + &target.core_postlude()
                 }),
-                Err(e) => print_compile_error(e),
+                Err(e) => {
+                    eprintln!("compilation error: {}", e.bright_red().underline());
+                    exit(1);
+                }
             },
-            Err(e) => print_compile_error(e),
+            Err(e) => {
+                eprintln!("compilation error: {}", e.bright_red().underline());
+                exit(1);
+            }
         },
-        Err(e) => print_compile_error(e),
+        Err(e) => {
+            eprintln!("compilation error: {}", e.bright_red().underline());
+            exit(1);
+        }
     }
 }
 
@@ -54,12 +57,7 @@ pub fn parse(input: impl ToString) -> HirProgram {
     let code = &strip(input.to_string()).unwrap();
     match parser::ProgramParser::new().parse(code) {
         // if the parser succeeds, build will succeed
-        Ok(parsed) => match parsed.compile() {
-            Ok(result) => result,
-            Err(e) => {
-                print_compile_error(e);
-            }
-        },
+        Ok(parsed) => parsed,
         // if the parser succeeds, annotate code with comments
         Err(e) => {
             eprintln!("{}", format_error(&code, e));
