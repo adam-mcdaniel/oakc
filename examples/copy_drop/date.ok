@@ -1,0 +1,65 @@
+#[std]
+
+struct Date {
+    let m: num,
+        d: num,
+        y: num;
+
+    fn new(m: num, d: num, y: num) -> Date {
+        putstr("Date is movable: ");
+        putboolln(is_movable(Date));
+        return [m, d, y]
+    }
+
+    fn birthday() -> Date {
+        return Date::new(5, 14, 2002);
+    }
+}
+
+
+struct A {
+    let x: &num;
+    fn new(x: &num) -> A {
+        putstr("A is movable: ");
+        putboolln(is_movable(A));
+        return x as A;
+    }
+}
+
+struct Test {
+    let first: Date,
+        second: Date;
+
+    fn new(first: Date, second: Date) -> Test {
+        putstr("Test is movable: ");
+        putboolln(is_movable(Test));
+        return [first, second];
+    }
+}
+
+
+fn print_date(d: Date) {
+    putnum(d->m);
+    putchar('/');
+    putnum(d->d);
+    putchar('/');
+    putnumln(d->y);
+}
+
+fn add_one(d: Date) -> Date {
+    d->m += 1;
+    return d;
+}
+
+fn main() {
+    let d = Date::birthday();
+
+    print_date(d);
+    d->d += 1;
+    print_date(d);
+    d->d += 1;
+    print_date(d);
+    
+    let test = add_one(d);
+    print_date(test);
+}
