@@ -470,7 +470,7 @@ impl TirStructure {
             if method.is_valid_copy(&self.name)? {
                 default_copy = false;
             }
-            
+
             // If the method is a drop destructor, mark `default_drop` as false
             if method.is_valid_drop(&self.name)? {
                 default_drop = false;
@@ -481,7 +481,7 @@ impl TirStructure {
             // If any of the structure's members are not movable,
             // then this structure cannot be movable.
             if !t.is_movable(decls)? {
-                return Ok(false)
+                return Ok(false);
             }
         }
         // If either a `copy` or `drop` is implemented manually,
@@ -491,7 +491,7 @@ impl TirStructure {
 
     fn to_hir_struct(&mut self, decls: &Vec<TirDeclaration>) -> Result<HirStructure, TirError> {
         // Check if the structure is movable BEFORE the copy
-        // and drop functions are automatically added. If the 
+        // and drop functions are automatically added. If the
         // copy and drop methods are added before the movability is checked,
         // then `is_movable` will automatically be false.
         let is_movable = self.is_movable(decls)?;
@@ -504,9 +504,10 @@ impl TirStructure {
         // Store all the previous member's types for each member
         // to create a getter/setter method for each member.
         let mut previous_member_types = vec![];
+        
         // Keep track of the size of the structure
-
         let mut size = HirConstant::Float(0.0);
+        
         for (name, t) in &self.members {
             // Add the member function to the list of methods
             methods.push(
@@ -523,7 +524,7 @@ impl TirStructure {
             previous_member_types.push(t.clone())
         }
 
-        // In addition to the member methods, 
+        // In addition to the member methods,
         // add each of the structures explicit methods
         for method in &self.methods {
             methods.push(method.to_hir_fn(decls)?)
@@ -582,7 +583,7 @@ pub enum TirConstant {
     True,
     /// False constant
     False,
-    
+
     /// Add two constants
     Add(Box<Self>, Box<Self>),
     /// Subtract two constants
@@ -591,7 +592,7 @@ pub enum TirConstant {
     Multiply(Box<Self>, Box<Self>),
     /// Divide two constants
     Divide(Box<Self>, Box<Self>),
-    
+
     /// And two constants
     And(Box<Self>, Box<Self>),
     /// Or two constants
