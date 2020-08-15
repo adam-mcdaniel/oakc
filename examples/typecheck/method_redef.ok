@@ -1,8 +1,0 @@
-struct Test {
-    let _: void;
-
-    fn test(self: &Test) {}
-    fn test(self: &Test) {}
-}
-
-fn main() {}

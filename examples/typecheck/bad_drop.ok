@@ -1,9 +1,0 @@
-
-
-struct Test {
-    let _: void;
-    
-    fn drop(_: &num) {}
-}
-
-fn main() {}

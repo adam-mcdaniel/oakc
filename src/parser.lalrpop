@@ -1,34 +1,33 @@
 
-use crate::{Identifier, tir::{TirProgram, TirDeclaration, TirStructure, TirFunction, TirExpression, TirConstant, TirStatement, TirType}};
+use crate::{Identifier, hir::{HirProgram, HirDeclaration, HirStructure, HirFunction, HirExpression, HirConstant, HirStatement, HirType}};
 
 grammar;
 
-pub Program: TirProgram = <(Declaration)*> => TirProgram::new(<>, 512);
+pub Program: HirProgram = <(Declaration)*> => HirProgram::new(<>, 512);
 
-Declaration: TirDeclaration = {
-    "#" "[" "header" "(" <Str> ")" "]" => TirDeclaration::DocumentHeader(<>),
-    "#" "[" "std" "]" => TirDeclaration::RequireStd,
-    "#" "[" "no_std" "]" => TirDeclaration::NoStd,
-    "#" "[" "assert" "(" <Constant> ")" "]" => TirDeclaration::Assert(<>),
-    "#" "[" "extern" "(" <Str> ")" "]" => TirDeclaration::Extern(<>),
-    "#" "[" "include" "(" <Str> ")" "]" => TirDeclaration::Include(<>),
-    "#" "[" "memory" "(" <Num> ")" "]" => TirDeclaration::Memory(<> as i32),
-    "#" "[" "error" "(" <Str> ")" "]" => TirDeclaration::Error(<>),
-    "#" "[" "if" "(" <cond:Constant> ")" "{" <code:Program> "}" "]" => TirDeclaration::If(cond, code),
-    "#" "[" "if" "(" <cond:Constant> ")" "{" <then_code:Program> "}" "else" "{" <else_code:Program> "}" "]" => TirDeclaration::IfElse(cond, then_code, else_code),
-    "#" "[" "define" "(" <name:Str> "," <constant:Constant> ")" "]" => TirDeclaration::Constant(None, name, constant),
-    "#" "[" "doc" "(" <doc:Str> ")" "]" "const" <name:Ident> "=" <constant:Constant> ";" => TirDeclaration::Constant(Some(doc), name, constant),
-    "const" <name:Ident> "=" <constant:Constant> ";" => TirDeclaration::Constant(None, name, constant),
-    <Function> => TirDeclaration::Function(<>),
-    <Structure> => TirDeclaration::Structure(<>),
+Declaration: HirDeclaration = {
+    "#" "[" "header" "(" <Str> ")" "]" => HirDeclaration::DocumentHeader(<>),
+    "#" "[" "std" "]" => HirDeclaration::RequireStd,
+    "#" "[" "no_std" "]" => HirDeclaration::NoStd,
+    "#" "[" "assert" "(" <Constant> ")" "]" => HirDeclaration::Assert(<>),
+    "#" "[" "extern" "(" <Str> ")" "]" => HirDeclaration::Extern(<>),
+    "#" "[" "include" "(" <Str> ")" "]" => HirDeclaration::Include(<>),
+    "#" "[" "memory" "(" <Num> ")" "]" => HirDeclaration::Memory(<> as i32),
+    "#" "[" "error" "(" <Str> ")" "]" => HirDeclaration::Error(<>),
+    "#" "[" "if" "(" <cond:Constant> ")" "{" <code:Program> "}" "]" => HirDeclaration::If(cond, code),
+    "#" "[" "if" "(" <cond:Constant> ")" "{" <then_code:Program> "}" "else" "{" <else_code:Program> "}" "]" => HirDeclaration::IfElse(cond, then_code, else_code),
+    "#" "[" "define" "(" <name:Str> "," <constant:Constant> ")" "]" => HirDeclaration::Constant(None, name, constant),
+    "#" "[" "doc" "(" <doc:Str> ")" "]" "const" <name:Ident> "=" <constant:Constant> ";" => HirDeclaration::Constant(Some(doc), name, constant),
+    "const" <name:Ident> "=" <constant:Constant> ";" => HirDeclaration::Constant(None, name, constant),
+    <Function> => HirDeclaration::Function(<>),
+    <Structure> => HirDeclaration::Structure(<>),
 }
 
 Str: String = <s:r#""(\\.|[^"])*""#> => String::from(&s[1..s.len()-1]).replace("\\\"", "\"").replace("\\n", "\n").replace("\\r", "\r").replace("\\t", "\t").replace("\\0", "\0");
 Char: char = <s:r#"'(\\.|[^'])'"#> => s.replace("\\'", "'").replace("\\n", "\n").replace("\\r", "\r").replace("\\t", "\t").replace("\\0", "\0").chars().nth(1).unwrap() as char;
 
 Num: f64 = {
-    // r"([0-9]+([.][0-9]*)?|[.][0-9]+)" => <>.to_string().parse::<f64>().unwrap(),
-    r"([1-9][0-9]*|[0])([.][0-9]+)?" => <>.to_string().parse::<f64>().unwrap(),
+    r"([0-9]+([.][0-9]*)?|[.][0-9]+)" => <>.to_string().parse::<f64>().unwrap(),
 }
 
 Ident: Identifier = {
@@ -57,191 +56,163 @@ List<Begin, T, Sep, End>: Vec<T> = {
     }
 }
 
-Constant: TirConstant = <ConstantMathBottom> => <>;
+Constant: HirConstant = <ConstantMathBottom> => <>;
 
-ConstantAtom: TirConstant = {
-    "is_movable" "(" <Type> ")" => TirConstant::IsMovable(<>),
-    "sizeof" "(" <Type> ")" => TirConstant::SizeOf(<>),
-    "is_defined" "(" <Str> ")" => TirConstant::IsDefined(<>),
-    "true" => TirConstant::True,
-    "false" => TirConstant::False,
-    <Ident> => TirConstant::Constant(<>),
-    <Num> => TirConstant::Float(<>),
-    <Char> => TirConstant::Character(<>),
-    "-" <ConstantAtom> => TirConstant::Subtract(Box::new(TirConstant::Float(0.0)), Box::new(<>)),
-    "!" <ConstantAtom> => TirConstant::Not(Box::new(<>))
+ConstantAtom: HirConstant = {
+    "sizeof" "(" <Type> ")" => HirConstant::SizeOf(<>),
+    "isdef" "(" <Str> ")" => HirConstant::IsDefined(<>),
+    "true" => HirConstant::True,
+    "false" => HirConstant::False,
+    <Ident> => HirConstant::Constant(<>),
+    <Num> => HirConstant::Float(<>),
+    <Char> => HirConstant::Character(<>),
+    "-" <ConstantAtom> => HirConstant::Subtract(Box::new(HirConstant::Float(0.0)), Box::new(<>)),
+    "!" <ConstantAtom> => HirConstant::Not(Box::new(<>))
 }
 
-ConstantMathBottom: TirConstant = {
-    <l:ConstantMathLow> "&&" <r:ConstantMathLow> => TirConstant::And(Box::new(l), Box::new(r)),
-    <l:ConstantMathLow> "||" <r:ConstantMathLow> => TirConstant::Or(Box::new(l), Box::new(r)),
+ConstantMathBottom: HirConstant = {
+    <l:ConstantMathLow> "&&" <r:ConstantMathLow> => HirConstant::And(Box::new(l), Box::new(r)),
+    <l:ConstantMathLow> "||" <r:ConstantMathLow> => HirConstant::Or(Box::new(l), Box::new(r)),
     <ConstantMathLow> => <>
 }
 
-ConstantMathLow: TirConstant = {
-    <l:ConstantMathMiddle> "==" <r:ConstantMathMiddle> => TirConstant::Equal(Box::new(l), Box::new(r)),
-    <l:ConstantMathMiddle> "!=" <r:ConstantMathMiddle> => TirConstant::NotEqual(Box::new(l), Box::new(r)),
-    <l:ConstantMathMiddle> ">=" <r:ConstantMathMiddle> => TirConstant::GreaterEqual(Box::new(l), Box::new(r)),
-    <l:ConstantMathMiddle> ">" <r:ConstantMathMiddle>  => TirConstant::Greater(Box::new(l), Box::new(r)),
-    <l:ConstantMathMiddle> "<=" <r:ConstantMathMiddle> => TirConstant::LessEqual(Box::new(l), Box::new(r)),
-    <l:ConstantMathMiddle> "<" <r:ConstantMathMiddle>  => TirConstant::Less(Box::new(l), Box::new(r)),
+ConstantMathLow: HirConstant = {
+    <l:ConstantMathMiddle> "==" <r:ConstantMathMiddle> => HirConstant::Equal(Box::new(l), Box::new(r)),
+    <l:ConstantMathMiddle> "!=" <r:ConstantMathMiddle> => HirConstant::NotEqual(Box::new(l), Box::new(r)),
+    <l:ConstantMathMiddle> ">=" <r:ConstantMathMiddle> => HirConstant::GreaterEqual(Box::new(l), Box::new(r)),
+    <l:ConstantMathMiddle> ">" <r:ConstantMathMiddle> => HirConstant::Greater(Box::new(l), Box::new(r)),
+    <l:ConstantMathMiddle> "<=" <r:ConstantMathMiddle> => HirConstant::LessEqual(Box::new(l), Box::new(r)),
+    <l:ConstantMathMiddle> "<" <r:ConstantMathMiddle> => HirConstant::Less(Box::new(l), Box::new(r)),
     <ConstantMathMiddle> => <>
 }
 
-ConstantMathMiddle: TirConstant = {
-    <l:ConstantMathHigh> "+" <r:ConstantMathHigh> => TirConstant::Add(Box::new(l), Box::new(r)),
-    <l:ConstantMathHigh> "-" <r:ConstantMathHigh> => TirConstant::Subtract(Box::new(l), Box::new(r)),
+ConstantMathMiddle: HirConstant = {
+    <l:ConstantMathHigh> "+" <r:ConstantMathHigh> => HirConstant::Add(Box::new(l), Box::new(r)),
+    <l:ConstantMathHigh> "-" <r:ConstantMathHigh> => HirConstant::Subtract(Box::new(l), Box::new(r)),
     <ConstantMathHigh> => <>
 }
 
-ConstantMathHigh: TirConstant = {
-    <l:ConstantAtom> "*" <r:ConstantAtom> => TirConstant::Multiply(Box::new(l), Box::new(r)),
-    <l:ConstantAtom> "/" <r:ConstantAtom> => TirConstant::Divide(Box::new(l), Box::new(r)),
+ConstantMathHigh: HirConstant = {
+    <l:ConstantAtom> "*" <r:ConstantAtom> => HirConstant::Multiply(Box::new(l), Box::new(r)),
+    <l:ConstantAtom> "/" <r:ConstantAtom> => HirConstant::Divide(Box::new(l), Box::new(r)),
     <ConstantAtom> => <>
 }
 
-Function: TirFunction = {
-    "#" "[" "doc" "(" <doc:Str> ")" "]" "fn" <name:Ident> <args:List<"(", (Ident ":" Type), ",", ")">> <body:Body> => TirFunction::new(Some(doc), name, args.iter().map(|(a, _, t)| (a.clone(), t.clone())).collect(), TirType::Void, body),
-    "#" "[" "doc" "(" <doc:Str> ")" "]" "fn" <name:Ident> <args:List<"(", (Ident ":" Type), ",", ")">> "->" <return_type:Type> <body:Body> => TirFunction::new(Some(doc), name, args.iter().map(|(a, _, t)| (a.clone(), t.clone())).collect(), return_type, body),
-    "fn" <name:Ident> <args:List<"(", (Ident ":" Type), ",", ")">> <body:Body> => TirFunction::new(None, name, args.iter().map(|(a, _, t)| (a.clone(), t.clone())).collect(), TirType::Void, body),
-    "fn" <name:Ident> <args:List<"(", (Ident ":" Type), ",", ")">> "->" <return_type:Type> <body:Body> => TirFunction::new(None, name, args.iter().map(|(a, _, t)| (a.clone(), t.clone())).collect(), return_type, body),
+Function: HirFunction = {
+    "#" "[" "doc" "(" <doc:Str> ")" "]" "fn" <name:Ident> <args:List<"(", (Ident ":" Type), ",", ")">> <body:Body> => HirFunction::new(Some(doc), name, args.iter().map(|(a, _, t)| (a.clone(), t.clone())).collect(), HirType::Void, body),
+    "#" "[" "doc" "(" <doc:Str> ")" "]" "fn" <name:Ident> <args:List<"(", (Ident ":" Type), ",", ")">> "->" <return_type:Type> <body:Body> => HirFunction::new(Some(doc), name, args.iter().map(|(a, _, t)| (a.clone(), t.clone())).collect(), return_type, body),
+    "fn" <name:Ident> <args:List<"(", (Ident ":" Type), ",", ")">> <body:Body> => HirFunction::new(None, name, args.iter().map(|(a, _, t)| (a.clone(), t.clone())).collect(), HirType::Void, body),
+    "fn" <name:Ident> <args:List<"(", (Ident ":" Type), ",", ")">> "->" <return_type:Type> <body:Body> => HirFunction::new(None, name, args.iter().map(|(a, _, t)| (a.clone(), t.clone())).collect(), return_type, body),
 }
 
-Structure: TirStructure = {
-    "#" "[" "doc" "(" <doc:Str> ")" "]" "struct" <name:Ident> "{" <members: List<"let", (Ident ":" Type), ",", ";">> <methods:Function*> "}" => TirStructure::new(Some(doc), name, members.iter().map(|(a, _, t)| (a.clone(), t.clone())).collect(), methods),
-    "struct" <name:Ident> "{" <members: List<"let", (Ident ":" Type), ",", ";">> <methods:Function*> "}" => TirStructure::new(None, name, members.iter().map(|(a, _, t)| (a.clone(), t.clone())).collect(), methods),
+Structure: HirStructure = {
+    "#" "[" "doc" "(" <doc:Str> ")" "]" "type" <name:Ident> "(" <size:Constant> ")" "{" <methods:Function*> "}" => HirStructure::new(Some(doc), name, size, methods),
+    "type" <name:Ident> "(" <size:Constant> ")" "{" <methods:Function*> "}" => HirStructure::new(None, name, size, methods),
 }
 
-Body: Vec<TirStatement> = "{" <head: Statement*> <tail: SmallStatement?> "}" => {
+Body: Vec<HirStatement> = "{" <head: Statement*> <tail: SmallStatement?> "}" => {
     let mut result = Vec::new();
     for stmt in head { result.push(stmt) }
     if let Some(stmt) = tail { result.push(stmt) }
     result
 };
 
-Type: TirType = {
-    "&" <Type> => TirType::Pointer(Box::new(<>)),
-    "&&" <Type> => TirType::Pointer(Box::new(TirType::Pointer(Box::new(<>)))),
-    "void" => TirType::Void,
-    "num"  => TirType::Float,
-    "bool" => TirType::Boolean,
-    "char" => TirType::Character,
-    <Ident> => TirType::Structure(<>)
+Type: HirType = {
+    "&" <Type> => HirType::Pointer(Box::new(<>)),
+    "&&" <Type> => HirType::Pointer(Box::new(HirType::Pointer(Box::new(<>)))),
+    "void" => HirType::Void,
+    "num"  => HirType::Float,
+    "bool" => HirType::Boolean,
+    "char" => HirType::Character,
+    <Ident> => HirType::Structure(<>)
 }
 
-Statement: TirStatement = {
+Statement: HirStatement = {
     <BodyStatement> => <>,
     <SmallStatement> ";" => <>
 }
 
-BodyStatement: TirStatement = {
-    "for" "(" <pre:SmallStatement> ";" <cond:Expression> ";" <post:SmallStatement> ")" <body:Body> => TirStatement::For(Box::new(pre), cond, Box::new(post), body),
-    "for" <var:Ident> "in" <from:Expression> ".." <to:Expression> <body:Body> => TirStatement::ForRange(var, from, to, body),
-    "while" <cond:Expression> <body:Body> => TirStatement::While(cond, body),
-    "if" <cond:Expression> <body:Body> => TirStatement::If(cond, body),
-    "if" <cond:Expression> <then_body:Body> "else" <else_body:Body> => TirStatement::IfElse(cond, then_body, else_body),
-    "if" <cond:Expression>  <then_body:Body> <elifs:("else" "if" Expression Body)+> "else" <else_body:Body> => {
-        TirStatement::IfElifElse(cond, then_body, elifs.iter().map(|(_, _, cond, body)| (cond.clone(), body.clone())).collect(), else_body)
-    },
+BodyStatement: HirStatement = {
+    "for" "(" <pre:SmallStatement> ";" <cond:Expression> ";" <post:SmallStatement> ")" <body:Body> => HirStatement::For(Box::new(pre), cond, Box::new(post), body),
+    "while" <cond:Expression> <body:Body> => HirStatement::While(cond, body),
+    "if" <cond:Expression> <body:Body> => HirStatement::If(cond, body),
+    "if" <cond:Expression> <then_body:Body> "else" <else_body:Body> => HirStatement::IfElse(cond, then_body, else_body),
 }
 
-SmallStatement: TirStatement = {
-    "return" <exprs:List<"[", Expression, ",", "]">> => TirStatement::Return(exprs),
-    "return" <expr:Expression> => TirStatement::Return(vec![expr]),
-    "free" <addr:Expression> ":" <size:Expression> => TirStatement::Free(addr, size),
-    "let" <name:Ident> "=" <expr:Expression> => TirStatement::AutoDefine(name, expr),
-    "let" <name:Ident> ":" <t:Type> "=" <expr:Expression> => TirStatement::Define(name, t, expr),
+SmallStatement: HirStatement = {
+    "return" <exprs:List<"[", Expression, ",", "]">> => HirStatement::Return(exprs),
+    "return" <expr:Expression> => HirStatement::Return(vec![expr]),
+    "free" <addr:Expression> ":" <size:Expression> => HirStatement::Free(addr, size),
+    "let" <name:Ident> "=" <expr:Expression> => HirStatement::AutoDefine(name, expr),
+    "let" <name:Ident> ":" <t:Type> "=" <expr:Expression> => HirStatement::Define(name, t, expr),
+    <name:Ident> "=" <expr:Expression> => HirStatement::AssignVariable(name, expr),
+    "*" <lhs:Expression> "=" <rhs:Expression> => HirStatement::AssignAddress(lhs, rhs),
+    <ptr:ExpressionAtom> "[" <idx:Expression> "]" "=" <rhs:Expression> => HirStatement::AssignAddress(HirExpression::Index(Box::new(ptr), Box::new(idx)), rhs),
+    <instance:ExpressionAtom> "->" <name:Ident> "=" <rhs:Expression> => HirStatement::AssignAddress(HirExpression::Method(Box::new(instance), name, vec![]), rhs),
 
-    <name:Ident> "=" <expr:Expression> => TirStatement::AssignVariable(name, expr),
-    <name:Ident> "+=" <expr:Expression> => TirStatement::AddAssignVariable(name, expr),
-    <name:Ident> "-=" <expr:Expression> => TirStatement::SubtractAssignVariable(name, expr),
-    <name:Ident> "*=" <expr:Expression> => TirStatement::MultiplyAssignVariable(name, expr),
-    <name:Ident> "/=" <expr:Expression> => TirStatement::DivideAssignVariable(name, expr),
-
-    "*" <lhs:Expression> "=" <rhs:Expression> => TirStatement::AssignAddress(lhs, rhs),
-    "*" <lhs:Expression> "+=" <rhs:Expression> => TirStatement::AddAssignAddress(lhs, rhs),
-    "*" <lhs:Expression> "-=" <rhs:Expression> => TirStatement::SubtractAssignAddress(lhs, rhs),
-    "*" <lhs:Expression> "*=" <rhs:Expression> => TirStatement::MultiplyAssignAddress(lhs, rhs),
-    "*" <lhs:Expression> "/=" <rhs:Expression> => TirStatement::DivideAssignAddress(lhs, rhs),
-
-    <ptr:ExpressionAtom> "[" <idx:Expression> "]" "=" <rhs:Expression> => TirStatement::AssignAddress(TirExpression::Index(Box::new(ptr), Box::new(idx)), rhs),
-    <ptr:ExpressionAtom> "[" <idx:Expression> "]" "+=" <rhs:Expression> => TirStatement::AddAssignAddress(TirExpression::Index(Box::new(ptr), Box::new(idx)), rhs),
-    <ptr:ExpressionAtom> "[" <idx:Expression> "]" "-=" <rhs:Expression> => TirStatement::SubtractAssignAddress(TirExpression::Index(Box::new(ptr), Box::new(idx)), rhs),
-    <ptr:ExpressionAtom> "[" <idx:Expression> "]" "*=" <rhs:Expression> => TirStatement::MultiplyAssignAddress(TirExpression::Index(Box::new(ptr), Box::new(idx)), rhs),
-    <ptr:ExpressionAtom> "[" <idx:Expression> "]" "/=" <rhs:Expression> => TirStatement::DivideAssignAddress(TirExpression::Index(Box::new(ptr), Box::new(idx)), rhs),
-
-    <instance:ExpressionAtom> "->" <name:Ident> "=" <rhs:Expression> => TirStatement::AssignAddress(TirExpression::Method(Box::new(instance), name, vec![]), rhs),
-    <instance:ExpressionAtom> "->" <name:Ident> "+=" <rhs:Expression> => TirStatement::AddAssignAddress(TirExpression::Method(Box::new(instance), name, vec![]), rhs),
-    <instance:ExpressionAtom> "->" <name:Ident> "-=" <rhs:Expression> => TirStatement::SubtractAssignAddress(TirExpression::Method(Box::new(instance), name, vec![]), rhs),
-    <instance:ExpressionAtom> "->" <name:Ident> "*=" <rhs:Expression> => TirStatement::MultiplyAssignAddress(TirExpression::Method(Box::new(instance), name, vec![]), rhs),
-    <instance:ExpressionAtom> "->" <name:Ident> "/=" <rhs:Expression> => TirStatement::DivideAssignAddress(TirExpression::Method(Box::new(instance), name, vec![]), rhs),
-
-    <Expression> => TirStatement::Expression(<>)
+    <Expression> => HirStatement::Expression(<>)
 }
 
-Expression: TirExpression = {
-    <expr:ExpressionAtom> "as" <t:Type> => TirExpression::TypeCast(Box::new(expr), t),
-    "*" <ptr:ExpressionBottom> => TirExpression::Deref(Box::new(ptr)),
+Expression: HirExpression = {
+    <expr:ExpressionAtom> "as" <t:Type> => HirExpression::TypeCast(Box::new(expr), t),
+    "*" <ptr:ExpressionBottom> => HirExpression::Deref(Box::new(ptr)),
     <ExpressionBottom> => <>,
 }
 
-ExpressionAtom: TirExpression = {
-    "is_movable" "(" <Type> ")" => TirExpression::IsMovable(<>),
-    "is_defined" "(" <Str> ")" => TirExpression::Constant(TirConstant::IsDefined(<>)),
-    "move" "(" <val:Expression> ")" => TirExpression::Move(Box::new(val)),
-    "sizeof" "(" <Type> ")" => TirExpression::SizeOf(<>),
-    "alloc" "(" <size:Expression> ")" => TirExpression::Alloc(Box::new(size)),
-    <name:Ident> <args:List<"(", Expression, ",", ")">> => TirExpression::Call(name, args),
-    <name:Ident> "!" <args:List<"(", Expression, ",", ")">> => TirExpression::ForeignCall(name, args),
+ExpressionAtom: HirExpression = {
+    "sizeof" "(" <Type> ")" => HirExpression::SizeOf(<>),
+    "alloc" "(" <size:Expression> ")" => HirExpression::Alloc(Box::new(size)),
+    <name:Ident> <args:List<"(", Expression, ",", ")">> => HirExpression::Call(name, args),
+    <name:Ident> "!" <args:List<"(", Expression, ",", ")">> => HirExpression::ForeignCall(name, args),
 
-    "true" => TirExpression::True,
-    "false" => TirExpression::False,
-    <Ident> => TirExpression::Variable(<>),
-    <Str> => TirExpression::String(<>),
+    "true" => HirExpression::True,
+    "false" => HirExpression::False,
+    <Ident> => HirExpression::Variable(<>),
+    <Str> => HirExpression::String(<>),
 
-    "@" => TirExpression::Void,
-    <Num> => TirExpression::Constant(TirConstant::Float(<>)),
-    <Char> => TirExpression::Character(<>),
+    "@" => HirExpression::Void,
+    <Num> => HirExpression::Constant(HirConstant::Float(<>)),
+    <Char> => HirExpression::Character(<>),
 
-    "!" <ExpressionAtom> => TirExpression::Not(Box::new(<>)),
+    "!" <ExpressionAtom> => HirExpression::Not(Box::new(<>)),
     "(" <Expression> ")" => <>,
-    "-" <ExpressionAtom> => TirExpression::Subtract(Box::new(TirExpression::Constant(TirConstant::Float(0.0))), Box::new(<>)),
+    "-" <ExpressionAtom> => HirExpression::Subtract(Box::new(HirExpression::Constant(HirConstant::Float(0.0))), Box::new(<>)),
 }
 
 
-ExpressionBottom: TirExpression = {
-    <l:ExpressionLow> "&&" <r:ExpressionLow> => TirExpression::And(Box::new(l), Box::new(r)),
-    <l:ExpressionLow> "||" <r:ExpressionLow> => TirExpression::Or(Box::new(l), Box::new(r)),
+ExpressionBottom: HirExpression = {
+    <l:ExpressionLow> "&&" <r:ExpressionLow> => HirExpression::And(Box::new(l), Box::new(r)),
+    <l:ExpressionLow> "||" <r:ExpressionLow> => HirExpression::Or(Box::new(l), Box::new(r)),
     <ExpressionLow> => <>
 }
 
-ExpressionLow: TirExpression = {
-    <l:ExpressionMiddle> "==" <r:ExpressionMiddle> => TirExpression::Equal(Box::new(l), Box::new(r)),
-    <l:ExpressionMiddle> "!=" <r:ExpressionMiddle> => TirExpression::NotEqual(Box::new(l), Box::new(r)),
-    <l:ExpressionMiddle> ">=" <r:ExpressionMiddle> => TirExpression::GreaterEqual(Box::new(l), Box::new(r)),
-    <l:ExpressionMiddle> ">" <r:ExpressionMiddle>  => TirExpression::Greater(Box::new(l), Box::new(r)),
-    <l:ExpressionMiddle> "<=" <r:ExpressionMiddle> => TirExpression::LessEqual(Box::new(l), Box::new(r)),
-    <l:ExpressionMiddle> "<" <r:ExpressionMiddle>  => TirExpression::Less(Box::new(l), Box::new(r)),
+ExpressionLow: HirExpression = {
+    <l:ExpressionMiddle> "==" <r:ExpressionMiddle> => HirExpression::Equal(Box::new(l), Box::new(r)),
+    <l:ExpressionMiddle> "!=" <r:ExpressionMiddle> => HirExpression::NotEqual(Box::new(l), Box::new(r)),
+    <l:ExpressionMiddle> ">=" <r:ExpressionMiddle> => HirExpression::GreaterEqual(Box::new(l), Box::new(r)),
+    <l:ExpressionMiddle> ">" <r:ExpressionMiddle> => HirExpression::Greater(Box::new(l), Box::new(r)),
+    <l:ExpressionMiddle> "<=" <r:ExpressionMiddle> => HirExpression::LessEqual(Box::new(l), Box::new(r)),
+    <l:ExpressionMiddle> "<" <r:ExpressionMiddle> => HirExpression::Less(Box::new(l), Box::new(r)),
     <ExpressionMiddle> => <>
 }
 
-ExpressionMiddle: TirExpression = {
-    <l:ExpressionHigh> "+" <r:ExpressionHigh> => TirExpression::Add(Box::new(l), Box::new(r)),
-    <l:ExpressionHigh> "-" <r:ExpressionHigh> => TirExpression::Subtract(Box::new(l), Box::new(r)),
+ExpressionMiddle: HirExpression = {
+    <l:ExpressionHigh> "+" <r:ExpressionHigh> => HirExpression::Add(Box::new(l), Box::new(r)),
+    <l:ExpressionHigh> "-" <r:ExpressionHigh> => HirExpression::Subtract(Box::new(l), Box::new(r)),
     <ExpressionHigh> => <>
 }
 
-ExpressionHigh: TirExpression = {
-    "&" <ptr:ExpressionAtom> "[" <idx:Expression> "]" => TirExpression::Index(Box::new(ptr), Box::new(idx)),
-    "&" <instance:ExpressionAtom> "->" <name:Ident> <args:List<"(", Expression, ",", ")">> => TirExpression::Method(Box::new(instance), name, args),
-    "&" <instance:ExpressionAtom> "->" <name:Ident> => TirExpression::Method(Box::new(instance), name, vec![]),
-    "&" <name:Ident> => TirExpression::Refer(name),
-    <ptr:ExpressionAtom> "[" <idx:Expression> "]" => TirExpression::Deref(Box::new(TirExpression::Index(Box::new(ptr), Box::new(idx)))),
-    <instance:ExpressionAtom> "." <name:Ident> <args:List<"(", Expression, ",", ")">> => TirExpression::Method(Box::new(instance), name, args),
-    <instance:ExpressionAtom> "." <name:Ident> => TirExpression::Method(Box::new(instance), name, vec![]),
-    <instance:ExpressionAtom> "->" <name:Ident> <args:List<"(", Expression, ",", ")">> => TirExpression::Deref(Box::new(TirExpression::Method(Box::new(instance), name, args))),
-    <instance:ExpressionAtom> "->" <name:Ident> => TirExpression::Deref(Box::new(TirExpression::Method(Box::new(instance), name, vec![]))),
-    <l:ExpressionAtom> "*" <r:ExpressionAtom> => TirExpression::Multiply(Box::new(l), Box::new(r)),
-    <l:ExpressionAtom> "/" <r:ExpressionAtom> => TirExpression::Divide(Box::new(l), Box::new(r)),
+ExpressionHigh: HirExpression = {
+    "&" <ptr:ExpressionAtom> "[" <idx:Expression> "]" => HirExpression::Index(Box::new(ptr), Box::new(idx)),
+    "&" <instance:ExpressionAtom> "->" <name:Ident> <args:List<"(", Expression, ",", ")">> => HirExpression::Method(Box::new(instance), name, args),
+    "&" <instance:ExpressionAtom> "->" <name:Ident> => HirExpression::Method(Box::new(instance), name, vec![]),
+    "&" <name:Ident> => HirExpression::Refer(name),
+    <ptr:ExpressionAtom> "[" <idx:Expression> "]" => HirExpression::Deref(Box::new(HirExpression::Index(Box::new(ptr), Box::new(idx)))),
+    <instance:ExpressionAtom> "." <name:Ident> <args:List<"(", Expression, ",", ")">> => HirExpression::Method(Box::new(instance), name, args),
+    <instance:ExpressionAtom> "." <name:Ident> => HirExpression::Method(Box::new(instance), name, vec![]),
+    <instance:ExpressionAtom> "->" <name:Ident> <args:List<"(", Expression, ",", ")">> => HirExpression::Deref(Box::new(HirExpression::Method(Box::new(instance), name, args))),
+    <instance:ExpressionAtom> "->" <name:Ident> => HirExpression::Deref(Box::new(HirExpression::Method(Box::new(instance), name, vec![]))),
+    <l:ExpressionAtom> "*" <r:ExpressionAtom> => HirExpression::Multiply(Box::new(l), Box::new(r)),
+    <l:ExpressionAtom> "/" <r:ExpressionAtom> => HirExpression::Divide(Box::new(l), Box::new(r)),
     <ExpressionAtom> => <>
 }

@@ -1,9 +1,0 @@
-
-
-struct Test {
-    let _: num;
-
-    fn copy(testing: num) {}
-}
-
-fn main() {}
