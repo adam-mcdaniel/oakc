@@ -1,0 +1,13 @@
+#[std]
+
+fn main() {
+    putnumln(6.1);
+    putnumln(6.114234);
+    putnumln(0);
+    putnumln(0.0);
+    putnumln(0.1);
+    putnumln(1.0);
+    putnumln(1.24);
+    putnumln(1);
+    putnumln(0.00);
+}

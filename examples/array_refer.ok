@@ -1,10 +1,10 @@
 #[std]
 
-type Thing(1) {
+struct Thing {
+    let member: num;
     fn new(n: num) -> Thing {
         return n as Thing;
     }
-    fn member(self: &Thing) -> &num { return self as &num }
 }
 
 fn main() {
@@ -17,4 +17,6 @@ fn main() {
     putnumln((&arr[0]) as num); // same as `putnumln(arr)`
     putstr("Address of arr[2]: ");
     putnumln((&arr[2]) as num); // same as `putnumln(arr + 2 * sizeof(num))`
+
+    free arr: 32;
 }

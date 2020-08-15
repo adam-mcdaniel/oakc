@@ -5,7 +5,9 @@ fn main() {
     let t = T::new()
 }
 
-type T(1) {
+struct T {
+    let member: num;
+    
     fn new() -> T {
         return 1 as T;
     }

@@ -1,8 +1,8 @@
 #[std]
 
 fn recursive(a: num) {
-	let number: num = a + 1;
-	if number < 5 {
+	let n = a + 1;
+	if n < 5 {
 		recursive(number);
 	}
 	putnumln(number);
