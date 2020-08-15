@@ -571,33 +571,55 @@ impl TirStructure {
     }
 }
 
+/// The type that represents a constant TIR  expression.
 #[derive(Clone, Debug)]
 pub enum TirConstant {
+    /// A float constant
     Float(f64),
+    /// A character constant
     Character(char),
+    /// True constant
     True,
+    /// False constant
     False,
-
+    
+    /// Add two constants
     Add(Box<Self>, Box<Self>),
+    /// Subtract two constants
     Subtract(Box<Self>, Box<Self>),
+    /// Multiply two constants
     Multiply(Box<Self>, Box<Self>),
+    /// Divide two constants
     Divide(Box<Self>, Box<Self>),
-
+    
+    /// And two constants
     And(Box<Self>, Box<Self>),
+    /// Or two constants
     Or(Box<Self>, Box<Self>),
+    /// Not a constant
+    Not(Box<Self>),
 
+    /// Compare two constants with the `>` operator
     Greater(Box<Self>, Box<Self>),
+    /// Compare two constants with the `<` operator
     Less(Box<Self>, Box<Self>),
+    /// Compare two constants with the `>=` operator
     GreaterEqual(Box<Self>, Box<Self>),
+    /// Compare two constants with the `<=` operator
     LessEqual(Box<Self>, Box<Self>),
+    /// Compare two constants with the `==` operator
     Equal(Box<Self>, Box<Self>),
+    /// Compare two constants with the `!=` operator
     NotEqual(Box<Self>, Box<Self>),
 
+    /// Get a constant by its name
     Constant(Identifier),
+    /// Is a constant defined?
     IsDefined(String),
+    /// Is a type movable?
     IsMovable(TirType),
+    /// What's the size of a type?
     SizeOf(TirType),
-    Not(Box<Self>),
 }
 
 impl TirConstant {
@@ -676,15 +698,23 @@ pub enum TirStatement {
     AutoDefine(Identifier, TirExpression),
     /// A variable assignment
     AssignVariable(Identifier, TirExpression),
+    /// Add to a variable
     AddAssignVariable(Identifier, TirExpression),
+    /// Subtract from a variable
     SubtractAssignVariable(Identifier, TirExpression),
+    /// Multiply to a variable
     MultiplyAssignVariable(Identifier, TirExpression),
+    /// Divide from a variable
     DivideAssignVariable(Identifier, TirExpression),
     /// An assignment to a dereferenced address
     AssignAddress(TirExpression, TirExpression),
+    /// Add to the value a pointer points to
     AddAssignAddress(TirExpression, TirExpression),
+    /// Subtract from the value a pointer points to
     SubtractAssignAddress(TirExpression, TirExpression),
+    /// Multiply the value a pointer points to
     MultiplyAssignAddress(TirExpression, TirExpression),
+    /// Divide the value a pointer points to
     DivideAssignAddress(TirExpression, TirExpression),
 
     /// An HIR for loop `for (let i=0; i<10; i=i+1) {...}`
