@@ -1,0 +1,2029 @@
+diff --git a/.gitignore b/.gitignore
+index 3258030..9e1b290 100644
+--- a/.gitignore
++++ b/.gitignore
+@@ -1,6 +1,5 @@
+ /target
+-/mar/*.mar
+ Cargo.lock
+ *.exe
+ .vscode
+-main
++main
+\ No newline at end of file
+diff --git a/examples/bf.ok b/examples/bf.ok
+index 8e7eb9f..03c7a16 100644
+--- a/examples/bf.ok
++++ b/examples/bf.ok
+@@ -103,14 +103,7 @@ struct Machine {
+ 	}
+ 
+ 	fn run(self: &Machine) {
+-		let len = strlen(self->code);
+-		let counter = 0;
+-		while self->ins_ptr != len {
+-			counter = counter + 1;
+-			if counter > 65 {
+-				counter = 0;
+-				//_sleep!();
+-			}
++		while self->ins_ptr != strlen(self->code) {
+ 			if self->token == '+' { self.plus() }
+ 			if self->token == '-' { self.minus() }
+ 			if self->token == '<' { self.left() }
+diff --git a/examples/flags/is_def.ok b/examples/flags/is_defined.ok
+similarity index 100%
+rename from examples/flags/is_def.ok
+rename to examples/flags/is_defined.ok
+diff --git a/examples/include/lib/str.ok b/examples/include/lib/str.ok
+index fe414e7..0605582 100644
+--- a/examples/include/lib/str.ok
++++ b/examples/include/lib/str.ok
+@@ -1,6 +1,6 @@
+ 
+-// The `is_defined` guard prevents redefining functions
+-#[if(!is_defined("STR")) {
++// The `isdef` guard prevents redefining functions
++#[if(!isdef("STR")) {
+     const STR = 1;
+ 
+     fn strlen(str: &char) -> num {
+diff --git a/examples/refer.ok b/examples/refer.ok
+index 31f073b..77ae400 100644
+--- a/examples/refer.ok
++++ b/examples/refer.ok
+@@ -6,7 +6,7 @@ struct Counter {
+     fn new() -> Counter { return 0 as Counter }
+ 
+     fn increment(self: &Counter) {
+-        self->count += 1;
++        self->count += + 1;
+     }
+ 
+     fn decrement(self: &Counter) {
+diff --git a/mar/generate_files.sh b/mar/generate_files.sh
+deleted file mode 100644
+index aa3a784..0000000
+--- a/mar/generate_files.sh
++++ /dev/null
+@@ -1,10 +0,0 @@
+-#/usr/bin/bash
+-
+-# primitive, has to be run from project root
+-
+-for file in ./examples/*.ok
+-do
+-    output=${file/examples/mar}
+-    output=${output/.ok/.mar}
+-    cargo run -- --mar c $file && mv OUTPUT.mar $output
+-done
+diff --git a/src/asm.rs b/src/asm.rs
+index b6f1fec..23d29b6 100644
+--- a/src/asm.rs
++++ b/src/asm.rs
+@@ -103,10 +103,6 @@ impl AsmProgram {
+         }
+     }
+ 
+-    pub fn get_externs(&self) -> &Vec<PathBuf> {
+-        return &self.externs;
+-    }
+-
+     pub fn assemble(&self, target: &impl Target) -> Result<String, AsmError> {
+         // Set up the output code
+         let mut result = String::new();
+diff --git a/src/bin.rs b/src/bin.rs
+index aee0b1d..a223a71 100644
+--- a/src/bin.rs
++++ b/src/bin.rs
+@@ -1,5 +1,5 @@
+ use clap::{clap_app, crate_authors, crate_version, AppSettings::ArgRequiredElseHelp};
+-use oakc::{compile, generate_docs, Go, C, TS, MAR};
++use oakc::{compile, generate_docs, Go, C, TS};
+ use std::{
+     fs::{read_to_string, write},
+     io::Result,
+@@ -15,7 +15,6 @@ fn main() {
+         (@group target =>
+             (@arg cc: -c --cc "Compile with C backend")
+             (@arg go: -g --go "Compile with Golang backend")
+-            (@arg mar: --mar "Compile with MAR backend")
+             (@arg ts: -t --ts "Compile with TypeScript backend")
+         )
+         (@subcommand c =>
+@@ -51,9 +50,7 @@ fn main() {
+                     compile(&cwd, contents, Go)
+                 } else if matches.is_present("ts") {
+                     compile(&cwd, contents, TS)
+-                } else if matches.is_present("mar") {
+-                    compile(&cwd, contents, MAR)
+-                 } else {
++                } else {
+                     compile(&cwd, contents, C)
+                 };
+ 
+diff --git a/src/lib.rs b/src/lib.rs
+index 4dea797..15eb1ff 100644
+--- a/src/lib.rs
++++ b/src/lib.rs
+@@ -10,7 +10,7 @@ pub mod tir;
+ use hir::HirProgram;
+ 
+ mod target;
+-pub use target::{Go, Target, C, MAR, TS};
++pub use target::{Go, Target, C, TS};
+ 
+ use asciicolor::Colorize;
+ use comment::cpp::strip;
+diff --git a/src/target/core/core.mar b/src/target/core/core.mar
+deleted file mode 100644
+index 925dee8..0000000
+--- a/src/target/core/core.mar
++++ /dev/null
+@@ -1,706 +0,0 @@
+-;; NOTE: the compiler will hoist __CORE_GLOBAL_SCOPE_SIZE and __CORE_INIT_VM_CAPACITY as a prefix to the contents of this file
+-
+-;; we want the runtime to be be able to host 'itself' by not depending on any dependencies
+-;; it should only implement the vm and any nessesary code and variables to run the oak program
+-;; the only overhead it currently contains is having a function pointer table for initializer functions
+-;; core only uses 1 entry, the rest of the entries can be filled during a 'linking' process to hook into this initializer feature
+-
+-;; Setting the binary offset to 0 makes sure our .data section starts at address 0x0000
+-org 0
+-
+-;; data segment -
+-;; NOTE: the _0x00xx labels are just to help visualize the offsets
+-;; TODO: do not leak these labels
+-;; NOTE: there are some static variables scattered trough the source, decide on what stays static inline and what can move to the data section
+-.data
+-_0x0000:
+-    __core_interrupt_vector_table:
+-    ;; division by zero causes an interrupt
+-    __core_interrupt_divide_by_zero: dw __core_interrupt_handler_default
+-_0x0001:
+-    ;; not implemented
+-    __core_interrupt_trap: dw __core_interrupt_handler_default
+-_0x0002:
+-    ;; not implemented
+-    __core_interrupt_nmi: dw __core_interrupt_handler_default
+-_0x0003:
+-    ;; NOTE: INT 3 is a special case for the server that starts the debugging mode.
+-    ;; NOTE: This memory location will never actually be used as a jump location for an interrupt
+-    ;; TODO: use this location for a static variable so we dont waste its space
+-    ;; not implemented server
+-    __core_interrupt_break_point: dw __core_interrupt_handler_default
+-_0x0004:
+-    ;; this interrupt requires a INTO instruction and the overflow flag to be set
+-    __core_interrupt_integer_overflow: dw __core_interrupt_handler_default
+-_0x0005:
+-    ;; keep 0x05 - 0x1F reserved for future interrupt handlers
+-    dw 0x1B dup(0x0153)
+-_0x0020:
+-    ;; MAR server causes this interrupt when the cpu is not allowed to execute any more instructions
+-    ;; gives 10_0000 instructions to save state and brk.
+-    ;; If execution is forcibly stopped the behaviour of the runtime is undefined
+-    __core_interrupt_execution_limit_reached: dw __core_interrupt_handler_execution_limit_reached
+-_0x0021:
+-    ;; keep 0x20 - 0x3f reserverd for future (hardware) interrupt handlers
+-    __core_interrupt_vector_table_hardware: dw 0x001F dup(0x0153)
+-_0x0040:
+-    ;; keep 0x40 - 0x43 reserved for core interrupt handlers
+-    __core_interrupt_vector_table_core:
+-    ;; software interrupt for a panic of unkown reason
+-    __core_interrupt_panic_unkown: dw __core_interrupt_handler_default
+-_0x0041:
+-    ;; software interrupt for a panic caused by a stack and heap collision
+-    __core_interrupt_panic_stack_heap_collision: dw __core_interrupt_handler_panic_stack_heap_collision
+-_0x0042:
+-    ;; software interrupt for a panic caused by having no more free memory
+-    __core_interrupt_panic_no_free_memory: dw __core_interrupt_handler_panic_no_free_memory
+-_0x0043:
+-    ;; software interrupt for a panic caused by a stack underflow
+-    __core_interrupt_panic_stack_underflow: dw __core_interrupt_handler_panic_stack_underflow
+-    ;; 0x44 - 0x7f is open for software interrupts
+-_0x0044:
+-    __core_interrupt_vector_table_software:
+-    dw 0x3C dup(0x0153)
+-    ;; TODO: figure out how the stdlib is going to reserve interrupts
+-    ;; probably by owning the software interrupt table and providing an interface to interact with it
+-_0x0080:
+-    __core_initializer_vector_table:
+-    ;; NOTE: when altering the table, the padding after the struct has to be adjusted as well.
+-    ;; struct __core_initializer_vector_table {
+-    ;;   size_t length
+-    __core_initializer_vector_table_length: dw 1
+-    ;;   void * entries
+-    __core_initializer_vector_table_entries: dw __core_machine_new
+-    ;; }
+-    ;; unused padding (0xdead is a value that is easily recognized)
+-    dw 0x76 dup(0xdead)
+-_0x00F8:
+-    ;; static variables used by __core_* functions
+-    ;; static struct machine {
+-    __core_vm:
+-    ;;   int * memory
+-    __core_vm_memory: dw 0x0000
+-    ;;   bool * allocated
+-    __core_vm_allocated: dw 0x0000
+-    ;;   size_t capacity
+-    __core_vm_capacity: dw 0x0000
+-    ;;   size_t base_ptr
+-    __core_vm_base_ptr: dw 0x0000
+-    ;;   size_t stack_ptr
+-    __core_vm_stack_ptr: dw 0x0000
+-    ;; } vm;
+-    ;; static const char * __core_panic_unkown_message
+-    __core_panic_unkown_message: dw "\nERR_UNKNOWN", 0 ;; 13 length
+-    ;; static const char * __core_panic_stack_heap_collision
+-    __core_panic_stack_heap_collision: dw "\nERR_STACK_HEAP_COLLISION", 0 ;; 26 length
+-    ;; static const char * __core_panic_no_free_memory
+-    __core_panic_no_free_memory: dw "\nERR_NO_FREE_MEMORY", 0 ;; 20 length
+-    ;; static const char * __core_panic_stack_underflow
+-    __core_panic_stack_underflow: dw "\nERR_STACK_UNDERFLOW", 0 ;; 21 length
+-    ;; static void * __core_jump_on_wake
+-    __core_jump_on_wake: dw 0x0000 ;; 0 represents no jump, non-0 represent a jump location
+-    ;; static size_t __core_execution_limit_reached_saved_sp
+-    __core_execution_limit_reached_saved_sp: dw 0
+-    ;; static size_t __core_execution_limit_reached_saved_bp
+-    __core_execution_limit_reached_saved_bp: dw 0
+-_0x0150:
+-    ;; 3 words reserved for execution cost variables. These are set by the server executing the code
+-    ;; see https://github.com/simon987/Much-Assembly-Required/blob/master/Server/src/main/java/net/simon987/server/assembly/CPU.java#L194
+-    __core_execution_cost_addr: dw 0x0000
+-    ;; 32 bit signed integer
+-    __core_executed_instruction_count: dw 0x0000, 0x0000
+-
+-_0x0153:
+-;; #[interrupt_handler] #[no_return] void __core_interrupt_handler_default()
+-;; this handler can be used as the default address for interrupt handlers
+-;; this prevents unhandled interrupts from jumping to random locations
+-__core_interrupt_handler_default:
+-    ;; either interrupt to panic_unknown or to panic_unhandled_interrupt?
+-    ;; TODO: make a decision on what this should do
+-    ;; jmp __core_interrupt_panic_unhandled_interrupt
+-
+-;; #[interrupt_handler] void __core_interrupt_handler_panic_unkown()
+-__core_interrupt_handler_panic_unkown:
+-    push 0
+-    call __core_panic
+-    
+-__CORE_STACK_HEAP_COLLISION EQU 1
+-__CORE_NO_FREE_MEMORY EQU 2
+-__CORE_STACK_UNDERFLOW EQU 3
+-
+-_0x0157:
+-;; #[interrupt_handler] #[no_return] void __core_interrupt_handler_panic_stack_heap_collision()
+-__core_interrupt_handler_panic_stack_heap_collision:
+-    push __CORE_STACK_HEAP_COLLISION
+-    call __core_panic
+-_0x015B:
+-;; #[interrupt_handler] #[no_return] void __core_interrupt_handler_panic_no_free_memory()
+-__core_interrupt_handler_panic_no_free_memory:
+-    push __CORE_STACK_HEAP_COLLISION
+-    call __core_panic
+-_0x015F:
+-;; #[interrupt_handler] #[no_return] void __core_interrupt_handler_panic_stack_underflow()
+-__core_interrupt_handler_panic_stack_underflow:
+-    push __CORE_STACK_UNDERFLOW
+-    call __core_panic
+-_0x0163:
+-
+-;; #[interrupt_handler] void __core_interrupt_handler_execution_limit_reached()
+-;; this has to be in core to make sure a program keeps its execution state in between ticks
+-;; std can overwrite the interupt vector entry to a different location to add more features (like a __mar_comport_flush call)
+-__core_interrupt_handler_execution_limit_reached:
+-    push a
+-    push b
+-    push c
+-    push d
+-    push x
+-    push y
+-    mov [__core_execution_limit_reached_saved_sp], sp
+-    mov [__core_execution_limit_reached_saved_bp], bp
+-    mov [__core_jump_on_wake], __core_interrupt_handler_execution_limit_reached_on_wake
+-    call __mar_comport_flush ;; TODO: remove this from core
+-    brk
+-__core_interrupt_handler_execution_limit_reached_on_wake:
+-    mov bp, [__core_execution_limit_reached_saved_bp]
+-    mov sp, [__core_execution_limit_reached_saved_sp]
+-    pop y
+-    pop x
+-    pop d
+-    pop c
+-    pop b
+-    pop a
+-    iret
+-
+-;; #[no_return] void __core_panic(int error_code)
+-;; prints a user friendly error message and then exits the program
+-;; in our case this means spinning forever
+-__core_panic:
+-    ;; [SP] = return address
+-    ;; [SP + 1] = int error_code
+-    MOV A, [SP + 1]
+-    mov X, __core_panic_unkown_message
+-__core_panic_case_1:
+-    cmp A, 1
+-    jnz __core_panic_case_2
+-    mov X, __core_panic_stack_heap_collision
+-    jmp __core_panic_end
+-__core_panic_case_2:
+-    cmp A, 2
+-    jnz __core_panic_case_3
+-    mov X, __core_panic_no_free_memory
+-    jmp __core_panic_end
+-__core_panic_case_3:
+-    cmp A, 3 
+-    jnz __core_panic_end
+-    mov X, __core_panic_stack_underflow
+-__core_panic_end:
+-    mov A, 3 ;; COMPORT_SELF_OUT
+-__core_panic_write:
+-    hwi 0x0D ;; HWID_COMPORT
+-    xor B, B ;; reset b
+-__core_panic_scan:
+-    inc X
+-    inc B
+-    cmp [X], 0 ;; this copies a null terminated string to the comport's internal buffer, then spins
+-    jz __core_spin
+-    cmp B, 8
+-    jz __core_panic_write
+-    jmp __core_panic_scan
+-
+-;; void __core_machine_new()
+-;; initializes the virtual machine located at the label __core_vm
+-;; we expected a label to be at the end of all code named `__core_heap_start`
+-__core_machine_new:
+-    ;; TODO: currently it uses compiler generated words and labels to initialize, those really should be compile time constants
+-    ;; TODO: write an heap implementation that doesnt have a 100% memory overhead
+-    ;; compiler figures out how big the tape must be and defines it as `__core_init_vm_capacity: dw value`
+-    mov [__core_vm_capacity], __CORE_INIT_VM_CAPACITY
+-    ;; vm->memory is a pointer to the __core_heap_start address
+-    mov [__core_vm_memory], __core_heap_start
+-
+-    ;; vm->allocated  is a pointer to the __core_heap_start address with an offset of vm->capacity
+-    mov [__core_vm_allocated], __core_heap_start
+-    add [__core_vm_allocated], [__core_vm_capacity]
+-    ;; compiler figures out how big the stack can be and defines it as `__core_global_scope_size: dw value`
+-    ;; the c impl does a for loop with push(0) for this size, but the end result is the same as setting the stack ptr to this size
+-    mov [__core_vm_stack_ptr], __CORE_GLOBAL_SCOPE_SIZE
+-    ret
+-
+-;; void __core_machine_load_base_ptr()
+-;; push the base pointer onto the stack
+-__core_machine_load_base_ptr:
+-    push [__core_vm_base_ptr]
+-    call __core_machine_push
+-    ret
+-
+-;; void __core_machine_establish_stack_frame(size_t arg_size, size_t local_scope_size)
+-__core_machine_establish_stack_frame:
+-    push BP
+-    mov BP, SP
+-    
+-    ;; [BP] == BP
+-    ;; [BP + 1] == return address
+-    ;; [BP + 2] == size_t arg_size
+-    ;; [BP + 3] == size_t local_scope_size
+-
+-    ; int args[arg_size]
+-    ; int * ptr = args[args.length - 1]
+-
+-    ;; Pop the arguments' values off of the vm stack onto the mar stack
+-    ; while (ptr != args) {
+-    ;   *ptr = machine_pop();
+-    ;    ptr -= 1;
+-    ; }
+-    mov x, [BP + 2]
+-__core_machine_establish_stack_frame_preserve_args_loop:
+-    cmp x, 0
+-    jz __core_machine_establish_stack_frame_preserve_args_break
+-    call __core_machine_pop
+-    push a
+-    dec x
+-    jmp __core_machine_establish_stack_frame_preserve_args_loop
+-__core_machine_establish_stack_frame_preserve_args_break:
+-
+-    ;; Push the current base pointer onto the stack so that
+-    ;; when this function returns, it will be able to resume
+-    ;; the current stack frame
+-    call __core_machine_load_base_ptr
+-
+-    ;; Set the base pointer to the current stack pointer to 
+-    ;; begin the stack frame at the current position on the stack.
+-    mov [__core_vm_base_ptr], [__core_vm_stack_ptr]
+-
+-    ;; allocate space for local variables
+-    ;; NOTE: the vm impl in C actually pushes 0's
+-    add [__core_vm_stack_ptr], [BP + 3]
+-
+-    ;; Push the arguments back onto the vm stack from the mar stack
+-__core_machine_establish_stack_frame_restore_args_loop:
+-    cmp [BP + 2], 0
+-    jz __core_machine_establish_stack_frame_restore_args_return
+-    call __core_machine_push
+-    dec [BP + 2]
+-    jmp __core_machine_establish_stack_frame_restore_args_loop
+-
+-__core_machine_establish_stack_frame_restore_args_return:
+-    mov SP, BP
+-    pop BP
+-    ret 2
+-
+-;; void __core_machine_end_stack_frame(size_t return_size, size_t local_scope_size);
+-__core_machine_end_stack_frame:
+-    push BP
+-    mov BP, SP
+-    
+-    ;; [BP] == BP
+-    ;; [BP + 1] == return address
+-    ;; [BP + 2] == size_t return_size
+-    ;; [BP + 3] == size_t local_scope_size
+-
+-    ; int return_value[return_size]
+-    ; int * ptr = return_value[return_value.length - 1]
+-
+-    ;; Pop the returned values off of the stack
+-    ; while (ptr != return_value) {
+-    ;   *ptr = machine_pop();
+-    ;    ptr -= 1;
+-    ; }
+-    mov x, [BP + 2]
+-__core_machine_establish_stack_frame_preserve_return_value_loop:
+-    cmp x, 0
+-    jz __core_machine_establish_stack_frame_preserve_return_value_clear_stack
+-    call __core_machine_pop
+-    push a
+-    dec x
+-    jmp __core_machine_establish_stack_frame_preserve_return_value_loop
+-
+-__core_machine_establish_stack_frame_preserve_return_value_clear_stack:
+-    ;; Discard the memory setup by the stack frame
+-    ;; NOTE: the c impl actually pops these (and pop 0's out the memory)
+-    sub [__core_vm_stack_ptr], [BP + 3]
+-
+-    ;; Retrieve the parent function's base pointer to resume the function
+-    call __core_machine_pop
+-    mov [__core_vm_base_ptr], A
+-    
+-    ;; Finally, push the returned value back onto the stack for use by
+-    ;; the parent function.
+-__core_machine_establish_stack_frame_restore_return_value_loop:
+-    cmp [BP + 2], 0
+-    jz __core_machine_establish_stack_frame_restore_return_value_return
+-    call __core_machine_push
+-    DEC [BP + 2]
+-    jmp __core_machine_establish_stack_frame_restore_return_value_loop
+-
+-__core_machine_establish_stack_frame_restore_return_value_return:
+-    mov SP, BP
+-    pop BP
+-    ret 2
+-
+-;; void __core_machine_allocate()
+-;; pop size of the stack
+-__core_machine_allocate:
+-    push A
+-    push B
+-    push C
+-    push D
+-    push X
+-    push Y
+-    push BP
+-    mov BP, SP
+-    call __core_machine_pop           ; int size = __core_machine_pop()
+-    mov B, [__core_vm_capacity]  ; int i = vm->capacity
+-    dec B                      ; i -= 1
+-    mov C, [__core_vm_allocated] ; int * loc_allocated = vm->allocated
+-    xor X, X                   ; int consecutive_free_cells = 0
+-__core_machine_allocate_loop_find:
+-    cmp B, [__core_vm_stack_ptr] ; while (i > vm->stack_ptr)
+-    jle __core_machine_allocate_loop_break
+-    mov D, C                   ; 
+-    add D, B                   ; int is_allocated = vm->allocated[i]
+-    cmp [D], 0                 ; if !is_allocated
+-    jnz __core_machine_allocate_loop_find_false
+-    inc X
+-    jmp __core_machine_allocate_loop_find_true
+-__core_machine_allocate_loop_find_false:
+-    xor X, X
+-__core_machine_allocate_loop_find_true:
+-    cmp X, A                   ; if consecutive_free_cells == size
+-    jz __core_machine_allocate_loop_break
+-    dec B
+-    jnz __core_machine_allocate_loop_find
+-__core_machine_allocate_loop_break:
+-    mov Y, B                   ; int addr = i
+-    cmp Y, [__core_vm_stack_ptr] ; if addr <= vm->stack_ptr then panic
+-    jle __core_machine_allocate_loop_panic
+-    xor B, B                   ; i = 0
+-__core_machine_allocate_loop_mark:
+-    cmp B, A                   ; while (i < size)
+-    jge __core_machine_allocate_return
+-    mov D, C                   ; int * loc = vm->allocated
+-    add D, B                   ; loc += i
+-    mov [D], 1                 ; *loc = 1
+-    inc B
+-    jmp __core_machine_allocate_loop_mark
+-__core_machine_allocate_return:
+-    push Y
+-    call __core_machine_push
+-    mov SP, BP
+-    pop BP
+-    pop Y
+-    pop X
+-    pop D
+-    pop C
+-    pop B
+-    pop A
+-    ret
+-__core_machine_allocate_loop_panic:
+-    int __core_interrupt_panic_no_free_memory
+-
+-;; void __core_machine_free()
+-__core_machine_free:
+-    push B
+-    push C
+-    push D
+-    push X
+-    push BP
+-    mov BP, SP
+-    call __core_machine_pop         ; int addr = __core_machine_pop() // C
+-    mov C, A
+-    call __core_machine_pop         ; int size = __core_machine_pop() // A
+-    xor B, B                 ; int i = 0                // B
+-__core_machine_free_loop:
+-    cmp B, A
+-    jl __core_machine_free_return
+-    mov D,   C                 ; int d = addr + i
+-    add D, B
+-    mov X, [__core_vm_allocated]
+-    add X, D
+-    mov [X], 0                 ; vm->allocated[addr + i] = false
+-    mov X, [__core_vm_memory]
+-    add X, D
+-    mov [X], 0                 ; vm->memory[addr + i] = 0
+-    inc B
+-    jmp __core_machine_free_loop
+-__core_machine_free_return:
+-    mov SP, BP
+-    pop BP
+-    pop X
+-    pop D
+-    pop C
+-    pop B
+-    ret
+-
+-;; void __core_machine_push(int n)
+-;; push n to the stack
+-__core_machine_push:
+-    push A
+-    push BP
+-    mov BP, SP
+-    ;; if vm->allocated[vm->stack_ptr] !== 0 then panic
+-    mov A, [__core_vm_allocated]
+-    add A, [__core_vm_stack_ptr]
+-    cmp [A], 0
+-    jnz __core_machine_push_panic
+-    mov A, [__core_vm_memory]
+-    add A, [__core_vm_stack_ptr] ; ref = &vm->memory[vm->stack_ptr]
+-    mov [A], [BP + 3]          ; *ref = n
+-    inc [__core_vm_stack_ptr]    ; vm->stack_ptr++
+-    mov SP, BP
+-    pop BP
+-    pop A
+-    ret 1
+-__core_machine_push_panic:
+-    int __core_interrupt_panic_stack_heap_collision
+-
+-;; int __core_machine_pop()
+-;; pop n of the stack
+-__core_machine_pop:
+-    push B
+-    push BP
+-    mov BP, SP
+-    cmp [__core_vm_stack_ptr], 0
+-    jz __core_machine_pop_panic
+-    mov A, [__core_vm_memory]    ; int * loc = vm->memory
+-    add A, [__core_vm_stack_ptr] ; loc += vm->stack_ptr
+-    dec A                      ; loc -= 1
+-    mov B, [A]                 ; int b = *loc
+-    mov [A], 0                 ; *loc = 0 // do we really need to 0 it?
+-    dec [__core_vm_stack_ptr]    ; vm->stack_ptr--
+-    mov A, B                   ; return values are set in the A register
+-    mov SP, BP
+-    pop BP
+-    pop B
+-    ret
+-__core_machine_pop_panic:
+-    int __core_interrupt_panic_stack_underflow
+-
+-;; void __core_machine_store(int size)
+-;; pop address of the stack
+-;; i is size - 1
+-;; for i until size
+-;;    pop value off the stack
+-;;    write it to address + i
+-__core_machine_store:
+-    push A
+-    push B
+-    push C
+-    push D
+-    push BP
+-    mov BP, SP
+-    call __core_machine_pop        ; int * addr = __core_machine_pop()
+-    add A, [__core_vm_memory] ; addr += vm->memory
+-    mov C, A                ; // move addr to a different register
+-    mov B, [BP + 6]         ; int i = size
+-    dec B                   ; i -= 1
+-__core_machine_store_loop:
+-    cmp B, 0                ;   while (i >= 0)
+-    jl __core_machine_store_return
+-    call __core_machine_pop        ;   int value = __core_machine_pop()
+-    mov D, C                ;   int * loc = addr
+-    add D, B                ;   loc += i
+-    mov [D], A              ;   *loc = value
+-    dec B                   ;   i--
+-    jmp __core_machine_store_loop
+-__core_machine_store_return:
+-    mov SP, BP
+-    pop BP
+-    pop D
+-    pop C
+-    pop B
+-    pop A
+-    ret 1
+-
+-;; void __core_machine_load(int size)
+-;; load size amount of integers from popped address
+-__core_machine_load:
+-    push A
+-    push B
+-    push C
+-    push D
+-    push BP
+-    mov BP, SP
+-    call __core_machine_pop        ; int * addr = __core_machine_pop()
+-    add A, [__core_vm_memory] ; addr += vm->memory
+-    mov C, A                ; move addr to a different register
+-    xor B, B                ; int i = 0
+-__core_machine_load_loop:
+-    cmp B, [BP + 6]         ; while (i < size)
+-    jge __core_machine_load_return
+-    mov D, C                ; int * loc = addr
+-    add D, B                ; loc += i
+-    push [D]                ; int value = *loc
+-    call __core_machine_push       ; __core_machine_push(value)
+-    inc B                   ; i++
+-    jmp __core_machine_load_loop
+-__core_machine_load_return:
+-    mov SP, BP
+-    pop BP
+-    pop D
+-    pop C
+-    pop B
+-    pop A
+-    ret 1
+-
+-;; void __core_machine_add()
+-;; pop 2 values, add them and push the result
+-__core_machine_add:
+-    push A
+-    push B
+-    push BP
+-    mov BP, SP
+-    call __core_machine_pop
+-    mov B, A
+-    call __core_machine_pop
+-    add A, B
+-    push A
+-    call __core_machine_push
+-    mov SP, BP
+-    pop BP
+-    pop B
+-    pop A
+-    ret
+-
+-;; void __core_machine_subtract()
+-;; pop 2 values, subtract them and push the result
+-__core_machine_subtract:
+-    push A
+-    push B
+-    push BP
+-    mov BP, SP
+-    call __core_machine_pop
+-    mov B, A
+-    call __core_machine_pop
+-    sub A, B
+-    push A
+-    call __core_machine_push
+-    mov SP, BP
+-    pop BP
+-    pop B
+-    pop A
+-    ret
+-
+-;; void __core_machine_sign()
+-;; pop a value of the stack, if it is 0 or greater push 1, else push -1
+-__core_machine_sign:
+-    push A
+-    push B
+-    push BP
+-    mov BP, SP
+-    call __core_machine_pop
+-    cmp A, 0
+-    jge __core_machine_sign_ge
+-__core_machine_sign_l:
+-    push -1
+-    jmp __core_machine_sign_push
+-__core_machine_sign_ge:
+-    push 1
+-__core_machine_sign_push:
+-    call __core_machine_push
+-    mov SP, BP
+-    pop BP
+-    pop B
+-    pop A
+-    ret
+-
+-;; void __core_machine_multiply()
+-;; pop 2 values, multiply them and push the result
+-__core_machine_multiply:
+-    push A
+-    push B
+-    push BP
+-    mov BP, SP
+-    call __core_machine_pop
+-    mov B, A
+-    call __core_machine_pop
+-    mul B                 ; will multiply register A with operand, result is a 32-bit integer in Y:A
+-    push A
+-    call __core_machine_push
+-    mov SP, BP
+-    pop BP
+-    pop B
+-    pop A
+-    ret
+-
+-;; void __core_machine_divide()
+-;; pop 2 values, divide them and push the result
+-__core_machine_divide:
+-    push A
+-    push B
+-    push BP
+-    mov BP, SP
+-    xor Y, Y
+-    call __core_machine_pop
+-    mov B, A
+-    call __core_machine_pop
+-    div B                 ; will divide register Y:A with source, result in A, remainder in Y
+-    push A
+-    call __core_machine_push
+-    mov SP, BP
+-    pop BP
+-    pop B
+-    pop A
+-    ret
+-
+-;; TODO: should these be in core?
+-;; #[internal] void __core_wrap_arg()
+-;; should be called as a foreign function before calling another foreign function that does not use the vm to receive arguments
+-;; assumes the argument is on top of the vm stack
+-;; NOTE: each argument can only have a size of 1
+-__core_wrap_arg:
+-    int 3
+-    ;; save return address
+-    pop B
+-    ;; retrieve oak value from the vm stack
+-    call __core_machine_pop
+-    ;; put in on the stack
+-    push A
+-    ;; put return address back on so we return to the caller
+-    push B
+-    ret
+-
+-;; #[internal] void __core_unwrap_return_value()
+-;; should be called as a foreign function after calling another foreign function that does not use the vm to return a value
+-;; assumes the return value is still in the A register so it pushes it on the vm stack
+-;; NOTE: a return value can only have a size of 1
+-__core_unwrap_return_value:
+-    push A
+-    call __core_machine_push
+-    ret
+-
+-;; execution on a server tick always starts at .text with the registers and status flags reset
+-;; a server reset erase the memory and floppy contents
+-;; #[entry] void __core_start()
+-.text
+-__core_start:
+-    ;; if * __core_jump_on_wake != null then jump to that pointer
+-    cmp [__core_jump_on_wake], 0
+-    jnz [__core_jump_on_wake]
+-
+-    ;; setup a loop to call all intializer functions
+-__core_start_initialize_runtime:
+-    xor a, a                                          ; size_t i = 0
+-__core_start_initialize_runtime_loop:
+-    cmp a, [__core_initializer_vector_table_length]   ; while (i != __core_initializer_vector_table_length)
+-    jz __core_start_runtime_is_initialized
+-    mov b, __core_initializer_vector_table_entries    ; void (*func)() = __core_initializer_vector_table_entries[i]
+-    add b, a
+-    call [b]                                            ; (*func)()
+-    inc a                                             ; i++
+-    jmp __core_start_initialize_runtime_loop
+-
+-__core_start_runtime_is_initialized:
+-    ;; call the user defined enry point
+-    call __core_main
+-
+-    ;; set the __core_jump_on_wake pointer to the next instruction
+-    ;; by using a simple pointer to represent a jump location if not null
+-    ;; any implementation can use `__core_jump_on_wake` and `brk` to implement a sleep and wake implementation with more features
+-__core_spin:
+-    mov [__core_jump_on_wake], __core_brk
+-__core_brk:
+-    brk
+-
+-;; the compiler will genererate the following:
+-;; oak program entrypoint. after the runtime is initialized it will call this function
+-;; __core_main:
+diff --git a/src/target/mar.rs b/src/target/mar.rs
+deleted file mode 100644
+index c496cb8..0000000
+--- a/src/target/mar.rs
++++ /dev/null
+@@ -1,241 +0,0 @@
+-use super::Target;
+-use std::{
+-    env::consts::EXE_SUFFIX,
+-    fs::{remove_file, write, read_to_string},
+-    fmt::{Debug, Display},
+-    io::{Error, ErrorKind, Result, Write},
+-    path::PathBuf,
+-    convert::TryFrom,
+-    collections::BTreeMap,
+-    process::exit,
+-};
+-
+-use asciicolor::Colorize;
+-use crate::{parse,asm::AsmError};
+-
+-// TODO: we want to compile to mir and then add that to the current compilation object
+-fn generate_stdlib(cwd: &PathBuf, input: String, target: &impl Target) -> Result<String> {
+-    let mut hir = parse(input);
+-
+-    match hir.compile(cwd, target, &mut BTreeMap::new()) {
+-        Ok(mir) => match mir.assemble() {
+-            Ok(asm) => {
+-                // Set up the output code
+-                let mut result = String::new();
+-        
+-                // Iterate over the external files to include
+-                for filename in asm.get_externs() {
+-                    // Find them in the current working directory
+-                    if let Ok(contents) = read_to_string(filename.clone()) {
+-                        // Add the contents of the file to the result
+-                        result += &contents
+-                    } else {
+-                        // If the file doesn't exist, throw an error
+-                        if let Ok(name) = filename.clone().into_os_string().into_string() {
+-                            eprintln!("compilation error while generating 'std.mar': {}", format!("could not find foreign file '{}'", name).bright_red().underline());
+-                        } else {
+-                            eprintln!("compilation error while generating 'std.mar': {}", String::from("could not find foreign file").bright_red().underline());
+-                        }
+-                        exit(1);
+-                    }
+-                }
+-
+-                return Ok(result);
+-            },
+-            Err(e) => {
+-                eprintln!("compilation error while generating 'std.mar': {}", e.bright_red().underline());
+-                exit(1);
+-            }
+-        }
+-        Err(e) => {
+-            eprintln!("compilation error while generating 'std.mar': {}", e.bright_red().underline());
+-            exit(1);
+-        }
+-    }
+-}
+-
+-pub struct MAR;
+-
+-// TODO: would like these to be members of the struct
+-// but that would require MAR to be mutable for the Target impl
+-// thus requirering the other target implementations to also update their function signatures to &mut self
+-static mut saved_global_scope_size: u16 = 0;
+-static mut saved_init_vm_capacity: u16 = 0;
+-static mut unique_id: i32 = 0;
+-static mut loop_identifiers: Vec<i32> = Vec::new(); 
+-
+-
+-impl Target for MAR {
+-    fn get_name(&self) -> char {
+-        'm'
+-    }
+-
+-    fn std(&self) -> String {
+-        // we use the oak compiler itself to compile our stdlib
+-        // we kinda have to because MAR has no import system or compile time checks available
+-        // pathbuff from project root working directory?
+-        if let Ok(std) = generate_stdlib(&PathBuf::from("src/target/std/mar/"), String::from(include_str!("std/std.mar.ok")), self) {
+-            return std;
+-        }
+-        String::from(";; ERROR: could not generate the 'std.mar' file")
+-    }
+-
+-    fn core_prelude(&self) -> String {
+-        String::from(include_str!("core/core.mar"))
+-    }
+-
+-    fn core_postlude(&self) -> String {
+-        String::from("__core_heap_start: ;; heap starts at this address")
+-    }
+-
+-    fn begin_entry_point(&self, global_scope_size: i32, memory_size: i32) -> String {
+-        // because of how constants need to be manually hoisted in MAR assembly
+-        // we save these values and prefix them to the code in the compile function
+-        unsafe {
+-            saved_global_scope_size = u16::try_from(global_scope_size).ok().unwrap();
+-            saved_init_vm_capacity = u16::try_from(memory_size).ok().unwrap();
+-        }
+-        String::from(format!(r##"
+-;; start of entry point
+-__core_main:
+-"##))
+-    }
+-
+-    fn end_entry_point(&self) -> String {
+-        // technically we want to get the return value from main and return it to the hosting environment
+-        // but since the target implementation is the host, we can do whatever we want here
+-        // TODO: remove the call to __mar_comport_flush from core
+-        String::from("    call __mar_comport_flush\n    RET ;; return from entry point\n")
+-    }
+-
+-    fn establish_stack_frame(&self, arg_size: i32, local_scope_size: i32) -> String {
+-        String::from(format!(
+-r#"    push {} ;; local_scope_size
+-    push {} ;; arg_size
+-    call __core_machine_establish_stack_frame
+-"#, u16::try_from(local_scope_size).ok().unwrap(), u16::try_from(arg_size).ok().unwrap()))
+-    }
+-
+-    fn end_stack_frame(&self, return_size: i32, local_scope_size: i32) -> String {
+-        String::from(format!(
+-r#"    push {} ;; local_scope_size
+-    push {} ;; return size
+-    call __core_machine_end_stack_frame
+-"#, u16::try_from(local_scope_size).ok().unwrap(), u16::try_from(return_size).ok().unwrap()))
+-    }
+-
+-    fn load_base_ptr(&self) -> String {
+-        String::from("    call __core_machine_load_base_ptr ;; push the base pointer on the stack\n")
+-    }
+-
+-    fn push(&self, n: f64) -> String {
+-        // TODO: i16::try_from><f64>() is not implemented? kinda want to do a checked cast here
+-        String::from(format!(
+-r##"    push {} ;; push value on the vm stack
+-    call __core_machine_push
+-"##, n as i16))
+-    }
+-
+-    fn add(&self) -> String {
+-        String::from("    call __core_machine_add\n")
+-    }
+-
+-    fn subtract(&self) -> String {
+-        String::from("    call __core_machine_subtract\n")
+-    }
+-    
+-    fn multiply(&self) -> String {
+-        String::from("    call __core_machine_multiply\n")
+-    }
+-    
+-    fn divide(&self) -> String {
+-        String::from("    call __core_machine_divide\n")
+-    }
+-
+-    fn sign(&self) -> String {
+-        String::from("    call __core_machine_sign\n")
+-    }
+-
+-    fn allocate(&self) -> String {
+-        String::from("    call __core_machine_allocate\n")
+-    }
+-
+-    fn free(&self) -> String {
+-        String::from("    call __core_machine_free\n")
+-    }
+-
+-    fn store(&self, size: i32) -> String {
+-        // TODO: i16::try_from><f64>() is not implemented? kinda want to do a checked cast here
+-        String::from(format!(
+-r##"    push {} ;; size
+-    call __core_machine_store
+-"##, size as i16))
+-    }
+-
+-    fn load(&self, size: i32) -> String {
+-        // TODO: i16::try_from><f64>() is not implemented? kinda want to do a checked cast here
+-        String::from(format!(
+-r##"    push {} ;; size
+-    call __core_machine_load
+-"##, size as i16))
+-    }
+-
+-    fn fn_header(&self, name: String) -> String {
+-        String::new()
+-    }
+-
+-    fn fn_definition(&self, name: String, body: String) -> String {
+-        String::from(format!(r##"
+-{}:       ;; definition of {}
+-{}    ret ;; returning from {}
+-"##, name, name, body, name))
+-    }
+-
+-    fn call_fn(&self, name: String) -> String {
+-        String::from(format!("    call {} ;; calling oak function\n", name))
+-    }
+-
+-    fn call_foreign_fn(&self, name: String) -> String {
+-        String::from(format!("    call {} ;; calling foreign function\n", name))
+-    }
+-
+-    fn begin_while(&self) -> String {
+-        unsafe {
+-            let id = unique_id;
+-            loop_identifiers.push(id);
+-            unique_id += 1;
+-            let str = String::from(format!(
+-r#"__generated_begin_while_{}:
+-    call __core_machine_pop
+-    cmp A, 0
+-    jz __generated_end_while_{}
+-"#, id, id));
+-            str
+-        }
+-    }
+-
+-    fn end_while(&self) -> String {
+-        unsafe {
+-            let id = loop_identifiers.pop().unwrap();
+-            let str = String::from(format!(
+-r#"    jmp __generated_begin_while_{}
+-__generated_end_while_{}:
+-"#, id, id));
+-            str
+-        }
+-    }
+-
+-    fn compile(&self, code: String) -> Result<()> {
+-        // prefix the saved values as constants
+-        let code_with_prefixed_constants = String::from(format!(
+-r#"
+-__CORE_GLOBAL_SCOPE_SIZE equ {}
+-__CORE_INIT_VM_CAPACITY equ {}
+-"#, unsafe { saved_global_scope_size }, unsafe { saved_init_vm_capacity })) + code.as_str();
+-        if let Ok(_) = write("OUTPUT.mar", code_with_prefixed_constants) {
+-            return Result::Ok(())
+-        }
+-        return Result::Err(Error::new(ErrorKind::Other,
+-            "unabe to compile to MAR"));
+-    }
+-}
+diff --git a/src/target/mod.rs b/src/target/mod.rs
+index 98289f9..ecb963e 100644
+--- a/src/target/mod.rs
++++ b/src/target/mod.rs
+@@ -2,8 +2,6 @@ mod c;
+ pub use c::C;
+ mod go;
+ pub use go::Go;
+-mod mar;
+-pub use mar::MAR;
+ mod ts;
+ pub use ts::TS;
+ 
+diff --git a/src/target/std/mar/README.md b/src/target/std/mar/README.md
+deleted file mode 100644
+index 4b08c2f..0000000
+--- a/src/target/std/mar/README.md
++++ /dev/null
+@@ -1,14 +0,0 @@
+-
+-
+-
+-# Calling convention
+-
+-## registers
+-- A - return value - caller saved
+-- B - callee saved
+-- C - callee saved
+-- D - callee saved
+-- X - callee saved
+-- Y - callee saved
+-- BP
+-- SP
+diff --git a/src/target/std/mar/c/ctype.h.mar b/src/target/std/mar/c/ctype.h.mar
+deleted file mode 100644
+index 8590f5a..0000000
+--- a/src/target/std/mar/c/ctype.h.mar
++++ /dev/null
+@@ -1,28 +0,0 @@
+-;;/
+-;; Implements the C header 'string.h' file in MAR assembly
+-;; NOTE: all functions and variables are prefixed with `__c_`
+-;; NOTE: all constants are prefixed with `__C_`
+-;; Source: https://pubs.opengroup.org/onlinepubs/007908799/xsh/ctype.h.html
+-;;         http://www.cplusplus.com/reference/cctype/
+-;;/
+-
+-; int   isalnum(int);
+-; int   isalpha(int);
+-; int   isascii(int);
+-; int   iscntrl(int);
+-; int   isdigit(int);
+-; int   isgraph(int);
+-; int   islower(int);
+-; int   isprint(int);
+-; int   ispunct(int);
+-; int   isspace(int);
+-; int   isupper(int);
+-; int   isxdigit(int);
+-; int   toascii(int);
+-; int   tolower(int);
+-; int   toupper(int);
+-
+-; The following are defined as macros:
+-
+-; int   _toupper(int);
+-; int   _tolower(int);
+diff --git a/src/target/std/mar/c/math.h.mar b/src/target/std/mar/c/math.h.mar
+deleted file mode 100644
+index 8e5dd37e..0000000
+--- a/src/target/std/mar/c/math.h.mar
++++ /dev/null
+@@ -1 +0,0 @@
+-;; http://www.cplusplus.com/reference/cmath/
+\ No newline at end of file
+diff --git a/src/target/std/mar/c/setjmp.h.mar b/src/target/std/mar/c/setjmp.h.mar
+deleted file mode 100644
+index 43c0f55..0000000
+--- a/src/target/std/mar/c/setjmp.h.mar
++++ /dev/null
+@@ -1 +0,0 @@
+-;; http://www.cplusplus.com/reference/csetjmp/
+\ No newline at end of file
+diff --git a/src/target/std/mar/c/signal.h.mar b/src/target/std/mar/c/signal.h.mar
+deleted file mode 100644
+index 2194ee0..0000000
+--- a/src/target/std/mar/c/signal.h.mar
++++ /dev/null
+@@ -1,8 +0,0 @@
+-;; http://www.cplusplus.com/reference/csignal/
+-;; NOTE: need the interupt feature to finish before this can be implemented
+-
+-;; rand can use the random number generator
+-
+-;; could be nice to conditionally use memory management for the core as well
+-
+-;; 
+diff --git a/src/target/std/mar/c/stdbool.h.mar b/src/target/std/mar/c/stdbool.h.mar
+deleted file mode 100644
+index 758ec35..0000000
+--- a/src/target/std/mar/c/stdbool.h.mar
++++ /dev/null
+@@ -1,9 +0,0 @@
+-;;/
+-;; Implements the C header 'stdbool.h' file in MAR assembly
+-;; NOTE: all functions and variables are prefixed with `__c_`
+-;; NOTE: all constants are prefixed with `__C_`
+-;; Source: http://www.cplusplus.com/reference/cstdbool/
+-;;/
+-
+-__C_true equ 1
+-__C_false equ 0
+diff --git a/src/target/std/mar/c/stdint.h.mar b/src/target/std/mar/c/stdint.h.mar
+deleted file mode 100644
+index 85bfd71..0000000
+--- a/src/target/std/mar/c/stdint.h.mar
++++ /dev/null
+@@ -1,2 +0,0 @@
+-;; http://www.cplusplus.com/reference/cstdint/
+-;; can implement some of the constants right?
+\ No newline at end of file
+diff --git a/src/target/std/mar/c/stdio.h.mar b/src/target/std/mar/c/stdio.h.mar
+deleted file mode 100644
+index c1508cb..0000000
+--- a/src/target/std/mar/c/stdio.h.mar
++++ /dev/null
+@@ -1,21 +0,0 @@
+-;; http://www.cplusplus.com/reference/cstdio/
+-;; big one, stdout should be easy (assuming its the console)
+-;; so should stdin be (assuming its the keyboard)
+-;; fun starts once we implement a file system on the floppy
+-
+-__C_BUFSIZ equ 0 ;; ?
+-__C_EOF equ -1
+-__C_FILENAME_MAX equ 0 ;; ?
+-__C_L_tmpnam equ 0 ;; ?
+-__C_NULL equ 0
+-__C_TMP_MAX equ 0 ;; ?
+-
+-;; fseek constants?
+-
+-;; setvbuf constants?
+-
+-
+-; Types
+-; FILE - Object containing information to control a stream (type )
+-; fpos_t - Object containing information to specify a position within a file (type )
+-; for fgetpos and fsetpos?
+diff --git a/src/target/std/mar/c/stdlib.h.mar b/src/target/std/mar/c/stdlib.h.mar
+deleted file mode 100644
+index c788d0c..0000000
+--- a/src/target/std/mar/c/stdlib.h.mar
++++ /dev/null
+@@ -1,3 +0,0 @@
+-;; http://www.cplusplus.com/reference/cstdlib/
+-
+-
+diff --git a/src/target/std/mar/c/string.h.mar b/src/target/std/mar/c/string.h.mar
+deleted file mode 100644
+index 55ed540..0000000
+--- a/src/target/std/mar/c/string.h.mar
++++ /dev/null
+@@ -1,79 +0,0 @@
+-;;/
+-;; Implements the C header 'string.h' file in MAR assembly
+-;; NOTE: all functions and variables are prefixed with `__c_`
+-;; NOTE: all constants are prefixed with `__C_`
+-;; Source: https://pubs.opengroup.org/onlinepubs/007908799/xsh/string.h.html
+-;;         http://www.cplusplus.com/reference/cstring/
+-;;/
+-
+-__C_NULL equ 0x0000
+-
+-;; TODO: implement the ones needed
+-
+-;; void * memccpy(void *, const void *, int, size_t);
+-
+-;; void * memchr(const void *, int, size_t);
+-
+-;; int memcmp(const void *, const void *, size_t);
+-
+-;; void * memcpy(void *, const void *, size_t);
+-
+-;; void *memmove(void *, const void *, size_t);
+-
+-;; void * memset(void *, int, size_t);
+-
+-;; char * strcat(char *, const char *);
+-
+-;; char * strchr(const char *, int);
+-
+-;; int strcmp(const char *, const char *);
+-
+-;; int strcoll(const char *, const char *);
+-
+-;; char * strcpy(char *, const char *);
+-
+-;; size_t strcspn(const char *, const char *);
+-
+-;; char * strdup(const char *);
+-
+-;; char * strerror(int);
+-
+-;; size_t __c_strlen(const char * str);
+-__c_strlen:
+-    push BP
+-    mov BP, SP
+-    ;; [BP + 0] = old BP
+-    ;; [BP + 1] = return address
+-    ;; [BP + 2] = const char * str
+-    mov A, [BP + 2]
+-__c_strlen_loop:
+-    cmp [A], 0
+-    jz __c_strlen_return
+-    inc A
+-    jmp __c_strlen_loop
+-__c_strlen_return:
+-    sub A, [BP + 2]
+-    mov SP, BP
+-    pop BP
+-    ret 1
+-
+-;; char * strncat(char *, const char *, size_t);
+-
+-;; int strncmp(const char *, const char *, size_t);
+-
+-;; char * strncpy(char *, const char *, size_t);
+-
+-;; char * strpbrk(const char *, const char *);
+-
+-;; char * strrchr(const char *, int);
+-
+-;; size_t strspn(const char *, const char *);
+-
+-;; char * strstr(const char *, const char *);
+-
+-;; char * strtok(char *, const char *);
+-
+-;; char * strtok_r(char *, const char *, char **);
+-
+-;; size_t strxfrm(char *, const char *, size_t);
+-
+diff --git a/src/target/std/mar/c/string.h.mar.ok b/src/target/std/mar/c/string.h.mar.ok
+deleted file mode 100644
+index 9de21f6..0000000
+--- a/src/target/std/mar/c/string.h.mar.ok
++++ /dev/null
+@@ -1,9 +0,0 @@
+-
+-#[if(!is_defined("C_STRING")) {
+-    // include guard
+-    const C_STRING = 1;
+-    // include dependencies
+-
+-    // include asm implementation
+-    #[extern("string.h.mar")]
+-}]
+diff --git a/src/target/std/mar/c/time.h.mar b/src/target/std/mar/c/time.h.mar
+deleted file mode 100644
+index 2d8c3d3..0000000
+--- a/src/target/std/mar/c/time.h.mar
++++ /dev/null
+@@ -1,4 +0,0 @@
+-;; http://www.cplusplus.com/reference/ctime/
+-
+-;; so the cubot has a clock but its since server reset
+-
+diff --git a/src/target/std/mar/mar/comport.mar b/src/target/std/mar/mar/comport.mar
+deleted file mode 100644
+index 76f3011..0000000
+--- a/src/target/std/mar/mar/comport.mar
++++ /dev/null
+@@ -1,183 +0,0 @@
+-;;/
+-;; Hardware - Universal Communication Port (UCP or comport)
+-;; Address:   0x000D
+-;; Id:        0x000D
+-;; Docs:      https://github.com/simon987/Much-Assembly-Required/wiki/(Hardware)-Universal-Com-Port
+-;;/
+-
+-__MAR_HWID_COMPORT equ 0x000D
+-
+-__MAR_COMPORT_BUFFER_CLEAR   equ 0 ;; / Clears the internal buffer
+-__MAR_COMPORT_POLL           equ 1 ;; / Copy all internal buffer messages to address X, sets B to the number of messages copied
+-__MAR_COMPORT_FRONT_PORT_OUT equ 2 ;; / Copies 8 words starting at address X to the front port if there is a valid receiver present. Sets/resets B to indicate success
+-__MAR_COMPORT_SELF_OUT       equ 3 ;; / Copies 8 words starting at address X to the internal message buffer. Sets/resets B to indicate success
+-__MAR_COMPORT_CONSOLE_CLEAR  equ 4 ;; / Clears the console
+-
+-;; static char[320] __mar_comport_write_buffer // 40 *  8 word wide messages
+-__mar_comport_write_buffer: dw 320 dup(0x0000)
+-;; static size_t __mar_comport_write_buffer_length //
+-__mar_comport_write_buffer_length: dw 0x0000
+-
+-;; what kind of api do we need
+-;; - write(const char * str, size_t length) // write length amount of characters from str to the comport with an intermediate buffer
+-;; - flush() // flush the intermediate buffer
+-;; ? how big is the intermediate buffer (40 * 40 maybe?) ! yes 40 * 8 = 320 should work best, this way we can remove the hwi interfacing from write()
+-;; ? what exactly does flush do                          ! it should interface with the hardware to write the intermediate buffer to the internal one
+-;; ?                                                     ! it should return the amount of characters flushed (multiple of 8)
+-;; with these 2 calls we can implement stdio in a way that abstracts the write and flush calls, their return values and when to use the sleep functionality
+-;; so these 2 calls are just a fixed interface on top of the actual hardware
+-;; by using these both and combinining their return values with tick knowledge 
+-
+-;; size_t write(const char * str, size_t length)
+-;; a buffered write to the self out port of the comport (console)
+-;; returns the amount of characters written
+-;; technically this just writes to an internal buffer
+-;; needs a flush call to actually write the contents to the internal buffer
+-__mar_comport_write:
+-    push b
+-    push bp
+-    mov bp, sp
+-
+-    ;; [BP] = SP
+-    ;; [BP + 1] = B
+-    ;; [BP + 2] = return addeess
+-    ;; [BP + 3] = const char * str
+-    ;; [BP + 4] = size_t length
+-    mov a, __mar_comport_write_buffer
+-    add a, [__mar_comport_write_buffer_length]
+-    mov b, [bp + 3]
+-    push [bp + 4]
+-__mar_comport_write_loop:
+-    cmp [bp + 4], 0
+-    jz __mar_comport_write_return
+-    cmp [__mar_comport_write_buffer_length], 320
+-    jz __mar_comport_write_return
+-    mov [a], [b]
+-    inc a
+-    inc b
+-    inc [__mar_comport_write_buffer_length]
+-    dec [bp + 4]
+-    jmp __mar_comport_write_loop
+-__mar_comport_write_return:
+-    pop a
+-    sub a, [bp + 4]
+-    mov sp, bp
+-    pop bp
+-    pop b
+-    ret 2
+-
+-;; size_t flush()
+-;; flushes the buffered `write()` calls to the internal buffer
+-;; returns the amount of characters written to the internal buffer
+-;; always starts at the start of the buffer
+-;; clears the written characters with '\0' and moves any remaining characters to the start of the buffer
+-__mar_comport_flush:
+-    push bp
+-    mov bp, sp
+-    ;; setup hwi
+-    mov x, __mar_comport_write_buffer
+-    mov a, __MAR_COMPORT_SELF_OUT
+-    ;; keep flushing until we get a false or if we are at the end of the buffer
+-__mar_comport_flush_loop:
+-    cmp [__mar_comport_write_buffer_length], 0
+-    jle __mar_comport_flush_clear_length
+-    hwi __MAR_HWID_COMPORT
+-    cmp b, 0
+-    jz __mar_comport_flush_shift
+-    add x, 8
+-    sub [__mar_comport_write_buffer_length], 8
+-    jmp __mar_comport_flush_loop
+-__mar_comport_flush_clear_length:
+-    mov [__mar_comport_write_buffer_length], 0 ;; it might have underflowed into some FFFx value, just reset it to 0
+-__mar_comport_flush_shift:
+-    mov b, __mar_comport_write_buffer
+-    push x ;; save this to calculate the amount of characters flushed later
+-__mar_comport_flush_shift_loop:
+-    ;; once we are done flushing we write the remaing part of the buffer to the start of the buffer
+-    ;; if we flushed everything x will be equal the length location
+-    cmp [__mar_comport_write_buffer_length], 0
+-    jz __mar_comport_flush_cleanup
+-    cmp x, __mar_comport_write_buffer_length
+-    jz __mar_comport_flush_cleanup
+-    mov [b], [x]
+-    inc b
+-    inc x
+-    dec [__mar_comport_write_buffer_length]
+-    jmp __mar_comport_flush_shift_loop
+-__mar_comport_flush_cleanup:
+-    ;; adjust the length property to how many unflushed characters are still in the buffer
+-    mov [__mar_comport_write_buffer_length], b
+-    sub [__mar_comport_write_buffer_length], __mar_comport_write_buffer
+-__mar_comport_flush_cleanup_loop:
+-    ;; if the buffer is fully flushed b will equal the length location
+-    ;; if not b will be at wherever we are done with shifting
+-    cmp b, __mar_comport_write_buffer_length
+-    jz __mar_comport_flush_return
+-    mov [b], 0
+-    inc b
+-    jmp __mar_comport_flush_cleanup_loop
+-__mar_comport_flush_return:
+-    ;; return the amount of characters flushed
+-    pop a
+-    sub a, __mar_comport_write_buffer
+-    mov sp, sp
+-    pop bp
+-    ret
+-
+-;;; below is a an interface to interact with the hardware interrupts
+-
+-;; void __mar_comport_buffer_clear()
+-;; clears the internal hardware message buffer
+-__mar_comport_buffer_clear:
+-    mov A, __MAR_COMPORT_BUFFER_CLEAR
+-    hwi __MAR_HWID_COMPORT
+-    ret
+-
+-;; size_t __mar_comport_poll(char * dest)
+-;; copies all messages (each 8 words) in the internal buffer to the destination
+-;; returns the number of messages copied
+-__mar_comport_poll:
+-    push B
+-    push X
+-    mov X, [SP + 3]
+-    mov A, __MAR_COMPORT_POLL
+-    hwi __MAR_HWID_COMPORT
+-    mov A, B
+-    pop X
+-    pop B
+-    ret
+-
+-;; bool __mar_comport_front_port_out(const char * source)
+-;; copies 8 words from source to the object in front of the cubot if it has a com port
+-;; returns a boolean stating success
+-__mar_comport_front_port_out:
+-    push B
+-    push X
+-    mov X, [SP + 3]
+-    mov A, __MAR_COMPORT_FRONT_PORT_OUT
+-    hwi __MAR_HWID_COMPORT
+-    mov A, B
+-    pop X
+-    pop B
+-    ret
+-
+-;; bool __mar_comport_self_out(const char * source)
+-;; copies 8 words from source to the internal message buffer
+-;; returns a boolean stating success
+-__mar_comport_self_out:
+-    push B
+-    push X
+-    mov X, [SP + 3]
+-    mov A, __MAR_COMPORT_SELF_OUT
+-    hwi __MAR_HWID_COMPORT
+-    mov A, B
+-    pop X
+-    pop B
+-    ret
+-
+-;; void __mar_comport_console_clear()
+-;; clears the console
+-__mar_comport_console_clear:
+-    mov A, __MAR_COMPORT_CONSOLE_CLEAR
+-    hwi __MAR_HWID_COMPORT
+-    ret
+diff --git a/src/target/std/mar/mar/comport.mar.ok b/src/target/std/mar/mar/comport.mar.ok
+deleted file mode 100644
+index 6587ccb..0000000
+--- a/src/target/std/mar/mar/comport.mar.ok
++++ /dev/null
+@@ -1,6 +0,0 @@
+-
+-#[if(!is_defined("MAR_COMPORT")) {
+-    const MAR_COMPORT = 1;
+-
+-    #[extern("comport.mar")]
+-}]
+diff --git a/src/target/std/mar/mar/constants.mar b/src/target/std/mar/mar/constants.mar
+deleted file mode 100644
+index d2dc0e2..0000000
+--- a/src/target/std/mar/mar/constants.mar
++++ /dev/null
+@@ -1,122 +0,0 @@
+-;; runtime.mar
+-;; runtime implmenetation
+-
+-;; NOTE: we leak these constants into any `#[extern]` included files;; constants
+-;*************************** Hardware IDs
+-HWID_LEGS     equ 0x1
+-HWID_LASER    equ 0x2
+-HWID_LIDAR    equ 0x3
+-HWID_KEYBOARD equ 0x4
+-HWID_DRILL    equ 0x5
+-HWID_INV      equ 0x6
+-HWID_RNG      equ 0x7
+-HWID_CLOCK    equ 0x8
+-HWID_HOLO     equ 0x9
+-HWID_BATTERY  equ 0xA
+-HWID_FLOPPY   equ 0xB
+-HWID_RADIO    equ 0xC
+-
+-;*************************** Drill actions IDs
+-DRILL_POLL        equ 1
+-DRILL_GATHER      equ 2
+-; Drill status
+-DRILL_STATUS_OK   equ 0
+-DRILL_STATUS_BUSY equ 1
+-
+-;*************************** Inventory actions IDs
+-INV_CLEAR equ 0
+-INV_POLL  equ 1
+-
+-;*************************** Laser actions IDs
+-LASER_WITHDRAW equ 1
+-LASER_DEPOSIT  equ 2
+-
+-;*************************** Legs actions IDs
+-LEGS_SET_DIRECTION          equ 1
+-LEGS_SET_DIRECTION_AND_WALK equ 2
+-; Legs directions
+-LEGS_DIR_NORTH equ 0
+-LEGS_DIR_EAST  equ 1
+-LEGS_DIR_SOUTH equ 2
+-LEGS_DIR_WEST  equ 3
+-
+-;*************************** LiDAR actions IDs
+-LIDAR_GET_POS       equ 1
+-LIDAR_GET_PATH      equ 2
+-LIDAR_GET_MAP       equ 3
+-LIDAR_GET_WORLD_POS equ 4
+-
+-;*************************** Keyboard actions IDs
+-KEYBOARD_CLEAR     equ 0
+-KEYBOARD_FETCH_KEY equ 1
+-
+-;*************************** Hologram Projector actions IDs
+-HOLO_CLEAR          equ 0
+-HOLO_DISPLAY_HEX    equ 1
+-HOLO_DISPLAY_STRING equ 2
+-HOLO_DISPLAY_DEC    equ 3
+-HOLO_DISPLAY_COLOR  equ 4
+-
+-;*************************** Battery actions IDs
+-BATTERY_POLL             equ 1
+-BATTERY_GET_MAX_CAPACITY equ 2
+-
+-;*************************** Random Number Generator actions IDs
+-RNG_POLL equ 0
+-
+-;*************************** Clock actions IDs
+-CLOCK_POLL equ 0
+-
+-;*************************** Floppy Disk actions IDs
+-FLOPPY_POLL         equ 1
+-FLOPPY_READ_SECTOR  equ 2
+-FLOPPY_WRITE_SECTOR equ 3
+-
+-;*************************** Radio actions IDs
+-RADIO_LISTEN equ 1
+-
+-;*************************** Keys IDs
+-KEY_ESC   equ 0x1b
+-KEY_SPACE equ 0x20
+-KEY_ENTER equ 0xd
+-KEY_0     equ 0x30
+-KEY_1     equ 0x31
+-KEY_2     equ 0x32
+-KEY_3     equ 0x33
+-KEY_4     equ 0x34
+-KEY_5     equ 0x35
+-KEY_6     equ 0x36
+-KEY_7     equ 0x37
+-KEY_8     equ 0x38
+-KEY_9     equ 0x39
+-KEY_A     equ 0x41
+-KEY_B     equ 0x42
+-KEY_C     equ 0x43
+-KEY_D     equ 0x44
+-KEY_E     equ 0x45
+-KEY_F     equ 0x46
+-KEY_G     equ 0x47
+-KEY_H     equ 0x48
+-KEY_I     equ 0x49
+-KEY_J     equ 0x4a
+-KEY_K     equ 0x4b
+-KEY_L     equ 0x4c
+-KEY_M     equ 0x4d
+-KEY_N     equ 0x4e
+-KEY_O     equ 0x4f
+-KEY_P     equ 0x50
+-KEY_Q     equ 0x51
+-KEY_R     equ 0x52
+-KEY_S     equ 0x53
+-KEY_T     equ 0x54
+-KEY_U     equ 0x55
+-KEY_V     equ 0x56
+-KEY_W     equ 0x57
+-KEY_X     equ 0x58
+-KEY_Y     equ 0x59
+-KEY_Z     equ 0x5a
+-
+-;*************************** Items IDs
+-ITEM_BIOMASS equ 1
+-ITEM_IRON    equ 3
+-ITEM_COPPER  equ 4
+diff --git a/src/target/std/mar/oak/_prn.mar b/src/target/std/mar/oak/_prn.mar
+deleted file mode 100644
+index c62827e..0000000
+--- a/src/target/std/mar/oak/_prn.mar
++++ /dev/null
+@@ -1,46 +0,0 @@
+-;;/
+-;; This is a foreign function file used by 'std.ok`.
+-;; NOTE: any #[ffi] function defintions are expected to work with the virtual machine instead of normal MAR calling conventions
+-;;/
+-
+-;; #[ffi] void prn!(n)
+-;; pop a value off the stack convert it from a number to a string and print it as a null terminated string
+-;; implementation from: https://stackoverflow.com/a/3982700
+-;; #[dependency="../c/string.h"]
+-;; what it should do:
+-;;  - use stdlib::
+-prn:
+-__oak_prn:
+-    push B
+-    push Y
+-    push BP
+-    mov BP, SP
+-    call __core_machine_pop  ; pop value into
+-    mov B, __oak_prn_buffer ; char * loc = &__oak_prn_buffer
+-    add B, 4          ; loc += 4 // move to the end of the buffer, but before the null terminator
+-__oak_prn_loop:
+-    cmp A, 10         ; while (value >= 10)
+-    jl __oak_prn_break
+-    mov Y, 0         ; zero out Y for the DIV op
+-    div 10           ; divide by 10, result in A, remainder in Y
+-    add Y, 0x30      ; convert remainder to ascii character
+-    mov [B], Y       ;
+-    dec B
+-    jmp __oak_prn_loop
+-__oak_prn_break:
+-    add A, 0x30
+-    mov [B], A
+-__oak_prn_loop_prc:
+-    push B
+-    call __c_strlen   ; size_t length = __c_strlen(__oak_prn_buffer)
+-    push A
+-    push B
+-    ; __mar_comport_write(loc, length)
+-    call __mar_comport_write
+-__oak_prn_return:
+-    mov SP, BP
+-    pop BP
+-    pop Y
+-    pop B
+-    ret
+-__oak_prn_buffer: dw 6 dup(0x00) ; space for 5 character + '\0'
+diff --git a/src/target/std/mar/oak/_prn.mar.ok b/src/target/std/mar/oak/_prn.mar.ok
+deleted file mode 100644
+index 01dff85..0000000
+--- a/src/target/std/mar/oak/_prn.mar.ok
++++ /dev/null
+@@ -1,10 +0,0 @@
+-
+-#[if(!is_defined("OAK_PRN")) {
+-    // include guard
+-    const OAK_PRN = 1;
+-    // include dependencies
+-    #[include("../c/string.h.mar.ok")]
+-    #[include("../mar/comport.mar.ok")]
+-    // include asm implementation
+-    #[extern("_prn.mar")]
+-}]
+diff --git a/src/target/std/mar/oak/getch.mar b/src/target/std/mar/oak/getch.mar
+deleted file mode 100644
+index 6867656..0000000
+--- a/src/target/std/mar/oak/getch.mar
++++ /dev/null
+@@ -1,80 +0,0 @@
+-;;/
+-;; This is a foreign function file used by 'std.ok`.
+-;; NOTE: any #[ffi] function defintions are expected to work with the virtual machine instead of normal MAR calling conventions
+-;;/
+-
+-HWID_KEYBOARD equ 0x4
+-;*************************** Keyboard actions IDs
+-KEYBOARD_CLEAR     equ 0
+-KEYBOARD_FETCH_KEY equ 1
+-;*************************** Keys IDs
+-KEY_ESC   equ 0x1b
+-KEY_SPACE equ 0x20
+-KEY_ENTER equ 0xd
+-KEY_NEWLINE equ 0xa
+-KEY_0     equ 0x30
+-KEY_1     equ 0x31
+-KEY_2     equ 0x32
+-KEY_3     equ 0x33
+-KEY_4     equ 0x34
+-KEY_5     equ 0x35
+-KEY_6     equ 0x36
+-KEY_7     equ 0x37
+-KEY_8     equ 0x38
+-KEY_9     equ 0x39
+-KEY_A     equ 0x41
+-KEY_B     equ 0x42
+-KEY_C     equ 0x43
+-KEY_D     equ 0x44
+-KEY_E     equ 0x45
+-KEY_F     equ 0x46
+-KEY_G     equ 0x47
+-KEY_H     equ 0x48
+-KEY_I     equ 0x49
+-KEY_J     equ 0x4a
+-KEY_K     equ 0x4b
+-KEY_L     equ 0x4c
+-KEY_M     equ 0x4d
+-KEY_N     equ 0x4e
+-KEY_O     equ 0x4f
+-KEY_P     equ 0x50
+-KEY_Q     equ 0x51
+-KEY_R     equ 0x52
+-KEY_S     equ 0x53
+-KEY_T     equ 0x54
+-KEY_U     equ 0x55
+-KEY_V     equ 0x56
+-KEY_W     equ 0x57
+-KEY_X     equ 0x58
+-KEY_Y     equ 0x59
+-KEY_Z     equ 0x5a
+-
+-;; [#ffi] void getch!()
+-;; TODO: should use '../mar/keyboard'
+-;; retrieve a character from stdin and push it on the stack
+-;; NOTE: seems like getch is expected to block so we emulate that behaviour
+-;; https://github.com/simon987/Much-Assembly-Required/wiki/(Hardware)-Keyboard
+-getch:
+-__oak_getch:
+-    push B
+-    push BP
+-    mov BP, SP
+-__oak_getch_fetch:
+-    mov A, KEYBOARD_FETCH_KEY
+-    hwi HWID_KEYBOARD
+-    cmp B, 0   ; if the result is zero there was no character in the keyboard buffer
+-    jnz __oak_getch_newline_check
+-    ;;call __core_sleep ; to prevent spinning and draining the server / have the server terminate our execution we use sleep
+-    jmp __oak_getch_fetch
+-__oak_getch_newline_check:
+-    ;; NOTE: oakc examples ignore '\r' and work with '\n' characters, so we do a switcheroo
+-    cmp B, KEY_ENTER ;; if key is a '\r' character, replace it with a '\n' character
+-    jnz __oak_getch_return
+-    mov B, KEY_NEWLINE
+-__oak_getch_return:
+-    push B
+-    call __core_machine_push
+-    mov SP, BP
+-    pop BP
+-    pop B
+-    ret
+diff --git a/src/target/std/mar/oak/getch.mar.ok b/src/target/std/mar/oak/getch.mar.ok
+deleted file mode 100644
+index e4f57c1..0000000
+--- a/src/target/std/mar/oak/getch.mar.ok
++++ /dev/null
+@@ -1,9 +0,0 @@
+-
+-#[if(!is_defined("OAK_GETCH")) {
+-    // include guard
+-    const OAK_GETCH = 1;
+-    // include dependencies
+-    //#[include("../mar/keyboard.mar.ok")]
+-    // include asm implementation
+-    #[extern("getch.mar")]
+-}]
+diff --git a/src/target/std/mar/oak/prc.mar b/src/target/std/mar/oak/prc.mar
+deleted file mode 100644
+index 26e0bab..0000000
+--- a/src/target/std/mar/oak/prc.mar
++++ /dev/null
+@@ -1,22 +0,0 @@
+-;;/
+-;; This is a foreign function file used by 'std.ok`.
+-;; NOTE: any #[ffi] function defintions are expected to work with the virtual machine instead of normal MAR calling conventions
+-;;/
+-
+-;; #[ffi] void prc!(ch)
+-;; pop a value off the stack and print it as character
+-;; #[dependency="../mar/comport.mar"] for `void __mar_blocking_write_to_console(const char * str, size_t length)``
+-prc:
+-__oak_prc:
+-    push BP
+-    mov BP, SP
+-    call __core_machine_pop
+-    mov [__oak_prc_buffer], A
+-    push 1
+-    push __oak_prc_buffer
+-    ; __mar_comport_write(loc, length)
+-    call __mar_comport_write
+-    mov SP, BP
+-    pop BP
+-    ret
+-__oak_prc_buffer: dw 0x0000
+diff --git a/src/target/std/mar/oak/prc.mar.ok b/src/target/std/mar/oak/prc.mar.ok
+deleted file mode 100644
+index f0eddd1..0000000
+--- a/src/target/std/mar/oak/prc.mar.ok
++++ /dev/null
+@@ -1,9 +0,0 @@
+-
+-#[if(!is_defined("OAK_PRC")) {
+-    // include guard
+-    const OAK_PRC = 1;
+-    // include dependencies
+-    #[include("../mar/comport.mar.ok")]
+-    // include asm implementation
+-    #[extern("prc.mar")]
+-}]
+diff --git a/src/target/std/mar/oak/prend.mar b/src/target/std/mar/oak/prend.mar
+deleted file mode 100644
+index c961e77..0000000
+--- a/src/target/std/mar/oak/prend.mar
++++ /dev/null
+@@ -1,16 +0,0 @@
+-;;/
+-;; This is a foreign function file used by 'std.ok`.
+-;; NOTE: any #[ffi] function defintions are expected to work with the virtual machine instead of normal MAR calling conventions
+-;;/
+-
+-;; #[ffi] void prend!()
+-;; print a newline character
+-;; #[dependency="../mar/comport.mar"] for `void __mar_blocking_write_to_console(const char * str, size_t length)``
+-prend:
+-__oak_prend:
+-    push 1
+-    push __oak_prend_buffer
+-    ; __mar_comport_write(loc, length)
+-    call __mar_comport_write
+-    ret
+-__oak_prend_buffer: dw 0x000A
+diff --git a/src/target/std/mar/oak/prend.mar.ok b/src/target/std/mar/oak/prend.mar.ok
+deleted file mode 100644
+index e5bfc2a..0000000
+--- a/src/target/std/mar/oak/prend.mar.ok
++++ /dev/null
+@@ -1,9 +0,0 @@
+-
+-#[if(!is_defined("OAK_PREND")) {
+-    // include guard
+-    const OAK_PREND = 1;
+-    // include dependencies
+-    #[include("../mar/comport.mar.ok")]
+-    // include asm implementation
+-    #[extern("prend.mar")]
+-}]
+diff --git a/src/target/std/mar/oak/prs.mar b/src/target/std/mar/oak/prs.mar
+deleted file mode 100644
+index fc120e4..0000000
+--- a/src/target/std/mar/oak/prs.mar
++++ /dev/null
+@@ -1,25 +0,0 @@
+-;;/
+-;; This is a foreign function file used by 'std.ok`.
+-;; NOTE: any #[ffi] function defintions are expected to work with the virtual machine instead of normal MAR calling conventions
+-;;/
+-
+-;; #[ffi] void prs!(s)
+-;; pop a value off the stack and print it as a null terminated string
+-;; #[dependency="../c/string.h.mar"] for `size_t __c_strlen(const char * str)`
+-;; #[dependency="../mar/comport.mar"] for `void __mar_blocking_write_to_console(const char * str, size_t length)``
+-;; NOTE: we cannot use `puts` because it will print a '\n' at the end of the string
+-prs:
+-__oak_prs:
+-    ;; preserve B
+-    push B
+-    mov B, [__core_vm_memory]     ; char * loc = vm->memory
+-    call __core_machine_pop            ; size_t offset = __core_machine_pop()
+-    add B, A                    ; loc += offset
+-    push B
+-    call __c_strlen             ; size_t length = strlen(loc)
+-    push A                      ;
+-    push B                      ;
+-    ; __mar_comport_write(loc, length)
+-    call __mar_comport_write
+-    pop B
+-    ret
+diff --git a/src/target/std/mar/oak/prs.mar.ok b/src/target/std/mar/oak/prs.mar.ok
+deleted file mode 100644
+index 4189f8c..0000000
+--- a/src/target/std/mar/oak/prs.mar.ok
++++ /dev/null
+@@ -1,10 +0,0 @@
+-
+-#[if(!is_defined("OAK_PRS")) {
+-    // include guard
+-    const OAK_PRS = 1;
+-    // include dependencies
+-    #[include("../c/string.h.mar.ok")]
+-    #[include("../mar/comport.mar.ok")]
+-    // include asm implementation
+-    #[extern("prs.mar")]
+-}]
+diff --git a/src/target/std/std.mar.ok b/src/target/std/std.mar.ok
+deleted file mode 100644
+index badcc5a..0000000
+--- a/src/target/std/std.mar.ok
++++ /dev/null
+@@ -1,35 +0,0 @@
+-
+-// we use the oak compiler itself to generate the actual std.mar file so we can use its compile time features
+-
+-// these functions should mimic https://github.com/adam-mcdaniel/oakc/blob/master/src/std.ok
+-// until a std lib specification is defined
+-
+-// current contents: 
+-/*
+-fn putstr(s: &char) -> void { prs!(s); }
+-fn putstrln(s: &char) -> void { putstr(s); prend!(); }
+-
+-fn putnum(n: num) -> void { prn!(n); }
+-fn putnumln(n: num) -> void { putnum(n); prend!(); }
+-
+-fn putchar(ch: char) -> void { prc!(ch); }
+-fn putcharln(ch: char) -> void { putchar(ch); prend!(); }
+-
+-fn get_char() -> char { return getch!() as char; }
+-*/
+-
+-// print null terminated string
+-#[include("oak/prs.mar.ok")]
+-
+-// print line ending
+-#[include("oak/prend.mar.ok")]
+-
+-// print number
+-// NOTE: windows gets confused by the 'prn' in the name and tries to use it like a printer
+-#[include("oak/_prn.mar.ok")]
+-
+-// print character
+-#[include("oak/prc.mar.ok")]
+-
+-// get a character from stdin (assume blocking execution until we have one)
+-#[include("oak/getch.mar.ok")]
