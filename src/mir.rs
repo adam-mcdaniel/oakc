@@ -873,7 +873,9 @@ impl MirStatement {
         }
     }
 
-    /// Type check the MIR before it is lowered
+    /// This function type checks a statement. Code that may compile to valid assembly
+    /// can still be riddled with type errors, and type errors fuel bugs and logic errors.
+    /// Enforcing checks against badly formed expressions is very important for correctness.
     fn type_check(
         &self,
         vars: &BTreeMap<Identifier, MirType>,
@@ -1025,12 +1027,17 @@ impl MirStatement {
         Ok(())
     }
 
-    /// Lower MIR into Oak's ASM
+    /// This function generates output code from a statement. Each different type of statement
+    /// is disassembled and translated into corresponding code for the next layer of the backend here.
+    /// This is done after type checking, though, which confirms the program is correct.
     fn assemble(
         &self,
         vars: &mut BTreeMap<Identifier, MirType>,
         funcs: &BTreeMap<Identifier, MirFunction>,
         structs: &BTreeMap<Identifier, MirStructure>,
+        // When an object instance is used in a method, its stored in a temporary and hidden
+        // variable so that it may be dropped later. This counts the number of temporary
+        // instances there currently are in the function.
         instance_count: &mut i32,
     ) -> Result<Vec<AsmStatement>, MirError> {
         Ok(match self {
@@ -1416,6 +1423,9 @@ impl MirExpression {
         })
     }
 
+    /// This function type checks an expression. Code that may compile to valid assembly
+    /// can still be riddled with type errors, and type errors fuel bugs and logic errors.
+    /// Enforcing checks against badly formed expressions is very important for correctness.
     fn type_check(
         &self,
         vars: &BTreeMap<Identifier, MirType>,
@@ -1433,7 +1443,7 @@ impl MirExpression {
                     return Err(MirError::NonBooleanCondition(*cond.clone()));
                 }
 
-                // Check if branches of the conditional expression match
+                // Check if the types of each branch match
                 if then.get_type(vars, funcs, structs)?
                     != otherwise.get_type(vars, funcs, structs)?
                 {
@@ -1609,6 +1619,9 @@ impl MirExpression {
         Ok(())
     }
 
+    /// This function generates output code from an expression. Each different type of expression
+    /// is disassembled and translated into corresponding code for the next layer of the backend here.
+    /// This is done after type checking, though, which confirms the program is correct.
     fn assemble(
         &self,
         vars: &mut BTreeMap<Identifier, MirType>,
