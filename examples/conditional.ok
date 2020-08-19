@@ -1,0 +1,36 @@
+#[std]
+
+fn yes_or_no(prompt: &char) -> bool {
+    putstr(prompt);
+    let input = get_char();
+    while input == '\r' || input == '\n' {
+        input = get_char();
+    }
+    return input == 'y' ||
+           input == 'Y';
+}
+
+
+const C = 1;
+const GO = 2;
+const TYPESCRIPT = 3;
+const UNKNOWN = 4;
+
+const BACKEND = TARGET == 'c'?
+    C
+    : TARGET == 'g'?
+        GO
+        : TARGET == 't'?
+            TYPESCRIPT
+            : UNKNOWN;
+
+
+fn main() {
+    putnumln(BACKEND);
+
+    putstrln(
+        yes_or_no("Do you like apples (y/n)? ")?
+            "You like apples!"
+            : "You don't like apples!"
+    )
+}
