@@ -51,7 +51,7 @@ struct Machine {
 		];
 	}
 
-	fn token(self: &Machine)       -> &char  { return self->code + self->ins_ptr }
+	fn token(self: &Machine) -> &char  { return self->code + self->ins_ptr }
 
 	fn plus(self: &Machine)   { self->val = self->val + 1 }
 	fn minus(self: &Machine)  { self->val = self->val - 1 }
@@ -86,17 +86,17 @@ struct Machine {
 
 	fn dump(self: &Machine) {
 		putstrln(self->code);
-		for (let i: num = 0; i < self->ins_ptr; i=i+1) {
+		for i in 0..self->ins_ptr {
 			putchar(' ');
 		}
 		putcharln('^');
 
 		putchar('[');
-		for (let i: num = 0; i<TAPE_SIZE; i=i+1) {
+		for i in 0..TAPE_SIZE {
 			putchar(' '); putnum((self->tape)[i]);
 		}
 		putstr(" ]\n  ");
-		for (let i: num = 0; i<self->val_ptr; i=i+1) {
+		for i in 0..self->val_ptr {
 			putstr("  ");
 		}
 		putcharln('^');

@@ -26,7 +26,7 @@ struct Array {
         let size = (self->len) * (self->elem_size);
         let ptr = alloc(size) as &char;
         let self_ptr = (self->contents) as &char;
-        for (let i=0; i < size; i=i+1) {
+        for i in 0..size {
             ptr[i] = self_ptr[i];
         }
         return [self->len, self->elem_size, self_ptr]

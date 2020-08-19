@@ -648,11 +648,14 @@ pub enum HirConstant {
     IsDefined(String),
     /// The size of a constant
     SizeOf(HirType),
+    /// A constant expression that is contingent on another constant expression
+    Conditional(Box<Self>, Box<Self>, Box<Self>)
 }
 
 impl Display for HirConstant {
     fn fmt(&self, f: &mut Formatter) -> Result<(), Error> {
         match self {
+            Self::Conditional(cond, then, otherwise) => write!(f, "{} ? {} : {}", cond, then, otherwise),
             Self::True => write!(f, "true"),
             Self::False => write!(f, "false"),
             Self::Float(n) => write!(f, "{}", n),
@@ -686,6 +689,16 @@ impl HirConstant {
         target: &impl Target,
     ) -> Result<f64, HirError> {
         Ok(match self {
+            Self::Conditional(cond, then, otherwise) => if cond.to_value(decls, constants, target)? != 0.0 {
+                // If the constant condition is true, then use
+                // the first constant branch
+                then.to_value(decls, constants, target)?
+            } else {
+                // If the constant condition is false, then use
+                // the second constant branch
+                otherwise.to_value(decls, constants, target)?
+            },
+
             Self::True => 1.0,
             Self::False => 0.0,
 
@@ -1000,6 +1013,9 @@ pub enum HirExpression {
     Method(Box<Self>, Identifier, Vec<Self>),
     /// An index of a pointer value
     Index(Box<Self>, Box<Self>),
+
+    /// A conditional expression
+    Conditional(Box<Self>, Box<Self>, Box<Self>),
 }
 
 impl HirExpression {
@@ -1162,6 +1178,12 @@ impl HirExpression {
             Self::Index(ptr, idx) => MirExpression::Index(
                 Box::new(ptr.to_mir_expr(decls, constants, target)?),
                 Box::new(idx.to_mir_expr(decls, constants, target)?),
+            ),
+
+            Self::Conditional(cond, then, otherwise) => MirExpression::Conditional(
+                Box::new(cond.to_mir_expr(decls, constants, target)?),
+                Box::new(then.to_mir_expr(decls, constants, target)?),
+                Box::new(otherwise.to_mir_expr(decls, constants, target)?),
             ),
         })
     }

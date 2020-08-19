@@ -18,7 +18,7 @@ struct Date {
     fn yesterday(self: &Date) { self->day = self->day - 1; }
 
     fn next_week(self: &Date) {
-        for (let i: num = 0; i<7; i=i+1) {
+        for i in 0..7 {
             self.tomorrow();
         }
     }

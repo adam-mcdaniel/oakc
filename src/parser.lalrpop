@@ -57,7 +57,10 @@ List<Begin, T, Sep, End>: Vec<T> = {
     }
 }
 
-Constant: TirConstant = <ConstantMathBottom> => <>;
+Constant: TirConstant = {
+    <cond:ConstantMathBottom> "?" <then:Constant> ":" <otherwise:Constant> => TirConstant::Conditional(Box::new(cond), Box::new(then), Box::new(otherwise)),
+    <ConstantMathBottom> => <>
+}
 
 ConstantAtom: TirConstant = {
     "is_movable" "(" <Type> ")" => TirConstant::IsMovable(<>),
@@ -180,6 +183,7 @@ SmallStatement: TirStatement = {
 }
 
 Expression: TirExpression = {
+    <cond:ExpressionBottom> "?" <then:Expression> ":" <otherwise:Expression> => TirExpression::Conditional(Box::new(cond), Box::new(then), Box::new(otherwise)),
     <expr:ExpressionAtom> "as" <t:Type> => TirExpression::TypeCast(Box::new(expr), t),
     "*" <ptr:ExpressionBottom> => TirExpression::Deref(Box::new(ptr)),
     <ExpressionBottom> => <>,
