@@ -1,6 +1,6 @@
 
-// The `isdef` guard prevents redefining functions
-#[if(!isdef("STR")) {
+// The `is_defined` guard prevents redefining functions
+#[if(!is_defined("STR")) {
     const STR = 1;
 
     fn strlen(str: &char) -> num {
