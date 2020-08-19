@@ -1,0 +1,38 @@
+#[std]
+#[if(is_defined("TEST_H")) {
+    fn test1() {
+        putstrln("is_defined doesn't work :(");
+    }
+} else {
+    fn test1() {
+        putstrln("is_defined works!");
+    }
+}]
+
+#[if(!is_defined("TEST_H")) {
+    const TEST_H = 1;
+    fn test2() {
+        putstrln("is_defined works!");
+    }
+} else {
+    fn test2() {
+        putstrln("is_defined doesn't work :(");
+    }
+}]
+
+#[if(is_defined("TEST_H")) {
+    fn test3() {
+        putstrln("is_defined works!");
+    }
+} else {
+    fn test3() {
+        putstrln("is_defined doesn't work :(");
+    }
+}]
+
+
+fn main() {
+    test1();
+    test2();
+    test3();
+}
