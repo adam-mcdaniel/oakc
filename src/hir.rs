@@ -690,8 +690,12 @@ impl HirConstant {
     ) -> Result<f64, HirError> {
         Ok(match self {
             Self::Conditional(cond, then, otherwise) => if cond.to_value(decls, constants, target)? != 0.0 {
+                // If the constant condition is true, then use
+                // the first constant branch
                 then.to_value(decls, constants, target)?
             } else {
+                // If the constant condition is false, then use
+                // the second constant branch
                 otherwise.to_value(decls, constants, target)?
             },
 
