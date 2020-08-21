@@ -467,8 +467,8 @@ impl HirStructure {
     fn generate_docs(&self) -> String {
         // Add a header for the output markdown
         let mut result = format!(
-            "## *type* **{}** *with size* **{}**\n",
-            self.name, self.size
+            "## *type* **{}**\n",
+            self.name
         );
         // If a docstring is defined, then
         // add it to the output
@@ -556,9 +556,11 @@ impl HirFunction {
         for (i, (arg_name, arg_type)) in self.args.iter().enumerate() {
             result += &format!("*{}*: {}, ", arg_name, arg_type)
         }
-        // Remove the last space and comma
-        result.pop();
-        result.pop();
+        // Remove the last space and comma from the last argument
+        if !self.args.is_empty() {
+            result.pop();
+            result.pop();
+        }
 
         // Add the close parantheses
         result += ")";
