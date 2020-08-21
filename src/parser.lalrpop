@@ -18,6 +18,7 @@ Declaration: TirDeclaration = {
     "#" "[" "if" "(" <cond:Constant> ")" "{" <then_code:Program> "}" "else" "{" <else_code:Program> "}" "]" => TirDeclaration::IfElse(cond, then_code, else_code),
     "#" "[" "define" "(" <name:Str> "," <constant:Constant> ")" "]" => TirDeclaration::Constant(None, name, constant),
     "#" "[" "doc" "(" <doc:Str> ")" "]" "const" <name:Ident> "=" <constant:Constant> ";" => TirDeclaration::Constant(Some(doc), name, constant),
+    "#" "[" "{" <Declaration+> "}" "]" => TirDeclaration::Block(<>),
     "const" <name:Ident> "=" <constant:Constant> ";" => TirDeclaration::Constant(None, name, constant),
     <Function> => TirDeclaration::Function(<>),
     <Structure> => TirDeclaration::Structure(<>),
@@ -138,6 +139,7 @@ Statement: TirStatement = {
 }
 
 BodyStatement: TirStatement = {
+    <body:Body> => TirStatement::Block(body),
     "for" "(" <pre:SmallStatement> ";" <cond:Expression> ";" <post:SmallStatement> ")" <body:Body> => TirStatement::For(Box::new(pre), cond, Box::new(post), body),
     "for" <var:Ident> "in" <from:Expression> ".." <to:Expression> <body:Body> => TirStatement::ForRange(var, from, to, body),
     "while" <cond:Expression> <body:Body> => TirStatement::While(cond, body),

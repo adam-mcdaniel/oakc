@@ -32,7 +32,7 @@ pub enum TirError {
     /// The user may NOT call the `.copy()` method explicitly
     /// The compiler is only allowed to call this method.
     /// This is to prevent memory leaks.
-    ExplicitCopy,
+    ExplicitCopy
 }
 
 impl Display for TirError {
@@ -61,7 +61,11 @@ pub struct TirProgram(Vec<TirDeclaration>, i32);
 
 impl TirProgram {
     pub fn new(decls: Vec<TirDeclaration>, memory_size: i32) -> Self {
-        Self(decls, memory_size)
+        let mut flattened_decls = Vec::new();
+        for decl in decls {
+            flattened_decls.extend(decl.flatten_blocks());
+        }
+        Self(flattened_decls, memory_size)
     }
 
     pub fn compile(&self) -> Result<HirProgram, TirError> {
@@ -79,6 +83,7 @@ impl TirProgram {
 /// should be added here.
 #[derive(Clone, Debug)]
 pub enum TirDeclaration {
+    Block(Vec<Self>),
     DocumentHeader(String),
     Constant(Option<String>, Identifier, TirConstant),
     Function(TirFunction),
@@ -95,8 +100,23 @@ pub enum TirDeclaration {
 }
 
 impl TirDeclaration {
+    fn flatten_blocks(&self) -> Vec<Self> {
+        match self {
+            Self::Block(decls) => {
+                let mut result = Vec::new();
+                for decl in decls {
+                    result.extend(decl.flatten_blocks())
+                }
+                result
+            }
+
+            _ => vec![self.clone()]
+        }
+    }
+
     fn to_hir_decl(&self, decls: &Vec<TirDeclaration>) -> Result<HirDeclaration, TirError> {
         Ok(match self {
+            Self::Block(_) => HirDeclaration::Pass,
             Self::DocumentHeader(header) => HirDeclaration::DocumentHeader(header.clone()),
             Self::Constant(doc, name, constant) => {
                 HirDeclaration::Constant(doc.clone(), name.clone(), constant.to_hir_const(decls)?)
@@ -701,9 +721,11 @@ impl TirConstant {
 
 #[derive(Clone, Debug)]
 pub enum TirStatement {
-    /// An HIR let expression with a manually assigned type
+    /// A groupt of statements executed as a single one
+    Block(Vec<Self>),
+    /// A TIR let expression with a manually assigned type
     Define(Identifier, TirType, TirExpression),
-    /// An HIR let expression with an automatically assigned type
+    /// A TIR let expression with an automatically assigned type
     AutoDefine(Identifier, TirExpression),
     /// A variable assignment
     AssignVariable(Identifier, TirExpression),
@@ -726,18 +748,18 @@ pub enum TirStatement {
     /// Divide the value a pointer points to
     DivideAssignAddress(TirExpression, TirExpression),
 
-    /// An HIR for loop `for (let i=0; i<10; i=i+1) {...}`
+    /// A TIR for loop `for (let i=0; i<10; i=i+1) {...}`
     For(Box<Self>, TirExpression, Box<Self>, Vec<Self>),
-    /// An HIR for loop `for i in 0..10 {...}`
+    /// A TIR for loop `for i in 0..10 {...}`
     ForRange(Identifier, TirExpression, TirExpression, Vec<Self>),
 
-    /// An HIR while loop
+    /// A TIR while loop
     While(TirExpression, Vec<Self>),
-    /// An HIR if statement
+    /// A TIR if statement
     If(TirExpression, Vec<Self>),
-    /// An HIR if statement with an else clause
+    /// A TIR if statement with an else clause
     IfElse(TirExpression, Vec<Self>, Vec<Self>),
-    /// An HIR if statement with an else clause
+    /// A TIR if statement with an else clause
     IfElifElse(
         TirExpression,
         Vec<Self>,
@@ -745,7 +767,7 @@ pub enum TirStatement {
         Vec<Self>,
     ),
 
-    /// An HIR free statement to deallocate memory
+    /// A TIR free statement to deallocate memory
     Free(TirExpression, TirExpression),
     /// Return one or more values at the end of a function
     Return(Vec<TirExpression>),
@@ -757,6 +779,14 @@ pub enum TirStatement {
 impl TirStatement {
     fn to_hir_stmt(&self, decls: &Vec<TirDeclaration>) -> Result<HirStatement, TirError> {
         Ok(match self {
+            Self::Block(stmts) => {
+                let mut result = Vec::new();
+                for stmt in stmts {
+                    result.push(stmt.to_hir_stmt(decls)?)
+                }
+                HirStatement::Block(result)
+            }
+
             Self::Define(name, t, expr) => {
                 HirStatement::Define(name.clone(), t.to_hir_type()?, expr.to_hir_expr(decls)?)
             }

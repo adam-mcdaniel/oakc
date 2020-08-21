@@ -2,7 +2,7 @@
 #[header("This file tests Oak's doc subcommand.")]
 
 
-#[doc("This constant is a constant.")]
+#[doc("This \* constant is a constant.")]
 const CONSTANT = 3;
 
 const TEST = CONSTANT + 5;

@@ -702,6 +702,9 @@ pub enum MirStatement {
     Return(Vec<MirExpression>),
     /// Use a non-void expression
     Expression(MirExpression),
+
+    /// A statement that consists of a block of statements
+    Block(Vec<Self>)
 }
 
 impl MirStatement {
@@ -736,6 +739,20 @@ impl MirStatement {
         structs: &BTreeMap<Identifier, MirStructure>,
     ) -> Result<bool, MirError> {
         match self {
+            Self::Block(stmts) => {
+                let mut has_return = false;
+                for stmt in stmts {
+                    if stmt.has_valid_return(func_name, return_type, vars, funcs, structs)? {
+                        if has_return {
+                            return Err(MirError::MultipleReturns(func_name.clone()));
+                        } else {
+                            has_return = true;
+                        }
+                    }
+                }
+                Ok(has_return)
+            }
+
             Self::IfElse(_, then_body, else_body) => {
                 // For each statement in the body, check if the
                 // statement returns a valid expression
@@ -883,6 +900,12 @@ impl MirStatement {
         structs: &BTreeMap<Identifier, MirStructure>,
     ) -> Result<(), MirError> {
         match self {
+            Self::Block(stmts) => {
+                for stmt in stmts {
+                    stmt.type_check(vars, funcs, structs)?
+                }
+            }
+
             Self::Define(var_name, t, expr) => {
                 expr.type_check(vars, funcs, structs)?;
                 let rhs_type = expr.get_type(vars, funcs, structs)?;
@@ -1041,6 +1064,14 @@ impl MirStatement {
         instance_count: &mut i32,
     ) -> Result<Vec<AsmStatement>, MirError> {
         Ok(match self {
+            Self::Block(stmts) => {
+                let mut result = Vec::new();
+                for stmt in stmts {
+                    result.extend(stmt.assemble(vars, funcs, structs, instance_count)?);
+                }
+                result
+            }
+
             /// Define a variable with a given type
             Self::Define(var_name, t, expr) => {
                 // Add the variable to the defined variables in the scope

@@ -406,6 +406,9 @@ pub enum HirDeclaration {
     RequireStd,
     /// Mark that the standard library is not allowed for the program
     NoStd,
+    /// This is a placeholder for declarations that are processed in TIR, 
+    /// but need to be assembled to HIR.
+    Pass
 }
 
 /// This type represents a user defined structure.
@@ -820,6 +823,9 @@ impl HirConstant {
 /// and void expressions.
 #[derive(Clone, Debug, PartialEq)]
 pub enum HirStatement {
+    /// A block of statements grouped as a single one
+    Block(Vec<Self>),
+
     /// An HIR let expression with a manually assigned type
     Define(Identifier, HirType, HirExpression),
     /// An HIR let expression with type inference
@@ -856,6 +862,14 @@ impl HirStatement {
         target: &impl Target,
     ) -> Result<MirStatement, HirError> {
         Ok(match self {
+            Self::Block(stmts) => {
+                let mut result = Vec::new();
+                for stmt in stmts {
+                    result.push(stmt.to_mir_stmt(decls, constants, target)?);
+                }
+                MirStatement::Block(result)
+            }
+
             Self::Define(name, data_type, expr) => MirStatement::Define(
                 name.clone(),
                 data_type.to_mir_type(),

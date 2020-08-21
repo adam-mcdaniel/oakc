@@ -1,0 +1,15 @@
+
+
+
+#[{
+    #[std]
+    #[assert(TARGET == 'c')]
+    fn test() {
+        putstrln("Block flags work!");
+    }
+}]
+
+
+fn main() {
+    test();
+}

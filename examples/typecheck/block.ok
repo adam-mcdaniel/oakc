@@ -1,0 +1,15 @@
+#[std]
+
+fn test(n: num) -> num {
+    {
+        putstr("The number is '");
+        putnum(n);
+        putcharln('\'');
+        return 5
+    }
+}
+
+
+fn main() {
+    putnumln(test(6));
+}
