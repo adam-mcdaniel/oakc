@@ -64,10 +64,45 @@ impl TirProgram {
         Self(decls, memory_size)
     }
 
-    pub fn compile(&self) -> Result<HirProgram, TirError> {
+    pub fn compile(&self, cwd: &PathBuf) -> Result<HirProgram, TirError> {
         let mut hir_decls = vec![];
+
         for decl in &self.0 {
-            hir_decls.push(decl.to_hir_decl(&self.0)?);
+            if let TirDeclaration::Include(filename) = decl {
+                // This takes the path of the file in the `include` flag
+                // and appends it to the directory of the file which is
+                // including it.
+                //
+                // So, if `src/main.ok` includes "lib/all.ok",
+                // `file_path` will be equal to "src/lib/all.ok"
+                let file_path = cwd.join(filename.clone());
+                if let Ok(contents) = read_to_string(file_path.clone()) {
+                    // Get the directory of the included file.
+
+                    // If `src/main.ok` includes "lib/all.ok",
+                    // `include_path` will be equal to "src/lib/"
+                    let include_path = if let Some(dir) = file_path.parent() {
+                        PathBuf::from(dir)
+                    } else {
+                        PathBuf::from("./")
+                    };
+
+                    // Compile the included file using the `include_path` as
+                    // the current working directory.
+                    hir_decls.extend(
+                        parse(cwd, contents)
+                            .get_declarations()
+                            .clone()
+                    );
+                } else {
+                    eprintln!("error: could not include file '{}'", filename);
+                    exit(1);
+                }
+            }
+        }
+
+        for decl in &self.0 {
+            hir_decls.push(decl.to_hir_decl(cwd, &self.0)?);
         }
 
         Ok(HirProgram::new(hir_decls, self.1))
@@ -95,7 +130,7 @@ pub enum TirDeclaration {
 }
 
 impl TirDeclaration {
-    fn to_hir_decl(&self, decls: &Vec<TirDeclaration>) -> Result<HirDeclaration, TirError> {
+    fn to_hir_decl(&self, cwd: &PathBuf, decls: &Vec<TirDeclaration>) -> Result<HirDeclaration, TirError> {
         Ok(match self {
             Self::DocumentHeader(header) => HirDeclaration::DocumentHeader(header.clone()),
             Self::Constant(doc, name, constant) => {
@@ -112,7 +147,7 @@ impl TirDeclaration {
 
             Self::Extern(file) => HirDeclaration::Extern(file.clone()),
 
-            Self::Include(file) => HirDeclaration::Include(file.clone()),
+            Self::Include(file) => HirDeclaration::Pass,
 
             Self::Memory(n) => HirDeclaration::Memory(*n),
 
@@ -120,13 +155,13 @@ impl TirDeclaration {
             Self::NoStd => HirDeclaration::NoStd,
 
             Self::If(constant, program) => {
-                HirDeclaration::If(constant.to_hir_const(decls)?, program.compile()?)
+                HirDeclaration::If(constant.to_hir_const(decls)?, program.compile(cwd)?)
             }
 
             Self::IfElse(constant, then_prog, else_prog) => HirDeclaration::IfElse(
                 constant.to_hir_const(decls)?,
-                then_prog.compile()?,
-                else_prog.compile()?,
+                then_prog.compile(cwd)?,
+                else_prog.compile(cwd)?,
             ),
         })
     }

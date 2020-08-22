@@ -18,8 +18,8 @@ use comment::cpp::strip;
 use lalrpop_util::{lalrpop_mod, ParseError};
 lalrpop_mod!(pub parser);
 
-pub fn generate_docs(input: impl ToString, filename: impl ToString, target: impl Target) -> String {
-    parse(input).generate_docs(filename.to_string(), &target, &mut BTreeMap::new(), false)
+pub fn generate_docs(cwd: &PathBuf, input: impl ToString, filename: impl ToString, target: impl Target) -> String {
+    parse(cwd, input).generate_docs(filename.to_string(), &target, &mut BTreeMap::new(), false)
 }
 
 fn print_compile_error(e: impl Display) -> ! {
@@ -28,10 +28,10 @@ fn print_compile_error(e: impl Display) -> ! {
 }
 
 pub fn compile(cwd: &PathBuf, input: impl ToString, target: impl Target) -> Result<()> {
-    let mut hir = parse(input);
-    hir.extend_declarations(parse(include_str!("core.ok")).get_declarations());
+    let mut hir = parse(cwd, input);
+    hir.extend_declarations(parse(cwd, include_str!("core.ok")).get_declarations());
     if hir.use_std() {
-        hir.extend_declarations(parse(include_str!("std.ok")).get_declarations())
+        hir.extend_declarations(parse(cwd, include_str!("std.ok")).get_declarations())
     }
 
     match hir.compile(cwd, &target, &mut BTreeMap::new()) {
@@ -50,11 +50,11 @@ pub fn compile(cwd: &PathBuf, input: impl ToString, target: impl Target) -> Resu
     }
 }
 
-pub fn parse(input: impl ToString) -> HirProgram {
+pub fn parse(cwd: &PathBuf, input: impl ToString) -> HirProgram {
     let code = &strip(input.to_string()).unwrap();
     match parser::ProgramParser::new().parse(code) {
         // if the parser succeeds, build will succeed
-        Ok(parsed) => match parsed.compile() {
+        Ok(parsed) => match parsed.compile(cwd) {
             Ok(result) => result,
             Err(e) => {
                 print_compile_error(e);
