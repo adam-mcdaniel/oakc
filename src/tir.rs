@@ -90,7 +90,7 @@ impl TirProgram {
                     // Compile the included file using the `include_path` as
                     // the current working directory.
                     hir_decls.extend(
-                        parse(cwd, contents)
+                        parse(&include_path, contents)
                             .get_declarations()
                             .clone()
                     );
