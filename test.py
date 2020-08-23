@@ -8,6 +8,7 @@
 #         this program's flags
 #     -r: the command to run the output of the test backend (ex. "./main")
 #     -f: the file to be tested (ex. "./examples/num.ok")
+#     -v: verbose output, optional
 
 import sys
 import subprocess
