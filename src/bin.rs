@@ -87,7 +87,7 @@ fn main() {
                 };
 
                 // If the output file exists, write the output to it
-                if let Some(output_file) = matches.value_of("OUTPUT") {
+                if let Some(output_file) = sub_matches.value_of("OUTPUT") {
                     if let Ok(_) = write(output_file, docs) {
                         println!("doc generation successful")
                     } else {

@@ -504,10 +504,10 @@ impl TirStructure {
         // Store all the previous member's types for each member
         // to create a getter/setter method for each member.
         let mut previous_member_types = vec![];
-        
+
         // Keep track of the size of the structure
         let mut size = HirConstant::Float(0.0);
-        
+
         for (name, t) in &self.members {
             // Add the member function to the list of methods
             methods.push(
@@ -621,11 +621,19 @@ pub enum TirConstant {
     IsMovable(TirType),
     /// What's the size of a type?
     SizeOf(TirType),
+    /// A constant expression that is contingent on another constant expression
+    Conditional(Box<Self>, Box<Self>, Box<Self>)
 }
 
 impl TirConstant {
     pub fn to_hir_const(&self, decls: &Vec<TirDeclaration>) -> Result<HirConstant, TirError> {
         Ok(match self {
+            Self::Conditional(cond, then, otherwise) => HirConstant::Conditional(
+                Box::new(cond.to_hir_const(decls)?),
+                Box::new(then.to_hir_const(decls)?),
+                Box::new(otherwise.to_hir_const(decls)?),
+            ),
+
             Self::Float(n) => HirConstant::Float(*n),
             Self::Character(ch) => HirConstant::Character(*ch),
             Self::True => HirConstant::True,
@@ -959,6 +967,7 @@ pub enum TirExpression {
     ForeignCall(Identifier, Vec<Self>),
     Method(Box<Self>, Identifier, Vec<Self>),
     Index(Box<Self>, Box<Self>),
+    Conditional(Box<Self>, Box<Self>, Box<Self>),
 }
 
 impl TirExpression {
@@ -1086,6 +1095,12 @@ impl TirExpression {
             Self::Index(ptr, idx) => HirExpression::Index(
                 Box::new(ptr.to_hir_expr(decls)?),
                 Box::new(idx.to_hir_expr(decls)?),
+            ),
+
+            Self::Conditional(cond, then, otherwise) => HirExpression::Conditional(
+                Box::new(cond.to_hir_expr(decls)?),
+                Box::new(then.to_hir_expr(decls)?),
+                Box::new(otherwise.to_hir_expr(decls)?),
             ),
         })
     }
