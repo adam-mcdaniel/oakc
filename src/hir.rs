@@ -467,8 +467,8 @@ impl HirStructure {
     fn generate_docs(&self) -> String {
         // Add a header for the output markdown
         let mut result = format!(
-            "## *type* **{}** *with size* **{}**\n",
-            self.name, self.size
+            "## *type* **{}**\n",
+            self.name
         );
         // If a docstring is defined, then
         // add it to the output
@@ -556,9 +556,11 @@ impl HirFunction {
         for (i, (arg_name, arg_type)) in self.args.iter().enumerate() {
             result += &format!("*{}*: {}, ", arg_name, arg_type)
         }
-        // Remove the last space and comma
-        result.pop();
-        result.pop();
+        // Remove the last space and comma from the last argument
+        if !self.args.is_empty() {
+            result.pop();
+            result.pop();
+        }
 
         // Add the close parantheses
         result += ")";
@@ -648,11 +650,14 @@ pub enum HirConstant {
     IsDefined(String),
     /// The size of a constant
     SizeOf(HirType),
+    /// A constant expression that is contingent on another constant expression
+    Conditional(Box<Self>, Box<Self>, Box<Self>)
 }
 
 impl Display for HirConstant {
     fn fmt(&self, f: &mut Formatter) -> Result<(), Error> {
         match self {
+            Self::Conditional(cond, then, otherwise) => write!(f, "{} ? {} : {}", cond, then, otherwise),
             Self::True => write!(f, "true"),
             Self::False => write!(f, "false"),
             Self::Float(n) => write!(f, "{}", n),
@@ -686,6 +691,16 @@ impl HirConstant {
         target: &impl Target,
     ) -> Result<f64, HirError> {
         Ok(match self {
+            Self::Conditional(cond, then, otherwise) => if cond.to_value(decls, constants, target)? != 0.0 {
+                // If the constant condition is true, then use
+                // the first constant branch
+                then.to_value(decls, constants, target)?
+            } else {
+                // If the constant condition is false, then use
+                // the second constant branch
+                otherwise.to_value(decls, constants, target)?
+            },
+
             Self::True => 1.0,
             Self::False => 0.0,
 
@@ -1000,6 +1015,9 @@ pub enum HirExpression {
     Method(Box<Self>, Identifier, Vec<Self>),
     /// An index of a pointer value
     Index(Box<Self>, Box<Self>),
+
+    /// A conditional expression
+    Conditional(Box<Self>, Box<Self>, Box<Self>),
 }
 
 impl HirExpression {
@@ -1162,6 +1180,12 @@ impl HirExpression {
             Self::Index(ptr, idx) => MirExpression::Index(
                 Box::new(ptr.to_mir_expr(decls, constants, target)?),
                 Box::new(idx.to_mir_expr(decls, constants, target)?),
+            ),
+
+            Self::Conditional(cond, then, otherwise) => MirExpression::Conditional(
+                Box::new(cond.to_mir_expr(decls, constants, target)?),
+                Box::new(then.to_mir_expr(decls, constants, target)?),
+                Box::new(otherwise.to_mir_expr(decls, constants, target)?),
             ),
         })
     }

@@ -3,9 +3,9 @@
 fn recursive(a: num) {
 	let n = a + 1;
 	if n < 5 {
-		recursive(number);
+		recursive(n);
 	}
-	putnumln(number);
+	putnumln(n);
 }
 
 fn main() {

@@ -93,6 +93,8 @@ pub enum MirError {
     /// Prevent memory leaks by preventing the user from calling methods
     /// on objects that will not be dropped
     MethodOnUnboundCopyDrop(MirExpression),
+    /// The branches of a conditional expression have different types
+    MismatchedConditionalBranchTypes(MirExpression, MirExpression),
 }
 
 /// Print an MIR error on the command line
@@ -216,6 +218,11 @@ impl Display for MirError {
                 f,
                 "the expression '{}' calls a method on an unbound object that implements 'copy' or 'drop'. try binding the object using a let expression",
                 method_call
+            ),
+            Self::MismatchedConditionalBranchTypes(then, otherwise) => write!(
+                f,
+                "the conditional branches '{}' and '{}' have mismatched types",
+                then, otherwise
             ),
         }
     }
@@ -866,7 +873,9 @@ impl MirStatement {
         }
     }
 
-    /// Type check the MIR before it is lowered
+    /// This function type checks a statement. Code that may compile to valid assembly
+    /// can still be riddled with type errors, and type errors fuel bugs and logic errors.
+    /// Enforcing checks against badly formed expressions is very important for correctness.
     fn type_check(
         &self,
         vars: &BTreeMap<Identifier, MirType>,
@@ -1018,12 +1027,17 @@ impl MirStatement {
         Ok(())
     }
 
-    /// Lower MIR into Oak's ASM
+    /// This function generates output code from a statement. Each different type of statement
+    /// is disassembled and translated into corresponding code for the next layer of the backend here.
+    /// This is done after type checking, though, which confirms the program is correct.
     fn assemble(
         &self,
         vars: &mut BTreeMap<Identifier, MirType>,
         funcs: &BTreeMap<Identifier, MirFunction>,
         structs: &BTreeMap<Identifier, MirStructure>,
+        // When an object instance is used in a method, its stored in a temporary and hidden
+        // variable so that it may be dropped later. This counts the number of temporary
+        // instances there currently are in the function.
         instance_count: &mut i32,
     ) -> Result<Vec<AsmStatement>, MirError> {
         Ok(match self {
@@ -1321,6 +1335,8 @@ pub enum MirExpression {
     Method(Box<Self>, Identifier, Vec<Self>),
     /// Index a pointer
     Index(Box<Self>, Box<Self>),
+    /// A conditional expression
+    Conditional(Box<Self>, Box<Self>, Box<Self>),
 }
 
 impl MirExpression {
@@ -1407,6 +1423,9 @@ impl MirExpression {
         })
     }
 
+    /// This function type checks an expression. Code that may compile to valid assembly
+    /// can still be riddled with type errors, and type errors fuel bugs and logic errors.
+    /// Enforcing checks against badly formed expressions is very important for correctness.
     fn type_check(
         &self,
         vars: &BTreeMap<Identifier, MirType>,
@@ -1414,6 +1433,27 @@ impl MirExpression {
         structs: &BTreeMap<Identifier, MirStructure>,
     ) -> Result<(), MirError> {
         match self {
+            Self::Conditional(cond, then, otherwise) => {
+                cond.type_check(vars, funcs, structs)?;
+                then.type_check(vars, funcs, structs)?;
+                otherwise.type_check(vars, funcs, structs)?;
+
+                // Confirm the condition is a boolean
+                if cond.get_type(vars, funcs, structs)? != MirType::boolean() {
+                    return Err(MirError::NonBooleanCondition(*cond.clone()));
+                }
+
+                // Check if the types of each branch match
+                if then.get_type(vars, funcs, structs)?
+                    != otherwise.get_type(vars, funcs, structs)?
+                {
+                    return Err(MirError::MismatchedConditionalBranchTypes(
+                        *then.clone(),
+                        *otherwise.clone(),
+                    ));
+                }
+            }
+
             // Typecheck a typecast
             Self::TypeCast(expr, t) => {
                 expr.type_check(vars, funcs, structs)?;
@@ -1579,6 +1619,9 @@ impl MirExpression {
         Ok(())
     }
 
+    /// This function generates output code from an expression. Each different type of expression
+    /// is disassembled and translated into corresponding code for the next layer of the backend here.
+    /// This is done after type checking, though, which confirms the program is correct.
     fn assemble(
         &self,
         vars: &mut BTreeMap<Identifier, MirType>,
@@ -1587,6 +1630,14 @@ impl MirExpression {
         instance_count: &mut i32,
     ) -> Result<Vec<AsmStatement>, MirError> {
         Ok(match self {
+            /// Turn the conditional expression into an if-else statement
+            Self::Conditional(cond, then, otherwise) => MirStatement::IfElse(
+                *cond.clone(),
+                vec![MirStatement::Expression(*then.clone())],
+                vec![MirStatement::Expression(*otherwise.clone())],
+            )
+            .assemble(vars, funcs, structs, instance_count)?,
+
             /// A move does not change its inner value
             Self::Move(expr) => expr.assemble(vars, funcs, structs, instance_count)?,
 
@@ -1963,6 +2014,9 @@ impl MirExpression {
         structs: &BTreeMap<Identifier, MirStructure>,
     ) -> Result<MirType, MirError> {
         Ok(match self {
+            /// Turn the conditional expression into an if-else statement
+            Self::Conditional(_, then, _) => then.get_type(vars, funcs, structs)?,
+
             /// A move expression does not change the inner type
             Self::Move(expr) => expr.get_type(vars, funcs, structs)?,
 
@@ -2066,6 +2120,7 @@ impl MirExpression {
 impl Display for MirExpression {
     fn fmt(&self, f: &mut Formatter) -> Result<(), Error> {
         match self {
+            Self::Conditional(cond, then, otherwise) => write!(f, "{} ? {} : {}", cond, then, otherwise),
             Self::Move(expr) => write!(f, "move({})", expr),
 
             Self::True => write!(f, "true"),
