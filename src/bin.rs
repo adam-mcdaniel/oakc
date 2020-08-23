@@ -1,5 +1,5 @@
 use clap::{clap_app, crate_authors, crate_version, AppSettings::ArgRequiredElseHelp};
-use oakc::{compile, generate_docs, Go, C, TS};
+use oakc::{compile, generate_docs, Go, C, TS, Ruby};
 use std::{
     fs::{read_to_string, write},
     io::Result,
