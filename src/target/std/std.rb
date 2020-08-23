@@ -23,7 +23,7 @@ end
 def prs(vm)
 	addr = machine_pop(vm)
 	i = addr
-    while vm.memory[i] != 0.0
+    while vm.memory[i] != 0
 		print(vm.memory[i].chr)
 		i += 1
 	end
@@ -31,7 +31,7 @@ end
 
 def prc(vm)
     n = machine_pop(vm)
-    print(n.chr)
+    print(n.round.chr)
 end
 
 def prend(vm)
@@ -43,6 +43,6 @@ def getch(vm)
     if ch == '\r'
         ch = read_char
 	end
-    machine_push(vm, ch)
+    machine_push(vm, ch.to_i)
 end
 

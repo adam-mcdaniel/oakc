@@ -2,7 +2,7 @@ class Machine
 	attr_accessor :memory, :allocated, :capacity, :stack_ptr, :base_ptr
 
 	def initialize(capacity)
-		@memory = Array.new(capacity, 0.0)
+		@memory = Array.new(capacity, 0)
 		@allocated = Array.new(capacity, false)
 		@capacity = capacity
 		@stack_ptr = 0
@@ -38,7 +38,7 @@ end
 ############## Debug Info ###############
 #########################################
 # Print out the state of the virtual machine's stack and heap
-def machine_dump(vm) {
+def machine_dump(vm)
 	print("stack: [ ")
 	vm.stack_ptr.times do |i|
 		print(vm.memory[i])
@@ -60,12 +60,13 @@ def machine_dump(vm) {
     puts("]")
     total = 0
     vm.capacity.times do |i|
-		vm.allocated[i] ? total += 1
+		if vm.allocated[i]
+			total += 1
+		end
 	end
     puts("STACK SIZE    #{vm.stack_ptr}")
     puts("TOTAL ALLOC'D #{total}")
-}
-
+end
 
 ###################################################
 ########## Stack manipulation operations ##########
@@ -93,7 +94,7 @@ def machine_pop(vm)
     # cause a stack underflow. Foreign functions, or errors in
     # the virtual machine implementation are SOLELY responsible
     # for a stack underflow.
-    if (vm.stack_ptr == 0) {
+    if (vm.stack_ptr == 0)
         panic(STACK_UNDERFLOW)
     end
 	# Get the popped value
@@ -108,7 +109,7 @@ end
 ########### Constructor and destructor ###########
 ####################################
 # Create new virtual machine
-def machine_new(global_scope_size, capacity) {
+def machine_new(global_scope_size, capacity)
     result = Machine.new(capacity)
 
     global_scope_size.times do
@@ -119,7 +120,7 @@ def machine_new(global_scope_size, capacity) {
 end
 
 # Free the virtual machine's memory. This is called at the end of the program.
-def machine_drop(vm) {
+def machine_drop(vm)
     # machine_dump(vm)
     # free(vm.memory)
     # free(vm.allocated)
@@ -129,7 +130,7 @@ end
 ########### Function memory management ###########
 ##################################################
 # Push the base pointer onto the stack
-def machine_load_base_ptr(vm) {
+def machine_load_base_ptr(vm)
     # Get the virtual machine's current base pointer value,
     # and push it onto the stack.
     machine_push(vm, vm.base_ptr)
@@ -137,9 +138,9 @@ end
 
 # Establish a new stack frame for a function with `arg_size`
 # number of cells as arguments.
-def machine_establish_stack_frame(vm, arg_size, local_scope_size) {
+def machine_establish_stack_frame(vm, arg_size, local_scope_size)
     # Allocate some space to store the arguments' cells for later
-    args = new Array(arg_size, 0.0)
+    args = Array.new(arg_size, 0)
     # Pop the arguments' values off of the stack
     for i in (arg_size-1).downto(0)
         args[i] = machine_pop(vm)
@@ -167,9 +168,9 @@ end
 
 # End a stack frame for a function with `return_size` number of cells
 # to return, and resume the parent stack frame.
-def machine_end_stack_frame(vm, return_size, local_scope_size) {
-    # Allocate some space to store the returned cells for later
-    return_val = new Array(return_size, 0.0)
+def machine_end_stack_frame(vm, return_size, local_scope_size)
+    # Allocate an array to store the returned cells for later
+    return_val = Array.new(return_size, 0)
     # Pop the returned values off of the stack
     for i in (return_size-1).downto(0)
         return_val[i] = machine_pop(vm)
@@ -195,7 +196,7 @@ end
 ##########/ Pointer and memory operations ##########/
 ####################################/
 # Pop the `size` parameter off of the stack, and return a pointer to `size` number of free cells.
-def machine_allocate(vm) {    
+def machine_allocate(vm)
     # Get the size of the memory to allocate on the heap
 	size = machine_pop(vm)
 	addr = 0
@@ -251,7 +252,7 @@ end
 
 # Pop an `address` parameter off of the stack, and a `value` parameter with size `size`.
 # Then store the `value` parameter at the memory address `address`.
-def machine_store(vm, size) {
+def machine_store(vm, size)
     # Pop an address off of the stack
     addr = machine_pop(vm)
 
@@ -264,7 +265,7 @@ def machine_store(vm, size) {
 end
 
 # Pop an `address` parameter off of the stack, and push the value at `address` with size `size` onto the stack.
-def machine_load(vm, size) {
+def machine_load(vm, size)
 	addr = machine_pop(vm)
 	size.times do |i|
 		machine_push(vm, vm.memory[addr+i])
@@ -272,30 +273,30 @@ def machine_load(vm, size) {
 end
 
 # Add the topmost numbers on the stack
-def machine_add(vm) {
+def machine_add(vm)
     machine_push(vm, machine_pop(vm) + machine_pop(vm))
 end
 
 # Subtract the topmost number on the stack from the second topmost number on the stack
-def machine_subtract(vm) {
+def machine_subtract(vm)
     b = machine_pop(vm)
     a = machine_pop(vm)
     machine_push(vm, a-b)
 end
 
 # Multiply the topmost numbers on the stack
-def machine_multiply(vm) {
+def machine_multiply(vm)
     machine_push(vm, machine_pop(vm) * machine_pop(vm))
 end
 
 # Divide the second topmost number on the stack by the topmost number on the stack
-def machine_divide(vm) {
+def machine_divide(vm)
     b = machine_pop(vm)
     a = machine_pop(vm)
     machine_push(vm, a/b)
 end
 
-def machine_sign(vm) {
+def machine_sign(vm)
     x = machine_pop(vm)
     if x >= 0
         machine_push(vm, 1)
