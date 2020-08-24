@@ -66,11 +66,15 @@ impl TirProgram {
 
     pub fn get_declarations(&mut self) -> &mut Vec<TirDeclaration> { &mut self.0 }
 
-    pub fn set_include_dir(&mut self, include_path: &PathBuf) -> &mut Self {
+    /// Add a prefix to every include statement in this program.
+    /// This is used to include files in other directories.
+    pub fn set_include_dir(&mut self, include_dir: &PathBuf) -> &mut Self {
         for decl in self.get_declarations() {
             if let TirDeclaration::Include(filename) = decl {
-                let file_path = include_path.join(filename.clone());
-                *decl = TirDeclaration::Include(file_path.to_str().unwrap().to_string())
+                // Join the include directive argument with the include directory
+                let new_path = include_dir.join(filename.clone());
+                // Replace the directive's argument with the new path
+                *filename = new_path.to_str().unwrap().to_string()
             }
         }
         self
@@ -99,11 +103,15 @@ impl TirProgram {
                         PathBuf::from("./")
                     };
 
-                    // Compile the included file using the `include_path` as
-                    // the current working directory.
+                    // Remove the include directive so it does not get computed again
                     self.get_declarations().remove(i);
+                    
+                    // Add the contents of the included file to this file
                     self.get_declarations().extend(
                         parse(contents)
+                            // The included file might be in a different folder.
+                            // So, compile the included file with the file's folder
+                            // as the working directory.
                             .set_include_dir(&match include_path.strip_prefix(cwd) {
                                 Ok(path) => path.to_path_buf(),
                                 Err(_) => include_path
@@ -111,6 +119,8 @@ impl TirProgram {
                             .get_declarations()
                             .clone()
                     );
+
+                    // Use recursion to deal with new include directives
                     return self.compile(cwd)
                 } else {
                     eprintln!("error: could not include file '{:?}'", file_path);
@@ -141,6 +151,8 @@ pub enum TirDeclaration {
     IfElse(TirConstant, TirProgram, TirProgram),
     Error(String),
     Extern(String),
+    /// This is the only flag that is computed in TIR. This
+    /// copies and pastes another Oak file in place of this declaration.
     Include(String),
     Memory(i32),
     RequireStd,
@@ -165,6 +177,7 @@ impl TirDeclaration {
 
             Self::Extern(file) => HirDeclaration::Extern(file.clone()),
 
+            /// In HIR, do nothing in place of an include statement
             Self::Include(file) => HirDeclaration::Pass,
 
             Self::Memory(n) => HirDeclaration::Memory(*n),

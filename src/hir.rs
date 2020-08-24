@@ -367,8 +367,6 @@ pub enum HirDeclaration {
     Error(String),
     /// Include a foreign file using the `extern` flag.
     Extern(String),
-    // /// Include an Oak file using the `include` flag.
-    // Include(String),
     /// Set the memory used for the stack and heap.
     Memory(i32),
     /// Mark that the standard library is required for the program
