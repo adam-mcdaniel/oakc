@@ -64,10 +64,22 @@ impl TirProgram {
         Self(decls, memory_size)
     }
 
-    pub fn compile(&self, cwd: &PathBuf) -> Result<HirProgram, TirError> {
+    pub fn get_declarations(&mut self) -> &mut Vec<TirDeclaration> { &mut self.0 }
+
+    pub fn set_include_dir(&mut self, include_path: &PathBuf) -> &mut Self {
+        for decl in self.get_declarations() {
+            if let TirDeclaration::Include(filename) = decl {
+                let file_path = include_path.join(filename.clone());
+                *decl = TirDeclaration::Include(file_path.to_str().unwrap().to_string())
+            }
+        }
+        self
+    }
+
+    pub fn compile(&mut self, cwd: &PathBuf) -> Result<HirProgram, TirError> {
         let mut hir_decls = vec![];
 
-        for decl in &self.0 {
+        for (i, decl) in self.get_declarations().iter().enumerate() {
             if let TirDeclaration::Include(filename) = decl {
                 // This takes the path of the file in the `include` flag
                 // and appends it to the directory of the file which is
@@ -89,13 +101,19 @@ impl TirProgram {
 
                     // Compile the included file using the `include_path` as
                     // the current working directory.
-                    hir_decls.extend(
-                        parse(&include_path, contents)
+                    self.get_declarations().remove(i);
+                    self.get_declarations().extend(
+                        parse(contents)
+                            .set_include_dir(&match include_path.strip_prefix(cwd) {
+                                Ok(path) => path.to_path_buf(),
+                                Err(_) => include_path
+                            })
                             .get_declarations()
                             .clone()
                     );
+                    return self.compile(cwd)
                 } else {
-                    eprintln!("error: could not include file '{}'", filename);
+                    eprintln!("error: could not include file '{:?}'", file_path);
                     exit(1);
                 }
             }
@@ -155,13 +173,13 @@ impl TirDeclaration {
             Self::NoStd => HirDeclaration::NoStd,
 
             Self::If(constant, program) => {
-                HirDeclaration::If(constant.to_hir_const(decls)?, program.compile(cwd)?)
+                HirDeclaration::If(constant.to_hir_const(decls)?, program.clone().compile(cwd)?)
             }
 
             Self::IfElse(constant, then_prog, else_prog) => HirDeclaration::IfElse(
                 constant.to_hir_const(decls)?,
-                then_prog.compile(cwd)?,
-                else_prog.compile(cwd)?,
+                then_prog.clone().compile(cwd)?,
+                else_prog.clone().compile(cwd)?,
             ),
         })
     }
