@@ -2133,7 +2133,7 @@ impl Display for MirExpression {
 
             Self::Add(lhs, rhs) => write!(f, "{}+{}", lhs, rhs),
             Self::Subtract(lhs, rhs) => write!(f, "{}-{}", lhs, rhs),
-            Self::Multiply(lhs, rhs) => write!(f, "{}/{}", lhs, rhs),
+            Self::Multiply(lhs, rhs) => write!(f, "{}*{}", lhs, rhs),
             Self::Divide(lhs, rhs) => write!(f, "{}/{}", lhs, rhs),
 
             Self::Equal(lhs, rhs) => write!(f, "{}=={}", lhs, rhs),

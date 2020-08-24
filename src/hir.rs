@@ -160,37 +160,6 @@ impl HirProgram {
                     mir_decls.push(MirDeclaration::Extern(file_path))
                 }
                 HirDeclaration::Error(err) => return Err(HirError::UserError(err.clone())),
-                HirDeclaration::Include(filename) => {
-                    // This takes the path of the file in the `include` flag
-                    // and appends it to the directory of the file which is
-                    // including it.
-                    //
-                    // So, if `src/main.ok` includes "lib/all.ok",
-                    // `file_path` will be equal to "src/lib/all.ok"
-                    let file_path = cwd.join(filename.clone());
-                    if let Ok(contents) = read_to_string(file_path.clone()) {
-                        // Get the directory of the included file.
-
-                        // If `src/main.ok` includes "lib/all.ok",
-                        // `include_path` will be equal to "src/lib/"
-                        let include_path = if let Some(dir) = file_path.parent() {
-                            PathBuf::from(dir)
-                        } else {
-                            PathBuf::from("./")
-                        };
-
-                        // Compile the included file using the `include_path` as
-                        // the current working directory.
-                        mir_decls.extend(
-                            parse(contents)
-                                .compile(&include_path, target, constants)?
-                                .get_declarations(),
-                        );
-                    } else {
-                        eprintln!("error: could not include file '{}'", filename);
-                        exit(1);
-                    }
-                }
 
                 HirDeclaration::If(cond, code) => {
                     if cond.to_value(self.get_declarations(), constants, target)? != 0.0 {
@@ -398,14 +367,14 @@ pub enum HirDeclaration {
     Error(String),
     /// Include a foreign file using the `extern` flag.
     Extern(String),
-    /// Include an Oak file using the `include` flag.
-    Include(String),
     /// Set the memory used for the stack and heap.
     Memory(i32),
     /// Mark that the standard library is required for the program
     RequireStd,
     /// Mark that the standard library is not allowed for the program
     NoStd,
+    /// Do nothing
+    Pass
 }
 
 /// This type represents a user defined structure.
