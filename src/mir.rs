@@ -9,6 +9,10 @@ use crate::{
     Identifier, StringLiteral,
 };
 
+trait Optimizable {
+    fn optimize(&self) -> Self;
+}
+
 /// A value representing an error while assembling the MIR code
 #[derive(Clone, Debug, PartialEq, PartialOrd)]
 pub enum MirError {
@@ -408,7 +412,8 @@ impl MirProgram {
     }
 
     pub fn assemble(&self) -> Result<AsmProgram, MirError> {
-        let Self(decls, memory_size) = self.clone();
+        let optimized_program = self.optimize();
+        let Self(decls, memory_size) = optimized_program;
         let mut externs = Vec::new();
         let mut funcs = BTreeMap::new();
         let mut structs = BTreeMap::new();
@@ -431,6 +436,28 @@ impl MirProgram {
     }
 }
 
+impl Optimizable for MirProgram {
+    fn optimize(&self) -> Self {
+        let mut decls: Vec<MirDeclaration> = Vec::new();
+
+        for decl in self.0.as_slice() {
+            decls.push(decl.optimize());
+        }
+
+        return MirProgram::new(decls, self.1);
+    }
+}
+
+impl Display for MirProgram {
+    fn fmt(&self, f: &mut Formatter) -> Result<(), Error> {
+        writeln!(f, "#[memory({})]", self.1)?;
+        for decl in self.0.clone() {
+            writeln!(f, "{}", decl)?;
+        }
+        Ok(())
+    }
+}
+
 #[derive(Clone, Debug, PartialEq, PartialOrd)]
 pub enum MirDeclaration {
     Structure(MirStructure),
@@ -449,6 +476,36 @@ impl MirDeclaration {
             Self::Function(func) => vec![func.assemble(funcs, structs)?],
             _ => vec![],
         })
+    }
+}
+
+impl Optimizable for MirDeclaration {
+    fn optimize(&self) -> Self {
+        match self {
+            Self::Structure(structure) => {
+                Self::Structure(structure.optimize())
+            }
+            Self::Function(function) => {
+                Self::Function(function.optimize())
+            }
+            _ => self.clone(),
+        }
+    }
+}
+
+impl Display for MirDeclaration {
+    fn fmt(&self, f: &mut Formatter) -> Result<(), Error> {
+        match self {
+            Self::Structure(structure) => {
+                writeln!(f, "{}", structure)
+            }
+            Self::Function(function) => {
+                writeln!(f, "{}", function)
+            }
+            Self::Extern(path) => {
+                writeln!(f, "#[extern(\"{}\")]", path.to_str().unwrap())
+            }
+        }
     }
 }
 
@@ -555,6 +612,26 @@ impl MirStructure {
         }
 
         Ok(result)
+    }
+}
+
+impl Optimizable for MirStructure {
+    fn optimize(&self) -> Self {
+        let mut methods: Vec<MirFunction> = Vec::new();
+        for method in self.methods.as_slice() {
+            methods.push(method.optimize());
+        }
+        MirStructure::new(self.name.clone(), self.size, methods, self.movable)
+    }
+}
+
+impl Display for MirStructure {
+    fn fmt(&self, f: &mut Formatter) -> Result<(), Error> {
+        writeln!(f, "struct {}({}) -> is_movable({}) {{", self.name, self.size, self.movable)?;
+        for method in self.methods.clone() {
+            writeln!(f, "{}", method);
+        }
+        writeln!(f, "}}")
     }
 }
 
@@ -672,6 +749,31 @@ impl MirFunction {
 
     fn get_return_type(&self) -> MirType {
         self.return_type.clone()
+    }
+}
+
+impl Optimizable for MirFunction {
+    fn optimize(&self) -> Self {
+        let mut statements: Vec<MirStatement> = Vec::new();
+        for statement in self.body.as_slice() {
+            statements.push(statement.optimize());
+        }
+        MirFunction::new(self.name.clone(), self.args.clone(), self.return_type.clone(), statements)
+    }
+}
+
+impl Display for MirFunction {
+    fn fmt(&self, f: &mut Formatter) -> Result<(), Error> {
+        write!(f, "fn {}(", self.name)?;
+        for (name, mir_type) in self.args.clone() {
+            write!(f, "{}: {}", name, mir_type)?;
+        }
+        writeln!(f, ") -> {} {{", self.return_type)?;
+        for statement in self.body.clone() {
+            writeln!(f, "{}", statement);
+        }
+        writeln!(f, "}}");
+        Ok(())
     }
 }
 
@@ -1263,6 +1365,133 @@ impl MirStatement {
 
             Self::Expression(expr) => expr.assemble(vars, funcs, structs, instance_count)?,
         })
+    }
+}
+
+impl Optimizable for MirStatement {
+    fn optimize(&self) -> Self {
+        match self {
+            Self::Define(identifier, mir_type, expression) => {
+                Self::Define(identifier.clone(), mir_type.clone(), expression.optimize())
+            }
+            Self::AutoDefine(identifier, expression) => {
+                Self::AutoDefine(identifier.clone(), expression.optimize())
+            }
+            Self::AssignVariable(identifier, expression) => {
+                Self::AutoDefine(identifier.clone(), expression.optimize())
+            }
+            Self::AssignAddress(address, expression) => {
+                Self::AssignAddress(address.optimize(), expression.optimize())
+            }
+            Self::For(pre, condition, post, body) => {
+                let mut statements: Vec<MirStatement> = Vec::new();
+                for statement in body.as_slice() {
+                    statements.push(statement.optimize());
+                }
+                Self::For(Box::new(pre.optimize()), condition.optimize(), Box::new(post.optimize()), statements)
+            }
+            Self::While(condition, body) => {
+                let mut statements: Vec<MirStatement> = Vec::new();
+                for statement in body.as_slice() {
+                    statements.push(statement.optimize());
+                }
+                Self::While(condition.optimize(), statements)
+            }
+            Self::If(condition, body) => {
+                let mut statements: Vec<MirStatement> = Vec::new();
+                for statement in body.as_slice() {
+                    statements.push(statement.optimize());
+                }
+                Self::If(condition.optimize(), statements)
+            }
+            Self::IfElse(condition, if_body, else_body) => {
+                let mut if_statements: Vec<MirStatement> = Vec::new();
+                for statement in if_body.as_slice() {
+                    if_statements.push(statement.optimize());
+                }
+                let mut else_statements: Vec<MirStatement> = Vec::new();
+                for statement in else_body.as_slice() {
+                    else_statements.push(statement.optimize());
+                }
+                Self::IfElse(condition.optimize(), if_statements, else_statements)
+            }
+            Self::Free(address, size) => {
+                self.clone()
+            }
+            Self::Return(expressions) => {
+                let mut optimized_expressions: Vec<MirExpression> = Vec::new();
+                for expression in expressions.as_slice() {
+                    optimized_expressions.push(expression.optimize());
+                }
+                Self::Return(optimized_expressions)
+            }
+            Self::Expression(expression) => {
+                Self::Expression(expression.optimize())
+            }
+        }
+    }
+}
+
+impl Display for MirStatement {
+    fn fmt(&self, f: &mut Formatter) -> Result<(), Error> {
+        match self {
+            Self::Define(identifier, mir_type, expression) => {
+                writeln!(f, "let {}: {} = {}", identifier, mir_type, expression)
+            }
+            Self::AutoDefine(identifier, expression) => {
+                writeln!(f, "let {} = {}", identifier, expression)
+            }
+            Self::AssignVariable(identifier, expression) => {
+                writeln!(f, "{} = {}", identifier, expression)
+            }
+            Self::AssignAddress(lhs, rhs) => {
+                writeln!(f, "*{} = {}", lhs, rhs)
+            }
+            Self::For(initializer, condition, after_iteration, body) => {
+                writeln!(f, "for ({}; {}; {}) {{", initializer, condition, after_iteration)?;
+                for statement in body {
+                    writeln!(f, "  {}", statement)?;
+                }
+                writeln!(f, "}}")
+            }
+            Self::While(condition, body) => {
+                writeln!(f, "while ({}) {{", condition)?;
+                for statement in body {
+                    writeln!(f, "  {}", statement)?;
+                }
+                writeln!(f, "}}")
+            }
+            Self::If(condition, body) => {
+                writeln!(f, "if ({}) {{", condition)?;
+                for statement in body {
+                    writeln!(f, "  {}", statement)?;
+                }
+                writeln!(f, "}}")
+            }
+            Self::IfElse(condition, body_if, body_else) => {
+                writeln!(f, "if ({}) {{", condition)?;
+                for statement in body_if {
+                    writeln!(f, "  {}", statement)?;
+                }
+                writeln!(f, "}} else {{")?;
+                for statement in body_else {
+                    writeln!(f, "  {};", statement)?;
+                }
+                writeln!(f, "}}")
+            }
+            Self::Free(address, size) => {
+                writeln!(f, "free {} : {};", address, size)
+            }
+            Self::Return(expressions) => {
+                for expression in expressions {
+                    writeln!(f, "return {};", expression)?;
+                }
+                Ok(())
+            },
+            Self::Expression(expression) => {
+                write!(f, "{}", expression)
+            }
+        }
     }
 }
 
@@ -2117,6 +2346,106 @@ impl MirExpression {
     }
 }
 
+impl Optimizable for MirExpression {
+    fn optimize(&self) -> Self {
+        match self {
+            Self::Add(lhs, rhs) => {
+                match (lhs.optimize(), rhs.optimize()) {
+                    (Self::Float(lhs), Self::Float(rhs)) => Self::Float(lhs + rhs),
+                    (lhs, rhs) => Self::Add(Box::new(lhs), Box::new(rhs)),
+                }
+            },
+            Self::Subtract(lhs, rhs) => {
+                match (lhs.optimize(), rhs.optimize()) {
+                    (Self::Float(lhs), Self::Float(rhs)) => Self::Float(lhs - rhs),
+                    (lhs, rhs) => Self::Subtract(Box::new(lhs), Box::new(rhs)),
+                }
+            }
+            Self::Multiply(lhs, rhs) => {
+                match (lhs.optimize(), rhs.optimize()) {
+                    (Self::Float(lhs), Self::Float(rhs)) => Self::Float(lhs * rhs),
+                    (lhs, rhs) => Self::Multiply(Box::new(lhs), Box::new(rhs)),
+                }
+            }
+            Self::Divide(lhs, rhs) => {
+                match (lhs.optimize(), rhs.optimize()) {
+                    (Self::Float(lhs), Self::Float(rhs)) => Self::Float(lhs / rhs),
+                    (lhs, rhs) => Self::Divide(Box::new(lhs), Box::new(rhs)),
+                }
+            }
+            Self::Not(expression) => {
+                match expression.optimize() {
+                    Self::True => Self::False,
+                    Self::False => Self::True,
+                    (expression) => Self::Not(Box::new(expression)),
+                }
+            }
+            Self::And(lhs, rhs) => {
+                match (lhs.optimize(), rhs.optimize()) {
+                    (Self::True, Self::True) => Self::True,
+                    (Self::False, Self::True) => Self::False,
+                    (Self::True, Self::False) => Self::False,
+                    (Self::False, Self::False) => Self::False,
+                    (lhs, rhs) => Self::And(Box::new(lhs), Box::new(rhs)),
+                }
+            }
+            Self::Or(lhs, rhs) => {
+                match (lhs.optimize(), rhs.optimize()) {
+                    (Self::True, _) => Self::True,
+                    (_, Self::True) => Self::False,
+                    (lhs, rhs) => Self::Or(Box::new(lhs), Box::new(rhs)),
+                }
+            }
+            Self::Greater(lhs, rhs) => {
+                match (lhs.optimize(), rhs.optimize()) {
+                    (Self::Float(lhs), Self::Float(rhs)) => if lhs > rhs { Self::True } else { Self::False } ,
+                    (Self::Character(lhs), Self::Character(rhs)) => if lhs > rhs { Self::True } else { Self::False } ,
+                    (lhs, rhs) => Self::Greater(Box::new(lhs), Box::new(rhs)),
+                }
+            }
+            Self::Less(lhs, rhs) => {
+                match (lhs.optimize(), rhs.optimize()) {
+                    (Self::Float(lhs), Self::Float(rhs)) => if lhs < rhs { Self::True } else { Self::False } ,
+                    (Self::Character(lhs), Self::Character(rhs)) => if lhs < rhs { Self::True } else { Self::False } ,
+                    (lhs, rhs) => Self::Less(Box::new(lhs), Box::new(rhs)),
+                }
+            }
+            
+            Self::GreaterEqual(lhs, rhs) => {
+                match (lhs.optimize(), rhs.optimize()) {
+                    (Self::Float(lhs), Self::Float(rhs)) => if lhs >= rhs { Self::True } else { Self::False } ,
+                    (Self::Character(lhs), Self::Character(rhs)) => if lhs >= rhs { Self::True } else { Self::False } ,
+                    (lhs, rhs) => Self::GreaterEqual(Box::new(lhs), Box::new(rhs)),
+                }
+            }
+            Self::LessEqual(lhs, rhs) => {
+                match (lhs.optimize(), rhs.optimize()) {
+                    (Self::Float(lhs), Self::Float(rhs)) => if lhs <= rhs { Self::True } else { Self::False } ,
+                    (Self::Character(lhs), Self::Character(rhs)) => if lhs <= rhs { Self::True } else { Self::False },
+                    (lhs, rhs) => Self::LessEqual(Box::new(lhs), Box::new(rhs)),
+                }
+            }
+            Self::Equal(lhs, rhs) => {
+                match (lhs.optimize(), rhs.optimize()) {
+                    (Self::Float(lhs), Self::Float(rhs)) => if lhs == rhs { Self::True } else { Self::False },
+                    (Self::Character(lhs), Self::Character(rhs)) => if lhs == rhs { Self::True } else { Self::False },
+                    (Self::True, Self::True) => Self::True,
+                    (Self::True, Self::False) => Self::False,
+                    (Self::False, Self::True) => Self::False,
+                    (Self::False, Self::False) => Self::True,
+                    (lhs, rhs) => Self::Equal(Box::new(lhs), Box::new(rhs)),
+                }
+            }
+            Self::Conditional(condition, if_true, if_false) => {
+                match (condition.optimize(), if_true.optimize(), if_false.optimize()) {
+                    (conditional, if_true, if_false) => Self::Conditional(Box::new(conditional), Box::new(if_true), Box::new(if_false)),
+                }
+            }
+            _ => self.clone(),
+        }
+    }
+}
+
 impl Display for MirExpression {
     fn fmt(&self, f: &mut Formatter) -> Result<(), Error> {
         match self {
@@ -2128,20 +2457,20 @@ impl Display for MirExpression {
             Self::TypeCast(expr, t) => write!(f, "{} as {}", expr, t),
 
             Self::Not(expr) => write!(f, "!{}", expr),
-            Self::And(lhs, rhs) => write!(f, "{}&&{}", lhs, rhs),
-            Self::Or(lhs, rhs) => write!(f, "{}||{}", lhs, rhs),
+            Self::And(lhs, rhs) => write!(f, "{} && {}", lhs, rhs),
+            Self::Or(lhs, rhs) => write!(f, "{} || {}", lhs, rhs),
 
-            Self::Add(lhs, rhs) => write!(f, "{}+{}", lhs, rhs),
-            Self::Subtract(lhs, rhs) => write!(f, "{}-{}", lhs, rhs),
-            Self::Multiply(lhs, rhs) => write!(f, "{}/{}", lhs, rhs),
-            Self::Divide(lhs, rhs) => write!(f, "{}/{}", lhs, rhs),
+            Self::Add(lhs, rhs) => write!(f, "{} + {}", lhs, rhs),
+            Self::Subtract(lhs, rhs) => write!(f, "{} - {}", lhs, rhs),
+            Self::Multiply(lhs, rhs) => write!(f, "{} / {}", lhs, rhs),
+            Self::Divide(lhs, rhs) => write!(f, "{} / {}", lhs, rhs),
 
-            Self::Equal(lhs, rhs) => write!(f, "{}=={}", lhs, rhs),
-            Self::NotEqual(lhs, rhs) => write!(f, "{}!={}", lhs, rhs),
-            Self::Greater(lhs, rhs) => write!(f, "{}>{}", lhs, rhs),
-            Self::GreaterEqual(lhs, rhs) => write!(f, "{}>={}", lhs, rhs),
-            Self::Less(lhs, rhs) => write!(f, "{}<{}", lhs, rhs),
-            Self::LessEqual(lhs, rhs) => write!(f, "{}<={}", lhs, rhs),
+            Self::Equal(lhs, rhs) => write!(f, "{} == {}", lhs, rhs),
+            Self::NotEqual(lhs, rhs) => write!(f, "{} != {}", lhs, rhs),
+            Self::Greater(lhs, rhs) => write!(f, "{} > {}", lhs, rhs),
+            Self::GreaterEqual(lhs, rhs) => write!(f, "{} >= {}", lhs, rhs),
+            Self::Less(lhs, rhs) => write!(f, "{} < {}", lhs, rhs),
+            Self::LessEqual(lhs, rhs) => write!(f, "{} <= {}", lhs, rhs),
 
             Self::Alloc(size) => write!(f, "alloc({})", size),
 

@@ -1,0 +1,12 @@
+
+fn square() -> num {
+    return 2 * 2;
+}
+
+fn main() {
+    if (8 >= 3) {
+        let _ = 2 * 8;
+    } else {
+        let _ = 4 / 2;
+    }
+}
