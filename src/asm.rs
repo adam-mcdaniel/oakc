@@ -92,6 +92,29 @@ pub struct AsmProgram {
     memory_size: i32,
 }
 
+fn extract_called_functions(statements: Vec<AsmStatement>) -> Vec<String> {
+    let mut names: Vec<String> = Vec::new();
+    for statement in statements {
+        match statement {
+            AsmStatement::Expression(expressions) => {
+                for expression in expressions {
+                    match expression {
+                        AsmExpression::Call(name) => {
+                            names.push(name.clone());
+                        }
+                        _ => {}
+                    }
+                }
+            }
+            AsmStatement::For(_, _, _, body) => {
+                names.append(&mut extract_called_functions(body.clone()));
+            }
+            _ => {}
+        }
+    }
+    return names;
+}
+
 impl AsmProgram {
     const ENTRY_POINT: &'static str = "main";
 
@@ -101,6 +124,18 @@ impl AsmProgram {
             funcs,
             memory_size,
         }
+    }
+
+    pub fn optimize(&self) -> Self {
+        let entry_point = self.funcs.iter().find(|func| func.name == Self::ENTRY_POINT);
+
+        if let Some(main_fn) = entry_point {
+            let names = extract_called_functions(main_fn.body.clone());
+            let funcs = self.funcs.iter().cloned().filter(|func| !names.contains(&func.name)).collect();
+            return Self::new(self.externs.clone(), funcs, self.memory_size);
+        }
+
+        return self.to_owned();
     }
 
     pub fn assemble(&self, target: &impl Target) -> Result<String, AsmError> {
