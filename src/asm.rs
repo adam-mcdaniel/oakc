@@ -92,7 +92,7 @@ pub struct AsmProgram {
     memory_size: i32,
 }
 
-fn extract_called_functions(statements: Vec<AsmStatement>) -> Vec<String> {
+fn extract_called_functions(statements: Vec<AsmStatement>, functions: &Vec<AsmFunction>) -> Vec<String> {
     let mut names: Vec<String> = Vec::new();
     for statement in statements {
         match statement {
@@ -101,13 +101,16 @@ fn extract_called_functions(statements: Vec<AsmStatement>) -> Vec<String> {
                     match expression {
                         AsmExpression::Call(name) => {
                             names.push(name.clone());
+                            if let Some(func) = functions.iter().find(|func| func.name == name) {
+                                names.append(&mut extract_called_functions(func.body.clone(), functions));
+                            }
                         }
                         _ => {}
                     }
                 }
             }
             AsmStatement::For(_, _, _, body) => {
-                names.append(&mut extract_called_functions(body.clone()));
+                names.append(&mut extract_called_functions(body.clone(), functions));
             }
             _ => {}
         }
@@ -130,8 +133,14 @@ impl AsmProgram {
         let entry_point = self.funcs.iter().find(|func| func.name == Self::ENTRY_POINT);
 
         if let Some(main_fn) = entry_point {
-            let names = extract_called_functions(main_fn.body.clone());
-            let funcs = self.funcs.iter().cloned().filter(|func| !names.contains(&func.name)).collect();
+            let mut names = extract_called_functions(main_fn.body.clone(), &self.funcs.clone());
+            names.push(String::from(Self::ENTRY_POINT));
+            let mut funcs = Vec::new();
+            for func in self.funcs.as_slice() {
+                if names.contains(&func.name) {
+                    funcs.push(func.clone())
+                }
+            }
             return Self::new(self.externs.clone(), funcs, self.memory_size);
         }
 
