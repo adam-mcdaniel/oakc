@@ -9,4 +9,5 @@
     }]
 }]
 
-fn test() { test!() }
+extern fn test();
+extern fn __oak_add as add(a: num, b: num) -> num;
