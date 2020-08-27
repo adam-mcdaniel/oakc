@@ -15,8 +15,8 @@ fn main() {
         (@group target =>
             (@arg cc: -c --cc "Compile with C backend")
             (@arg go: -g --go "Compile with Golang backend")
-			(@arg ts: -t --ts "Compile with TypeScript backend")
-			(@arg rb: -r --rb "Compile with Ruby backend")
+            (@arg ts: -t --ts "Compile with TypeScript backend")
+            (@arg rb: -r --rb "Compile with Ruby backend")
         )
         (@subcommand c =>
             (about: "Compile an Oak file")
@@ -52,8 +52,8 @@ fn main() {
                 } else if matches.is_present("ts") {
                     compile(&cwd, contents, TS)
                 } else if matches.is_present("rb") {
-					compile(&cwd, contents, Ruby)
-				} else {
+                    compile(&cwd, contents, Ruby)
+                } else {
                     compile(&cwd, contents, C)
                 };
 
