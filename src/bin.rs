@@ -77,13 +77,21 @@ fn main() {
         if let Some(input_file) = sub_matches.value_of("FILE") {
             // Get the contents of the input file
             if let Ok(contents) = read_to_string(input_file) {
+
+                // Get the current working directory of the input file
+                let cwd = if let Some(dir) = PathBuf::from(input_file).parent() {
+                    PathBuf::from(dir)
+                } else {
+                    PathBuf::from("./")
+                };
+
                 // Document the input file using the target backend
                 let docs = if matches.is_present("cc") {
-                    generate_docs(contents, input_file, C)
+                    generate_docs(&cwd, contents, input_file, C)
                 } else if matches.is_present("go") {
-                    generate_docs(contents, input_file, Go)
+                    generate_docs(&cwd, contents, input_file, Go)
                 } else {
-                    generate_docs(contents, input_file, C)
+                    generate_docs(&cwd, contents, input_file, C)
                 };
 
                 // If the output file exists, write the output to it

@@ -10,7 +10,8 @@
 #     -f: the file to be tested (ex. "./examples/num.ok")
 #     -v: verbose output, optional
 
-import sys
+import sys, os.path
+from os.path import exists
 import subprocess
 import difflib
 from math import floor
@@ -32,7 +33,8 @@ def pad_list(arr: List[str], new_len: int) -> List[str]:
 	out = arr.copy()
 	if not len(arr) >= new_len:
 		for i in range(len(arr)-1, new_len):
-			out[i] = ""
+			if i < len(out):
+				out[i] = ""
 	return out
 
 def print_diff(base: bytes, test: bytes, title: str) -> None:
@@ -52,7 +54,8 @@ def print_diff(base: bytes, test: bytes, title: str) -> None:
 		elif s[0]=='-' or s[0]=='+':
 			arrow_pos[base[:i].count("\n")+2] = " =/= "
 	for i in range(0, list_len):
-		print("| "+base_lines[i]+" | "+arrow_pos[i]+" | "+test_lines[i]+" |")
+		if i < len(base_lines) and i < len(arrow_pos) and i < len(test_lines):
+			print("| "+base_lines[i]+" | "+arrow_pos[i]+" | "+test_lines[i]+" |")
 
 def run_and_capture_output(args: List) -> Tuple[bytes, bytes]:
 	complete_process = subprocess.Popen(args,
@@ -67,8 +70,21 @@ def verbose_process_output(stdout: StdIOType, stderr: StdIOType, verbose: bool) 
 		print(stderr.decode("utf-8"))
 
 def main():
+	if not "-b" in sys.argv:
+		print("Specify the backend using the '-b' flag")
+		exit(1)
 	backend_to_test = sys.argv[sys.argv.index("-b")+1]
+	if backend_to_test[0] != '-':
+		print("The backend to test must be a flag, such as '--cc'")
+		exit(1)
+	
+	if not "-r" in sys.argv:
+		print("Specify the command to run with the '-r' flag (such as './main')")
+		exit(1)
 	run_cmd = sys.argv[sys.argv.index("-r")+1]
+	if not "-f" in sys.argv:
+		print("Specify the file to test with the '-f' flag")
+		exit(1)
 	file_to_test = sys.argv[sys.argv.index("-f")+1]
 	verbose = False
 	try:
@@ -77,6 +93,10 @@ def main():
 	except: 
 		pass
 		
+	if not exists("./target/debug/oak"):
+		print("Build Oak with 'cargo build' before running the test script")
+		exit(1)
+
 	if verbose:
 		print("Compiling "+file_to_test+" with C backend...")
 	baseline_compile_stdout, baseline_compile_stderr = run_and_capture_output(
