@@ -1,5 +1,6 @@
 
 # from http://rubyquiz.com/quiz5.html
+# Ruby doesn't have a built in cross platform getchar, so this creates it
 begin
 	require "Win32API"
 
