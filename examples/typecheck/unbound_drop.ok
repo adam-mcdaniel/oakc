@@ -1,0 +1,35 @@
+#[std]
+
+
+struct Test {
+    let item: num;
+    
+    fn new(n: num) -> Test {
+        return n as Test;
+    }
+
+    // Defining either the `copy` or `drop` methods for a type will prevent
+    // the user from copy-constructing unbound objects.
+    fn drop(self: &Test) {}
+}
+
+fn test() -> Test {
+    return Test::new(1);
+}
+
+fn main() {
+    // When `test` returns the `Test` object, it is temporarily stored
+    // on the stack. Since it implements the `copy` method, it could be
+    // managing memory somewhere. So, when we use it as a temporary value
+    // on the stack without binding it to a variable or function argument,
+    // there's a big problem. **We can't call the `drop` method on the object
+    // after it disappears off of the stack.** So, temporary values such
+    // as `test()` must be bound before they're accessed.
+
+    // Okay!
+    let t = test();
+    putnumln(t->item);
+
+    // Error
+    putnumln(test()->item);
+}

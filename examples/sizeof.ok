@@ -1,0 +1,19 @@
+#[std]
+
+const TEST = sizeof(char) + sizeof(char);
+
+struct Testing {
+    let a: char,
+        b: char;
+
+    fn new() -> Testing {
+        return ['\0', '\0'];
+    }
+}
+
+
+fn main() {
+    putstr("The size of the `Testing` type is ");
+    putnumln(TEST);
+    putnumln(sizeof(Testing));
+}

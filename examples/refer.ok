@@ -1,16 +1,16 @@
 #[std]
 
-type Counter(1) {
+struct Counter {
+    let count: num;
+
     fn new() -> Counter { return 0 as Counter }
 
-    fn count(self: &Counter) -> &num { return self as &num }
-
     fn increment(self: &Counter) {
-        self->count = self->count + 1;
+        self->count += 1;
     }
 
     fn decrement(self: &Counter) {
-        self->count = self->count - 1;
+        self->count -= 1;
     }
 }
 

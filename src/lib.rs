@@ -1,7 +1,6 @@
 #![allow(warnings, clippy, unknown_lints)]
 use std::{
     collections::BTreeMap,
-    sync::Mutex,
     env::consts::{FAMILY, OS},
     io::Result,
     path::PathBuf,
@@ -13,10 +12,12 @@ pub type StringLiteral = String;
 pub mod asm;
 pub mod hir;
 pub mod mir;
+pub mod tir;
 use hir::{HirConstant, HirProgram};
+use tir::TirProgram;
 
 mod target;
-pub use target::{Go, Target, C};
+pub use target::{Go, Target, C, TS};
 
 use asciicolor::Colorize;
 use comment::cpp::strip;
@@ -24,7 +25,6 @@ use time::OffsetDateTime;
 
 use lalrpop_util::{lalrpop_mod, ParseError};
 lalrpop_mod!(pub parser);
-
 
 pub fn get_predefined_constants(target: &impl Target) -> BTreeMap<String, HirConstant> {
     let mut constants = BTreeMap::new();
@@ -76,16 +76,36 @@ pub fn get_predefined_constants(target: &impl Target) -> BTreeMap<String, HirCon
     constants
 }
 
-pub fn generate_docs(input: impl ToString, filename: impl ToString, target: impl Target) -> String {
-    parse(input).generate_docs(filename.to_string(), &target, &mut get_predefined_constants(&target), false)
+pub fn generate_docs(cwd: &PathBuf, input: impl ToString, filename: impl ToString, target: impl Target) -> String {
+    match parse(input).compile(cwd) {
+        Ok(output) => output,
+        Err(e) => print_compile_error(e)
+    }.generate_docs(filename.to_string(), &target, &mut BTreeMap::new(), false)
 }
 
-pub fn compile(cwd: &PathBuf, input: impl ToString, target: impl Target) -> Result<()> {    let mut hir = parse(input);
-    hir.extend_declarations(parse(include_str!("core.ok")).get_declarations());
-    if hir.use_std() {
-        hir.extend_declarations(parse(include_str!("std.ok")).get_declarations())
-    }
+fn print_compile_error(e: impl Display) -> ! {
+    eprintln!("compilation error: {}", e.bright_red().underline());
+    exit(1);
+}
 
+pub fn compile(cwd: &PathBuf, input: impl ToString, target: impl Target) -> Result<()> {
+    let mut tir = parse(input);
+    let mut hir = match tir.compile(cwd) {
+        Ok(output) => output,
+        Err(e) => print_compile_error(e)
+    };
+
+    hir.extend_declarations(match parse(include_str!("core.ok")).compile(cwd) {
+        Ok(output) => output,
+        Err(e) => print_compile_error(e)
+    }.get_declarations());
+
+    if hir.use_std() {
+        hir.extend_declarations(match parse(include_str!("std.ok")).compile(cwd) {
+            Ok(output) => output,
+            Err(e) => print_compile_error(e)
+        }.get_declarations());
+    }
 
     match hir.compile(cwd, &target, &mut get_predefined_constants(&target)) {
         Ok(mir) => match mir.assemble() {
@@ -95,24 +115,15 @@ pub fn compile(cwd: &PathBuf, input: impl ToString, target: impl Target) -> Resu
                 } else {
                     target.core_prelude() + &result + &target.core_postlude()
                 }),
-                Err(e) => {
-                    eprintln!("compilation error: {}", e.bright_red().underline());
-                    exit(1);
-                }
+                Err(e) => print_compile_error(e),
             },
-            Err(e) => {
-                eprintln!("compilation error: {}", e.bright_red().underline());
-                exit(1);
-            }
+            Err(e) => print_compile_error(e),
         },
-        Err(e) => {
-            eprintln!("compilation error: {}", e.bright_red().underline());
-            exit(1);
-        }
+        Err(e) => print_compile_error(e),
     }
 }
 
-pub fn parse(input: impl ToString) -> HirProgram {
+pub fn parse(input: impl ToString) -> TirProgram {
     let code = &strip(input.to_string()).unwrap();
     match parser::ProgramParser::new().parse(code) {
         // if the parser succeeds, build will succeed

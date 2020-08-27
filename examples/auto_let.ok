@@ -5,9 +5,11 @@ fn main() {
     let size = 10;
     // without `&num` type specification, oak will throw a
     // `cannot use type inference when defining void pointer` error.
-    let x: &num = alloc(size);
+    let x = alloc(size) as &num;
 
-    for (let i=0; i<size; i=i+1) { x[i] = i * 5; }
+    for i in 0..size { x[i] = i * 5; }
 
-    for (let i=0; i<size; i=i+1) { putnumln(x[i]); }
+    for i in 0..size { putnumln(x[i]); }
+
+    free x: size;
 }

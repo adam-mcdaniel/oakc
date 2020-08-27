@@ -1,11 +1,11 @@
 #[std]
 
 fn recursive(a: num) {
-	let number: num = a + 1;
-	if number < 5 {
-		recursive(number);
+	let n = a + 1;
+	if n < 5 {
+		recursive(n);
 	}
-	putnumln(number);
+	putnumln(n);
 }
 
 fn main() {

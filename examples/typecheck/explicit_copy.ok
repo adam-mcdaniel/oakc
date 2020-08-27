@@ -1,0 +1,12 @@
+
+
+
+struct Test {
+    let n: num;
+    fn new() -> Test { return 0 as Test; }
+}
+
+fn main() {
+    let t = Test::new();
+    let x = t.copy();
+}

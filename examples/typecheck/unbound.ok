@@ -1,0 +1,26 @@
+#[std]
+
+
+struct Test {
+    let item: num;
+    
+    fn new(n: num) -> Test {
+        return n as Test;
+    }
+
+    // No copy or drop methods are defined, so `Test`
+    // can't possibly manage memory.
+}
+
+fn test() -> Test {
+    return Test::new(1);
+}
+
+fn main() {
+    // Okay!
+    let t = test();
+    putnumln(t->item);
+
+    // Okay!
+    putnumln(test()->item);
+}

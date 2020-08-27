@@ -1,12 +1,15 @@
 
-fn putstr(s: &char) -> void { prs!(s); }
-fn putstrln(s: &char) -> void { putstr(s); prend!(); }
+extern fn prend();
+extern fn prs as putstr(s: &char);
+extern fn prn as putnum(n: num);
+extern fn prc as putchar(ch: char);
+extern fn getch as get_char() -> char;
 
-fn putnum(n: num) -> void { prn!(n); }
-fn putnumln(n: num) -> void { putnum(n); prend!(); }
+fn putstrln(s: &char) -> void { putstr(s); prend(); }
 
-fn putchar(ch: char) -> void { prc!(ch); }
-fn putcharln(ch: char) -> void { putchar(ch); prend!(); }
+fn putnumln(n: num) -> void { putnum(n); prend(); }
+
+fn putcharln(ch: char) -> void { putchar(ch); prend(); }
 
 fn putbool(b: bool) -> void {
     if b {
@@ -24,6 +27,4 @@ fn putbool(b: bool) -> void {
     }
 }
 
-fn putboolln(b: bool) -> void { putbool(b); prend!(); }
-
-fn get_char() -> char { return getch!() as char; }
+fn putboolln(b: bool) -> void { putbool(b); prend(); }
