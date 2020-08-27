@@ -1,7 +1,7 @@
 
-use crate::{Identifier, tir::{TirProgram, TirDeclaration, TirStructure, TirFunction, TirExpression, TirConstant, TirStatement, TirType}};
+use crate::{get_line, Identifier, tir::{TirProgram, TirDeclaration, TirStructure, TirFunction, TirExpression, TirConstant, TirStatement, TirType}};
 
-grammar;
+grammar(filename: &str, script: &str);
 
 pub Program: TirProgram = <(Declaration)*> => TirProgram::new(<>, 512);
 
@@ -73,6 +73,7 @@ Constant: TirConstant = {
 }
 
 ConstantAtom: TirConstant = {
+    <offset:@L> "current_line" "(" ")" => TirConstant::Float(get_line(script, offset).0 as f64),
     "is_movable" "(" <Type> ")" => TirConstant::IsMovable(<>),
     "sizeof" "(" <Type> ")" => TirConstant::SizeOf(<>),
     "is_defined" "(" <Str> ")" => TirConstant::IsDefined(<>),
@@ -197,6 +198,8 @@ Expression: TirExpression = {
 }
 
 ExpressionAtom: TirExpression = {
+    <offset:@L> "current_line" "(" ")" => TirExpression::Constant(TirConstant::Float(get_line(script, offset).0 as f64)),
+    "current_file" "(" ")" => TirExpression::String(filename.to_string()),
     "is_movable" "(" <Type> ")" => TirExpression::IsMovable(<>),
     "is_defined" "(" <Str> ")" => TirExpression::Constant(TirConstant::IsDefined(<>)),
     "move" "(" <val:Expression> ")" => TirExpression::Move(Box::new(val)),

@@ -18,8 +18,19 @@
     }]
 }]
 
+#[if(true) {
+    fn test_current_line() {
+        putstr("current line: ");
+        putnumln(current_line());
+    }
+}]
+
+#[include("current_file.ok")]
 
 fn main() {
+    test_current_line();
+    test_current_file();
+
     putstr("compiled on the date ");
     putnum(DATE_MONTH); putchar('/');
     putnum(DATE_DAY);   putchar('/');

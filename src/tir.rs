@@ -99,6 +99,7 @@ impl TirProgram {
 
         for (i, decl) in self.get_declarations().iter().enumerate() {
             if let TirDeclaration::Include(filename) = decl {
+                let filename = filename.clone();
                 // This takes the path of the file in the `include` flag
                 // and appends it to the directory of the file which is
                 // including it.
@@ -122,7 +123,7 @@ impl TirProgram {
                     
                     // Add the contents of the included file to this file
                     self.get_declarations().extend(
-                        parse(contents)
+                        parse(filename, contents)
                             // The included file might be in a different folder.
                             // So, compile the included file with the file's folder
                             // as the working directory.

@@ -45,13 +45,13 @@ fn main() {
 
                 // Compile using the target backend
                 let compile_result = if matches.is_present("cc") {
-                    compile(&cwd, contents, C)
+                    compile(&cwd, input_file, contents, C)
                 } else if matches.is_present("go") {
-                    compile(&cwd, contents, Go)
+                    compile(&cwd, input_file, contents, Go)
                 } else if matches.is_present("ts") {
-                    compile(&cwd, contents, TS)
+                    compile(&cwd, input_file, contents, TS)
                 } else {
-                    compile(&cwd, contents, C)
+                    compile(&cwd, input_file, contents, C)
                 };
 
                 match compile_result {
@@ -84,11 +84,11 @@ fn main() {
 
                 // Document the input file using the target backend
                 let docs = if matches.is_present("cc") {
-                    generate_docs(&cwd, contents, input_file, C)
+                    generate_docs(&cwd, input_file, contents, C)
                 } else if matches.is_present("go") {
-                    generate_docs(&cwd, contents, input_file, Go)
+                    generate_docs(&cwd, input_file, contents, Go)
                 } else {
-                    generate_docs(&cwd, contents, input_file, C)
+                    generate_docs(&cwd, input_file, contents, C)
                 };
 
                 // If the output file exists, write the output to it

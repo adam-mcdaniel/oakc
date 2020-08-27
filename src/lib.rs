@@ -5,6 +5,7 @@ use std::{
     io::Result,
     path::PathBuf,
     process::exit,
+    fmt::Display,
 };
 pub type Identifier = String;
 pub type StringLiteral = String;
@@ -76,11 +77,12 @@ pub fn get_predefined_constants(target: &impl Target) -> BTreeMap<String, HirCon
     constants
 }
 
-pub fn generate_docs(cwd: &PathBuf, input: impl ToString, filename: impl ToString, target: impl Target) -> String {
-    match parse(input).compile(cwd) {
+pub fn generate_docs(cwd: &PathBuf, filename: impl ToString, input: impl ToString, target: impl Target) -> String {
+    let filename = filename.to_string();
+    match parse(&filename, input).compile(cwd) {
         Ok(output) => output,
         Err(e) => print_compile_error(e)
-    }.generate_docs(filename.to_string(), &target, &mut BTreeMap::new(), false)
+    }.generate_docs(filename, &mut get_predefined_constants(&target), false)
 }
 
 fn print_compile_error(e: impl Display) -> ! {
@@ -88,26 +90,26 @@ fn print_compile_error(e: impl Display) -> ! {
     exit(1);
 }
 
-pub fn compile(cwd: &PathBuf, input: impl ToString, target: impl Target) -> Result<()> {
-    let mut tir = parse(input);
+pub fn compile(cwd: &PathBuf, filename: impl ToString, input: impl ToString, target: impl Target) -> Result<()> {
+    let mut tir = parse(filename, input);
     let mut hir = match tir.compile(cwd) {
         Ok(output) => output,
         Err(e) => print_compile_error(e)
     };
 
-    hir.extend_declarations(match parse(include_str!("core.ok")).compile(cwd) {
+    hir.extend_declarations(match parse("core.ok", include_str!("core.ok")).compile(cwd) {
         Ok(output) => output,
         Err(e) => print_compile_error(e)
     }.get_declarations());
 
     if hir.use_std() {
-        hir.extend_declarations(match parse(include_str!("std.ok")).compile(cwd) {
+        hir.extend_declarations(match parse("std.ok", include_str!("std.ok")).compile(cwd) {
             Ok(output) => output,
             Err(e) => print_compile_error(e)
         }.get_declarations());
     }
 
-    match hir.compile(cwd, &target, &mut get_predefined_constants(&target)) {
+    match hir.compile(cwd, &mut get_predefined_constants(&target)) {
         Ok(mir) => match mir.assemble() {
             Ok(asm) => match asm.assemble(&target) {
                 Ok(result) => target.compile(if hir.use_std() {
@@ -123,9 +125,9 @@ pub fn compile(cwd: &PathBuf, input: impl ToString, target: impl Target) -> Resu
     }
 }
 
-pub fn parse(input: impl ToString) -> TirProgram {
+pub fn parse(filename: impl ToString, input: impl ToString) -> TirProgram {
     let code = &strip(input.to_string()).unwrap();
-    match parser::ProgramParser::new().parse(code) {
+    match parser::ProgramParser::new().parse(&filename.to_string(), &code, code) {
         // if the parser succeeds, build will succeed
         Ok(parsed) => parsed,
         // if the parser succeeds, annotate code with comments
@@ -164,7 +166,7 @@ fn make_error(line: &str, unexpected: &str, line_number: usize, column_number: u
 }
 
 // Gets the line number, the line, and the column number of the error
-fn get_line(script: &str, location: usize) -> (usize, String, usize) {
+pub fn get_line(script: &str, location: usize) -> (usize, String, usize) {
     // Get the line number from the character location
     let line_number = script[..location + 1].lines().count();
     // Get the line from the line number
