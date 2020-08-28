@@ -45,13 +45,13 @@ fn main() {
 
                 // Compile using the target backend
                 let compile_result = if matches.is_present("cc") {
-                    compile(&cwd, contents, C)
+                    compile(&cwd, &input_file, contents, C)
                 } else if matches.is_present("go") {
-                    compile(&cwd, contents, Go)
+                    compile(&cwd, &input_file, contents, Go)
                 } else if matches.is_present("ts") {
-                    compile(&cwd, contents, TS)
+                    compile(&cwd, &input_file, contents, TS)
                 } else {
-                    compile(&cwd, contents, C)
+                    compile(&cwd, &input_file, contents, C)
                 };
 
                 match compile_result {
@@ -74,7 +74,6 @@ fn main() {
         if let Some(input_file) = sub_matches.value_of("FILE") {
             // Get the contents of the input file
             if let Ok(contents) = read_to_string(input_file) {
-
                 // Get the current working directory of the input file
                 let cwd = if let Some(dir) = PathBuf::from(input_file).parent() {
                     PathBuf::from(dir)
@@ -84,16 +83,16 @@ fn main() {
 
                 // Document the input file using the target backend
                 let docs = if matches.is_present("cc") {
-                    generate_docs(&cwd, contents, input_file, C)
+                    generate_docs(&cwd, input_file, contents, C)
                 } else if matches.is_present("go") {
-                    generate_docs(&cwd, contents, input_file, Go)
+                    generate_docs(&cwd, input_file, contents, Go)
                 } else {
-                    generate_docs(&cwd, contents, input_file, C)
+                    generate_docs(&cwd, input_file, contents, C)
                 };
 
                 // If the output file exists, write the output to it
                 if let Some(output_file) = sub_matches.value_of("OUTPUT") {
-                    if let Ok(_) = write(output_file, docs) {
+                    if write(output_file, docs).is_ok() {
                         println!("doc generation successful")
                     } else {
                         eprintln!("error: could not write to file \"{}\"", output_file);

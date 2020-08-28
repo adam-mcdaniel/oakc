@@ -1,5 +1,12 @@
 #![allow(warnings, clippy, unknown_lints)]
-use std::{collections::BTreeMap, fmt::Display, io::Result, path::PathBuf, process::exit};
+use std::{
+    collections::BTreeMap,
+    env::consts::{FAMILY, OS},
+    fmt::Display,
+    io::Result,
+    path::PathBuf,
+    process::exit,
+};
 pub type Identifier = String;
 pub type StringLiteral = String;
 
@@ -7,7 +14,7 @@ pub mod asm;
 pub mod hir;
 pub mod mir;
 pub mod tir;
-use hir::HirProgram;
+use hir::{HirConstant, HirProgram};
 use tir::TirProgram;
 
 mod target;
@@ -15,15 +22,81 @@ pub use target::{Go, Target, C, TS};
 
 use asciicolor::Colorize;
 use comment::cpp::strip;
+use time::OffsetDateTime;
 
 use lalrpop_util::{lalrpop_mod, ParseError};
 lalrpop_mod!(pub parser);
 
-pub fn generate_docs(cwd: &PathBuf, input: impl ToString, filename: impl ToString, target: impl Target) -> String {
-    match parse(input).compile(cwd) {
+pub fn get_predefined_constants(target: &impl Target) -> BTreeMap<String, HirConstant> {
+    let mut constants = BTreeMap::new();
+
+    constants.insert(
+        String::from("ON_WINDOWS"),
+        HirConstant::Float((OS == "windows") as i32 as f64),
+    );
+    constants.insert(
+        String::from("ON_MACOS"),
+        HirConstant::Float((OS == "macos") as i32 as f64),
+    );
+    constants.insert(
+        String::from("ON_LINUX"),
+        HirConstant::Float((OS == "linux") as i32 as f64),
+    );
+
+    constants.insert(
+        String::from("ON_NIX"),
+        HirConstant::Float((FAMILY == "unix") as i32 as f64),
+    );
+    constants.insert(
+        String::from("ON_NON_NIX"),
+        HirConstant::Float((FAMILY != "unix") as i32 as f64),
+    );
+
+    constants.insert(
+        String::from("DATE_DAY"),
+        HirConstant::Float(OffsetDateTime::now_local().day() as f64),
+    );
+    constants.insert(
+        String::from("DATE_MONTH"),
+        HirConstant::Float(OffsetDateTime::now_local().month() as f64),
+    );
+    constants.insert(
+        String::from("DATE_YEAR"),
+        HirConstant::Float(OffsetDateTime::now_local().year() as f64),
+    );
+
+    constants.insert(
+        String::from("TARGET"),
+        HirConstant::Float(target.get_name() as u8 as f64),
+    );
+    constants.insert(
+        String::from("IS_STANDARD"),
+        HirConstant::Float(target.is_standard() as i32 as f64),
+    );
+
+    constants
+}
+
+pub fn generate_docs(
+    // The working directory of the input file.
+    // This is where included files will be gathered from.
+    cwd: &PathBuf,
+    // The name of the input file to generate docs for
+    filename: &str,
+    // The code to generate docs for
+    input: impl ToString,
+    // The target to use for the documented code's TARGET const
+    target: impl Target,
+) -> String {
+    match parse(filename, input).compile(cwd) {
         Ok(output) => output,
-        Err(e) => print_compile_error(e)
-    }.generate_docs(filename.to_string(), &target, &mut BTreeMap::new(), false)
+        Err(e) => print_compile_error(e),
+    }
+    .generate_docs(
+        filename.to_string(),
+        &mut get_predefined_constants(&target),
+        false,
+    )
 }
 
 fn print_compile_error(e: impl Display) -> ! {
@@ -31,26 +104,48 @@ fn print_compile_error(e: impl Display) -> ! {
     exit(1);
 }
 
-pub fn compile(cwd: &PathBuf, input: impl ToString, target: impl Target) -> Result<()> {
-    let mut tir = parse(input);
+pub fn compile(
+    // The working directory of the input file.
+    // This is where included files will be gathered from.
+    cwd: &PathBuf,
+    // The name of the input file being compiled.
+    // This is used for the `current_file()` operator
+    filename: &str,
+    // The code to compile
+    input: impl ToString,
+    // The target to compile for
+    target: impl Target,
+) -> Result<()> {
+    // Get the TIR code for the user's Oak code
+    let mut tir = parse(filename, input);
+    // Convert the TIR to HIR
     let mut hir = match tir.compile(cwd) {
         Ok(output) => output,
-        Err(e) => print_compile_error(e)
+        Err(e) => print_compile_error(e),
     };
 
-    hir.extend_declarations(match parse(include_str!("core.ok")).compile(cwd) {
-        Ok(output) => output,
-        Err(e) => print_compile_error(e)
-    }.get_declarations());
-
-    if hir.use_std() {
-        hir.extend_declarations(match parse(include_str!("std.ok")).compile(cwd) {
+    // Add the core library code to the users code
+    hir.extend_declarations(
+        match parse("core.ok", include_str!("core.ok")).compile(cwd) {
             Ok(output) => output,
-            Err(e) => print_compile_error(e)
-        }.get_declarations());
+            Err(e) => print_compile_error(e),
+        }
+        .get_declarations(),
+    );
+
+    // If the user specifies that they want to include the standard library
+    if hir.use_std() {
+        // Then add the standard library code to the users code
+        hir.extend_declarations(
+            match parse("std.ok", include_str!("std.ok")).compile(cwd) {
+                Ok(output) => output,
+                Err(e) => print_compile_error(e),
+            }
+            .get_declarations(),
+        );
     }
 
-    match hir.compile(cwd, &target, &mut BTreeMap::new()) {
+    match hir.compile(cwd, &mut get_predefined_constants(&target)) {
         Ok(mir) => match mir.assemble() {
             Ok(asm) => match asm.assemble(&target) {
                 Ok(result) => target.compile(if hir.use_std() {
@@ -66,9 +161,12 @@ pub fn compile(cwd: &PathBuf, input: impl ToString, target: impl Target) -> Resu
     }
 }
 
-pub fn parse(input: impl ToString) -> TirProgram {
+pub fn parse(filename: &str, input: impl ToString) -> TirProgram {
+    // Strip the user's code of all comments
     let code = &strip(input.to_string()).unwrap();
-    match parser::ProgramParser::new().parse(code) {
+
+    // Parse the users code and return the resulting TIR
+    match parser::ProgramParser::new().parse(filename, &code, code) {
         // if the parser succeeds, build will succeed
         Ok(parsed) => parsed,
         // if the parser succeeds, annotate code with comments
@@ -107,7 +205,7 @@ fn make_error(line: &str, unexpected: &str, line_number: usize, column_number: u
 }
 
 // Gets the line number, the line, and the column number of the error
-fn get_line(script: &str, location: usize) -> (usize, String, usize) {
+pub fn get_line(script: &str, location: usize) -> (usize, String, usize) {
     // Get the line number from the character location
     let line_number = script[..location + 1].lines().count();
     // Get the line from the line number

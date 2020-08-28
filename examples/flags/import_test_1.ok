@@ -1,0 +1,3 @@
+fn test1() {
+    putstrln("Import works!");
+}

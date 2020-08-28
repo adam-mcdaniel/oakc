@@ -1,0 +1,6 @@
+#[import("import_test_1.ok")]
+
+fn test2() {
+    test1();
+    putstrln("Import works again!!");
+}

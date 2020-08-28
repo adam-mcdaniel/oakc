@@ -12,6 +12,10 @@ impl Target for TS {
         't'
     }
 
+    fn is_standard(&self) -> bool {
+        true
+    }
+
     fn std(&self) -> String {
         String::from(include_str!("std/std.ts"))
     }

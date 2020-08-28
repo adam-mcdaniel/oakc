@@ -12,6 +12,10 @@ impl Target for C {
         'c'
     }
 
+    fn is_standard(&self) -> bool {
+        true
+    }
+
     fn std(&self) -> String {
         String::from(include_str!("std/std.c"))
     }

@@ -64,7 +64,9 @@ impl TirProgram {
         Self(decls, memory_size)
     }
 
-    pub fn get_declarations(&mut self) -> &mut Vec<TirDeclaration> { &mut self.0 }
+    pub fn get_declarations(&mut self) -> &mut Vec<TirDeclaration> {
+        &mut self.0
+    }
 
     /// Add a prefix to every include statement in this program.
     /// This is used to include files in other directories.
@@ -87,7 +89,7 @@ impl TirProgram {
                 TirDeclaration::IfElse(_, then_prog, else_prog) => {
                     *then_prog = then_prog.set_include_dir(include_dir).clone();
                     *else_prog = else_prog.set_include_dir(include_dir).clone()
-                },
+                }
                 _ => {}
             }
         }
@@ -99,6 +101,7 @@ impl TirProgram {
 
         for (i, decl) in self.get_declarations().iter().enumerate() {
             if let TirDeclaration::Include(filename) = decl {
+                let filename = filename.clone();
                 // This takes the path of the file in the `include` flag
                 // and appends it to the directory of the file which is
                 // including it.
@@ -119,23 +122,23 @@ impl TirProgram {
 
                     // Remove the include directive so it does not get computed again
                     self.get_declarations().remove(i);
-                    
+
                     // Add the contents of the included file to this file
                     self.get_declarations().extend(
-                        parse(contents)
+                        parse(&filename, contents)
                             // The included file might be in a different folder.
                             // So, compile the included file with the file's folder
                             // as the working directory.
                             .set_include_dir(&match include_path.strip_prefix(cwd) {
                                 Ok(path) => path.to_path_buf(),
-                                Err(_) => include_path
+                                Err(_) => include_path,
                             })
                             .get_declarations()
-                            .clone()
+                            .clone(),
                     );
 
                     // Use recursion to deal with new include directives
-                    return self.compile(cwd)
+                    return self.compile(cwd);
                 } else {
                     eprintln!("error: could not include file '{:?}'", file_path);
                     exit(1);
@@ -174,7 +177,13 @@ pub enum TirDeclaration {
     ///    the function will be called with.
     /// 4. The typed parameters of the function
     /// 5. The return type of the function
-    ExternFunction(Option<String>, String, String, Vec<(Identifier, TirType)>, TirType),
+    ExternFunction(
+        Option<String>,
+        String,
+        String,
+        Vec<(Identifier, TirType)>,
+        TirType,
+    ),
     /// This is the only other flag that is computed in TIR. This
     /// copies and pastes another Oak file in place of this declaration.
     Include(String),
@@ -184,7 +193,11 @@ pub enum TirDeclaration {
 }
 
 impl TirDeclaration {
-    fn to_hir_decl(&self, cwd: &PathBuf, decls: &Vec<TirDeclaration>) -> Result<HirDeclaration, TirError> {
+    fn to_hir_decl(
+        &self,
+        cwd: &PathBuf,
+        decls: &Vec<TirDeclaration>,
+    ) -> Result<HirDeclaration, TirError> {
         Ok(match self {
             Self::DocumentHeader(header) => HirDeclaration::DocumentHeader(header.clone()),
             Self::Constant(doc, name, constant) => {
@@ -212,7 +225,11 @@ impl TirDeclaration {
                     hir_args.push(HirExpression::Variable(param.clone()))
                 }
 
-                HirDeclaration::Function(HirFunction::new(doc.clone(), name.clone(), hir_params, hir_return_type.clone(),
+                HirDeclaration::Function(HirFunction::new(
+                    doc.clone(),
+                    name.clone(),
+                    hir_params,
+                    hir_return_type.clone(),
                     vec![
                         // If the return type is not void, then return the result
                         // of the foreign function
@@ -221,16 +238,22 @@ impl TirDeclaration {
                                 // Foreign functions, by default, return &void for casting purposes
                                 // To get the value we want, we cast it to the requested return type.
                                 HirExpression::TypeCast(
-                                    Box::new(HirExpression::ForeignCall(foreign_name.clone(), hir_args)),
-                                    hir_return_type
-                                )
+                                    Box::new(HirExpression::ForeignCall(
+                                        foreign_name.clone(),
+                                        hir_args,
+                                    )),
+                                    hir_return_type,
+                                ),
                             ])
                         } else {
-                            HirStatement::Expression(HirExpression::ForeignCall(foreign_name.clone(), hir_args))
-                        }
-                    ]
+                            HirStatement::Expression(HirExpression::ForeignCall(
+                                foreign_name.clone(),
+                                hir_args,
+                            ))
+                        },
+                    ],
                 ))
-            },
+            }
 
             /// In HIR, do nothing in place of an include statement
             Self::Include(file) => HirDeclaration::Pass,
@@ -743,7 +766,7 @@ pub enum TirConstant {
     /// What's the size of a type?
     SizeOf(TirType),
     /// A constant expression that is contingent on another constant expression
-    Conditional(Box<Self>, Box<Self>, Box<Self>)
+    Conditional(Box<Self>, Box<Self>, Box<Self>),
 }
 
 impl TirConstant {
