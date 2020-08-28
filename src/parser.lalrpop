@@ -13,6 +13,15 @@ Declaration: TirDeclaration = {
     "#" "[" "no_std" "]" => TirDeclaration::NoStd,
     "#" "[" "assert" "(" <Constant> ")" "]" => TirDeclaration::Assert(<>),
     "#" "[" "extern" "(" <Str> ")" "]" => TirDeclaration::Extern(<>),
+    "#" "[" "import" "(" <file:Str> ")" "]" => {
+        TirDeclaration::If(
+            TirConstant::Not(Box::new(TirConstant::IsDefined(file.clone()))),
+            TirProgram::new(vec![
+                TirDeclaration::Constant(None, file.clone(), TirConstant::Float(0.0)),
+                TirDeclaration::Include(file)
+            ], 512)
+        )
+    },
     "#" "[" "include" "(" <Str> ")" "]" => TirDeclaration::Include(<>),
     "#" "[" "memory" "(" <Num> ")" "]" => TirDeclaration::Memory(<> as i32),
     "#" "[" "error" "(" <Str> ")" "]" => TirDeclaration::Error(<>),

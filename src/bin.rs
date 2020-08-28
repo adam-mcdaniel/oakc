@@ -45,13 +45,13 @@ fn main() {
 
                 // Compile using the target backend
                 let compile_result = if matches.is_present("cc") {
-                    compile(&cwd, input_file, contents, C)
+                    compile(&cwd, &input_file, contents, C)
                 } else if matches.is_present("go") {
-                    compile(&cwd, input_file, contents, Go)
+                    compile(&cwd, &input_file, contents, Go)
                 } else if matches.is_present("ts") {
-                    compile(&cwd, input_file, contents, TS)
+                    compile(&cwd, &input_file, contents, TS)
                 } else {
-                    compile(&cwd, input_file, contents, C)
+                    compile(&cwd, &input_file, contents, C)
                 };
 
                 match compile_result {
@@ -74,7 +74,6 @@ fn main() {
         if let Some(input_file) = sub_matches.value_of("FILE") {
             // Get the contents of the input file
             if let Ok(contents) = read_to_string(input_file) {
-
                 // Get the current working directory of the input file
                 let cwd = if let Some(dir) = PathBuf::from(input_file).parent() {
                     PathBuf::from(dir)
