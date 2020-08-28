@@ -118,45 +118,30 @@ pub fn compile(
 ) -> Result<()> {
     // Get the TIR code for the user's Oak code
     let mut tir = parse(filename, input);
-    // Convert the TIR to HIR
-    let mut hir = match tir.compile(cwd) {
-        Ok(output) => output,
-        Err(e) => print_compile_error(e),
-    };
 
     // Add the core library code to the users code
-    hir.extend_declarations(
-        match parse("core.ok", include_str!("core.ok")).compile(cwd) {
-            Ok(output) => output,
-            Err(e) => print_compile_error(e),
-        }
-        .get_declarations(),
-    );
+    tir.extend(parse("core.ok", include_str!("core.ok")));
 
     // If the user specifies that they want to include the standard library
-    if hir.use_std() {
-        // Then add the standard library code to the users code
-        hir.extend_declarations(
-            match parse("std.ok", include_str!("std.ok")).compile(cwd) {
-                Ok(output) => output,
-                Err(e) => print_compile_error(e),
-            }
-            .get_declarations(),
-        );
+    if tir.use_std() {
+        tir.extend(parse("std.ok", include_str!("std.ok")));
     }
 
-    match hir.compile(cwd, &mut get_predefined_constants(&target)) {
-        Ok(mir) => match mir.assemble() {
-            Ok(asm) => match asm.assemble(&target) {
-                Ok(result) => target.compile(if hir.use_std() {
-                    target.core_prelude() + &target.std() + &result + &target.core_postlude()
-                } else {
-                    target.core_prelude() + &result + &target.core_postlude()
-                }),
+    match tir.compile(cwd) {
+        Ok(mut hir) => match hir.compile(cwd, &mut get_predefined_constants(&target)) {
+            Ok(mir) => match mir.assemble() {
+                Ok(asm) => match asm.assemble(&target) {
+                    Ok(result) => target.compile(if tir.use_std() {
+                        target.core_prelude() + &target.std() + &result + &target.core_postlude()
+                    } else {
+                        target.core_prelude() + &result + &target.core_postlude()
+                    }),
+                    Err(e) => print_compile_error(e),
+                },
                 Err(e) => print_compile_error(e),
             },
             Err(e) => print_compile_error(e),
-        },
+        }
         Err(e) => print_compile_error(e),
     }
 }

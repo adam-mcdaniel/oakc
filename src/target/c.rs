@@ -134,26 +134,26 @@ impl Target for C {
             match child.stdin.as_mut() {
                 Some(stdin) => {
                     if let Err(error) = stdin.write_all(code.as_bytes()) {
-                        return Result::Err(Error::new(
+                        return Err(Error::new(
                             ErrorKind::Other,
                             "unable to open write to child stdin",
                         ));
                     }
                 }
                 None => {
-                    return Result::Err(Error::new(ErrorKind::Other, "unable to open child stdin"))
+                    return Err(Error::new(ErrorKind::Other, "unable to open child stdin"))
                 }
             }
 
-            match child.wait_with_output() {
-                Ok(_) => return Result::Ok(()),
+            return match child.wait_with_output() {
+                Ok(_) => Ok(()),
                 Err(_) => {
-                    return Result::Err(Error::new(ErrorKind::Other, "unable to read child output"))
+                    Err(Error::new(ErrorKind::Other, "unable to read child output"))
                 }
             }
         } else {
             // child failed to execute
-            Result::Err(Error::new(
+            Err(Error::new(
                 ErrorKind::Other,
                 "unable to spawn child gcc proccess",
             ))

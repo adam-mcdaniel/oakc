@@ -1,0 +1,46 @@
+#[std]
+#[memory(262144)]
+
+const MALE = true; 
+const FEMALE = true; 
+
+struct Person {
+    let name: String,
+        age: num,
+        sex: bool;
+    
+    fn man(name: String, age: num) -> Person {
+        return [name, age, MALE];
+    }
+
+    fn woman(name: String, age: num) -> Person {
+        return [name, age, FEMALE];
+    }
+
+    fn puts(self: &Person) {
+        putstr((self->name)->contents);
+        putstr(" is ");
+        putnum(self->age);
+        putstr(" years old, and is a ");
+        putstr((self->sex)? "man" : "woman");
+    }
+
+    fn putln(self: &Person) {
+        self.puts(); putchar('\n');
+    }
+}
+
+
+fn main() {
+    let s = String::from("Hello,");
+    putstrln(s->contents);
+    for i in 0..1000 {
+        s.cats(String::from(" world!"));
+    }
+    putstrln(s->contents);
+
+    for i in 0..1000 {
+        let adam = Person::man(String::from("Adam"), 18);
+        adam.puts();
+    }
+}

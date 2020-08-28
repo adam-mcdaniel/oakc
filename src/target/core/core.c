@@ -297,3 +297,44 @@ void machine_sign(machine *vm) {
 }
 
 
+#include <string.h>
+
+void __oak_memcpy(machine *vm) {
+    int dst = machine_pop(vm),
+        src = machine_pop(vm),
+        size = machine_pop(vm);
+
+    memcpy(&vm->memory[dst], &vm->memory[src], size * sizeof(double));
+}
+
+void __oak_memset(machine *vm) {
+    int dst = machine_pop(vm);
+    double val = machine_pop(vm);
+    int size = machine_pop(vm);
+
+    for (int i=0; i<size; i++)
+        vm->memory[dst+i] = val;
+}
+
+void __oak_strlen(machine *vm) {
+    int i, src = machine_pop(vm);
+    // memet(&vm->memory[dst], val, size * sizeof(double));
+    for (i=0; vm->memory[src+i]; i++) {}
+    machine_push(vm, i);
+}
+
+void __oak_strcpy(machine *vm) {
+    int i,
+        dst = machine_pop(vm),
+        src = machine_pop(vm);
+
+    machine_push(vm, src);
+    __oak_strlen(vm);
+    int len = machine_pop(vm);
+
+	machine_push(vm, len);
+	machine_push(vm, src);
+	machine_push(vm, dst);
+	__oak_memcpy(vm);
+	vm->memory[dst+len] = 0.0;
+}

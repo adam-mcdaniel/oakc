@@ -133,10 +133,10 @@ impl Target for TS {
                 .output()
             {
                 if let Ok(_) = remove_file("OUTPUT.ts") {
-                    return Result::Ok(());
+                    return Ok(());
                 }
             }
         }
-        Result::Err(Error::new(ErrorKind::Other, "error compiling "))
+        Err(Error::new(ErrorKind::Other, "error compiling "))
     }
 }

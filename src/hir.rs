@@ -37,17 +37,6 @@ impl HirProgram {
         *memory_size
     }
 
-    pub fn use_std(&self) -> bool {
-        for decl in self.get_declarations() {
-            match decl {
-                HirDeclaration::NoStd => return false,
-                HirDeclaration::RequireStd => return true,
-                _ => {}
-            }
-        }
-        false
-    }
-
     pub fn generate_docs(
         &self,
         filename: String,
