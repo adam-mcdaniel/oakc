@@ -25,17 +25,16 @@ struct Date {
 
     fn print(self: &Date, is_american: bool) {
         if is_american {
-            prn!(self->month); prc!('/');
-            prn!(self->day); prc!('/');
-            prn!(self->year); 
+            putnum(self->month); putchar('/');
+            putnum(self->day); putchar('/');
         } else {
-            prn!(self->day); prc!('/');
-            prn!(self->month); prc!('/');
-            prn!(self->year); 
+            putnum(self->day); putchar('/');
+            putnum(self->month); putchar('/');
         }
+        putnum(self->year); 
     }
 
-    fn println(self: &Date, is_american: bool) { self.print(is_american); prend!(); }
+    fn println(self: &Date, is_american: bool) { self.print(is_american); putchar('\n'); }
 }
 
 fn main() {

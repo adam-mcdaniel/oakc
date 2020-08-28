@@ -18,10 +18,10 @@ struct File {
 
 fn main() {
     let f: File = File::open("test.txt");
-    prs!("file status: "); prn!(f->is_open); prend!();
+    putstr("file status: "); putnumln(f->is_open);
 
-    prs!("file contents: '"); prs!(f.read()); prc!('\''); prend!();
+    putstr("file contents: '"); putstr(f.read()); putcharln('\'');
     f.close();
 
-    prs!("file status: "); prn!(f->is_open); prend!();
+    putstr("file status: "); putnumln(f->is_open);
 }
