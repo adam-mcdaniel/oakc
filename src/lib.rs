@@ -32,24 +32,24 @@ pub fn get_predefined_constants(target: &impl Target) -> BTreeMap<String, HirCon
 
     constants.insert(
         String::from("ON_WINDOWS"),
-        HirConstant::Float((OS == "windows") as i32 as f64),
+        HirConstant::boolean(OS == "windows")
     );
     constants.insert(
         String::from("ON_MACOS"),
-        HirConstant::Float((OS == "macos") as i32 as f64),
+        HirConstant::boolean(OS == "macos")
     );
     constants.insert(
         String::from("ON_LINUX"),
-        HirConstant::Float((OS == "linux") as i32 as f64),
+        HirConstant::boolean(OS == "linux")
     );
 
     constants.insert(
         String::from("ON_NIX"),
-        HirConstant::Float((FAMILY == "unix") as i32 as f64),
+        HirConstant::boolean(FAMILY == "unix")
     );
     constants.insert(
         String::from("ON_NON_NIX"),
-        HirConstant::Float((FAMILY != "unix") as i32 as f64),
+        HirConstant::boolean(FAMILY != "unix")
     );
 
     constants.insert(
@@ -67,11 +67,11 @@ pub fn get_predefined_constants(target: &impl Target) -> BTreeMap<String, HirCon
 
     constants.insert(
         String::from("TARGET"),
-        HirConstant::Float(target.get_name() as u8 as f64),
+        HirConstant::Character(target.get_name()),
     );
     constants.insert(
         String::from("IS_STANDARD"),
-        HirConstant::Float(target.is_standard() as i32 as f64),
+        HirConstant::boolean(target.is_standard())
     );
 
     constants

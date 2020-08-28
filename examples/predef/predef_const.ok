@@ -27,6 +27,13 @@
 
 #[include("current_file.ok")]
 
+fn dyn_platform() -> &char {
+    return ON_WINDOWS? "windows"
+                : ON_MACOS? "macOS"
+                    : ON_LINUX? "linux"
+                        : "unknown";
+}
+
 fn main() {
     test_current_line();
     test_current_file();

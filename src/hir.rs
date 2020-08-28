@@ -638,6 +638,36 @@ impl Display for HirConstant {
 }
 
 impl HirConstant {
+    pub fn boolean(b: bool) -> Self { if b { Self::True } else { Self::False } }
+
+    /// Get the type of a constant value
+    fn get_type(&self, constants: &BTreeMap<Identifier, Self>) -> Result<HirType, HirError> {
+        Ok(match self {
+            Self::Conditional(_, a, _) 
+            | Self::Add(a, _) 
+            | Self::Subtract(a, _) 
+            | Self::Multiply(a, _) 
+            | Self::Divide(a, _) => a.get_type(constants)?,
+
+            Self::True | Self::False
+            | Self::And(_, _) | Self::Or(_, _) | Self::Not(_)
+            | Self::Greater(_, _) | Self::GreaterEqual(_, _)
+            | Self::Less(_, _) | Self::LessEqual(_, _)
+            | Self::Equal(_, _) | Self::NotEqual(_, _)
+            | Self::IsDefined(_) => HirType::Boolean,
+
+            Self::Constant(name) => if let Some(value) = constants.get(name) {
+                value.get_type(constants)?
+            } else {
+                return Err(HirError::ConstantNotDefined(name.clone()));
+            },
+
+            Self::Character(_) => HirType::Character,
+
+            Self::Float(_) | Self::SizeOf(_) => HirType::Float,
+        })
+    }
+
     /// Find a constants floating point value.
     fn to_value(
         &self,
@@ -981,7 +1011,19 @@ impl HirExpression {
             Self::SizeOf(t) => MirExpression::Float(t.get_size(decls, constants)? as f64),
 
             /// Convert a constant expression into a float literal
-            Self::Constant(constant) => MirExpression::Float(constant.to_value(decls, constants)?),
+            Self::Constant(constant) => {
+                let val = constant.to_value(decls, constants)?;
+                match constant.get_type(constants)? {
+                    HirType::Boolean => if val != 0.0 {
+                        MirExpression::True
+                    } else {
+                        MirExpression::False
+                    },
+
+                    HirType::Character => MirExpression::Character(val as u8 as char),
+                    _ => MirExpression::Float(val),
+                }
+            },
 
             Self::Add(l, r) => MirExpression::Add(
                 Box::new(l.to_mir_expr(decls, constants)?),
@@ -1059,7 +1101,7 @@ impl HirExpression {
             /// replace it with its constant value
             Self::Variable(name) => {
                 if let Some(val) = constants.get(name) {
-                    MirExpression::Float(val.to_value(decls, constants)?)
+                    HirExpression::Constant(val.clone()).to_mir_expr(decls, constants)?
                 } else {
                     MirExpression::Variable(name.clone())
                 }
