@@ -44,8 +44,8 @@ Str: String = <s:r#""(\\.|[^"])*""#> => String::from(&s[1..s.len()-1]).replace("
 Char: char = <s:r#"'(\\.|[^'])'"#> => s.replace("\\'", "'").replace("\\n", "\n").replace("\\r", "\r").replace("\\t", "\t").replace("\\0", "\0").chars().nth(1).unwrap() as char;
 
 Num: f64 = {
-    // r"([0-9]+([.][0-9]*)?|[.][0-9]+)" => <>.to_string().parse::<f64>().unwrap(),
-    r"([1-9][0-9]*|[0])([.][0-9]+)?" => <>.to_string().parse::<f64>().unwrap(),
+    r"([0-9]+([.][0-9]*)?|[.][0-9]+)" => <>.to_string().parse::<f64>().unwrap(),
+    // r"([1-9][0-9]*|[0])([.][0-9]+)?" => <>.to_string().parse::<f64>().unwrap(),
 }
 
 Ident: Identifier = {

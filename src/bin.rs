@@ -92,7 +92,7 @@ fn main() {
 
                 // If the output file exists, write the output to it
                 if let Some(output_file) = sub_matches.value_of("OUTPUT") {
-                    if let Ok(_) = write(output_file, docs) {
+                    if write(output_file, docs).is_ok() {
                         println!("doc generation successful")
                     } else {
                         eprintln!("error: could not write to file \"{}\"", output_file);

@@ -78,9 +78,14 @@ pub fn get_predefined_constants(target: &impl Target) -> BTreeMap<String, HirCon
 }
 
 pub fn generate_docs(
+    // The working directory of the input file.
+    // This is where included files will be gathered from.
     cwd: &PathBuf,
+    // The name of the input file to generate docs for
     filename: &str,
+    // The code to generate docs for
     input: impl ToString,
+    // The target to use for the documented code's TARGET const
     target: impl Target,
 ) -> String {
     match parse(filename, input).compile(cwd) {
@@ -100,17 +105,26 @@ fn print_compile_error(e: impl Display) -> ! {
 }
 
 pub fn compile(
+    // The working directory of the input file.
+    // This is where included files will be gathered from.
     cwd: &PathBuf,
+    // The name of the input file being compiled.
+    // This is used for the `current_file()` operator
     filename: &str,
+    // The code to compile
     input: impl ToString,
+    // The target to compile for
     target: impl Target,
 ) -> Result<()> {
+    // Get the TIR code for the user's Oak code
     let mut tir = parse(filename, input);
+    // Convert the TIR to HIR
     let mut hir = match tir.compile(cwd) {
         Ok(output) => output,
         Err(e) => print_compile_error(e),
     };
 
+    // Add the core library code to the users code
     hir.extend_declarations(
         match parse("core.ok", include_str!("core.ok")).compile(cwd) {
             Ok(output) => output,
@@ -119,7 +133,9 @@ pub fn compile(
         .get_declarations(),
     );
 
+    // If the user specifies that they want to include the standard library
     if hir.use_std() {
+        // Then add the standard library code to the users code
         hir.extend_declarations(
             match parse("std.ok", include_str!("std.ok")).compile(cwd) {
                 Ok(output) => output,
@@ -146,7 +162,10 @@ pub fn compile(
 }
 
 pub fn parse(filename: &str, input: impl ToString) -> TirProgram {
+    // Strip the user's code of all comments
     let code = &strip(input.to_string()).unwrap();
+
+    // Parse the users code and return the resulting TIR
     match parser::ProgramParser::new().parse(filename, &code, code) {
         // if the parser succeeds, build will succeed
         Ok(parsed) => parsed,

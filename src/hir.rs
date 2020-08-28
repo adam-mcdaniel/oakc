@@ -631,7 +631,7 @@ impl Display for HirConstant {
             Self::NotEqual(l, r) => write!(f, "{}!={}", l, r),
             Self::Constant(name) => write!(f, "{}", name),
             Self::SizeOf(name) => write!(f, "sizeof(\"{}\")", name),
-            Self::IsDefined(name) => write!(f, "isdef(\"{}\")", name),
+            Self::IsDefined(name) => write!(f, "is_defined(\"{}\")", name),
             Self::Not(expr) => write!(f, "!{}", expr),
         }
     }
