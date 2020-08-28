@@ -51,26 +51,28 @@ function machine_new(vars: number, capacity: number): machine {
 
 // Print out the state of the virtual machine's stack and heap
 function machine_dump(vm: machine): void {
+	let out = "";
 	let i:number;
-	console.log("stack: [ ");
+	out += "stack: [ ";
 	for (i=0; i<vm.stack_ptr; i++)
-	console.log(vm.memory[i]);
+		out += vm.memory[i];
 	for (i=vm.stack_ptr; i<vm.capacity; i++)
-	console.log("  ");
+		out += "  ";
 	console.log("]\nheap:  [ ");
 	for (i=0; i<vm.stack_ptr; i++)
-		console.log("  ");
+		out += "  ";
 	for (i=vm.stack_ptr; i<vm.capacity; i++)
-		console.log(`${vm.memory[i]} `);
-	console.log("]\nalloc: [ ");
+		out += `${vm.memory[i]} `;
+	out += "]\nalloc: [ ";
 	for (i=0; i<vm.capacity; i++)
-		console.log(`${vm.allocated[i]} `);
-	console.log("]\n");
+		out += `${vm.allocated[i]} `;
+	out += "]\n";
 	let total: number = 0;
 	for (i=0; i<vm.capacity; i++)
 		total += vm.allocated[i] ? 1 : 0;
-	console.log(`STACK SIZE	${vm.stack_ptr}\n`);
-	console.log(`TOTAL ALLOC'D ${total}\n`);
+	out += `STACK SIZE	${vm.stack_ptr}\n`;
+	out += `TOTAL ALLOC'D ${total}\n`;
+	console.log(out);
 }
 
 // Free the virtual machine's memory. This is called at the end of the program.

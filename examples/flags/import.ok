@@ -1,0 +1,14 @@
+#[std]
+#[import("import_test_1.ok")]
+#[import("import_test_1.ok")]
+#[import("import_test_1.ok")]
+#[import("import_test_1.ok")]
+#[import("import_test_2.ok")]
+#[import("import_test_2.ok")]
+#[import("import_test_2.ok")]
+#[import("import_test_2.ok")]
+
+fn main() {
+    test1();
+    test2();
+}

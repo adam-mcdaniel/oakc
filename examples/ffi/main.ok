@@ -1,6 +1,7 @@
-#[no_std]
+#[std]
 #[include("lib/foreign.ok")]
 
 fn main() {
 	test();
+	putnumln(add(5, 6));
 }

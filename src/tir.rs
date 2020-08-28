@@ -64,10 +64,90 @@ impl TirProgram {
         Self(decls, memory_size)
     }
 
-    pub fn compile(&self) -> Result<HirProgram, TirError> {
+    pub fn get_declarations(&mut self) -> &mut Vec<TirDeclaration> {
+        &mut self.0
+    }
+
+    /// Add a prefix to every include statement in this program.
+    /// This is used to include files in other directories.
+    pub fn set_include_dir(&mut self, include_dir: &PathBuf) -> &mut Self {
+        for decl in self.get_declarations() {
+            match decl {
+                /// Both the include and extern directives look in their working directories
+                /// for files, so their filenames must be adjusted.
+                TirDeclaration::Include(filename) | TirDeclaration::Extern(filename) => {
+                    // Join the include directive argument with the include directory
+                    let new_path = include_dir.join(filename.clone());
+                    // Replace the directive's argument with the new path
+                    *filename = new_path.to_str().unwrap().to_string()
+                }
+                /// In conditional compilation statements, set all of the inner
+                /// include directives' include directories.
+                TirDeclaration::If(_, prog) => *prog = prog.set_include_dir(include_dir).clone(),
+                /// In conditional compilation statements, set all of the inner
+                /// include directives' include directories.
+                TirDeclaration::IfElse(_, then_prog, else_prog) => {
+                    *then_prog = then_prog.set_include_dir(include_dir).clone();
+                    *else_prog = else_prog.set_include_dir(include_dir).clone()
+                }
+                _ => {}
+            }
+        }
+        self
+    }
+
+    pub fn compile(&mut self, cwd: &PathBuf) -> Result<HirProgram, TirError> {
         let mut hir_decls = vec![];
+
+        for (i, decl) in self.get_declarations().iter().enumerate() {
+            if let TirDeclaration::Include(filename) = decl {
+                let filename = filename.clone();
+                // This takes the path of the file in the `include` flag
+                // and appends it to the directory of the file which is
+                // including it.
+                //
+                // So, if `src/main.ok` includes "lib/all.ok",
+                // `file_path` will be equal to "src/lib/all.ok"
+                let file_path = cwd.join(filename.clone());
+                if let Ok(contents) = read_to_string(file_path.clone()) {
+                    // Get the directory of the included file.
+
+                    // If `src/main.ok` includes "lib/all.ok",
+                    // `include_path` will be equal to "src/lib/"
+                    let include_path = if let Some(dir) = file_path.parent() {
+                        PathBuf::from(dir)
+                    } else {
+                        PathBuf::from("./")
+                    };
+
+                    // Remove the include directive so it does not get computed again
+                    self.get_declarations().remove(i);
+
+                    // Add the contents of the included file to this file
+                    self.get_declarations().extend(
+                        parse(&filename, contents)
+                            // The included file might be in a different folder.
+                            // So, compile the included file with the file's folder
+                            // as the working directory.
+                            .set_include_dir(&match include_path.strip_prefix(cwd) {
+                                Ok(path) => path.to_path_buf(),
+                                Err(_) => include_path,
+                            })
+                            .get_declarations()
+                            .clone(),
+                    );
+
+                    // Use recursion to deal with new include directives
+                    return self.compile(cwd);
+                } else {
+                    eprintln!("error: could not include file '{:?}'", file_path);
+                    exit(1);
+                }
+            }
+        }
+
         for decl in &self.0 {
-            hir_decls.push(decl.to_hir_decl(&self.0)?);
+            hir_decls.push(decl.to_hir_decl(cwd, &self.0)?);
         }
 
         Ok(HirProgram::new(hir_decls, self.1))
@@ -88,6 +168,24 @@ pub enum TirDeclaration {
     IfElse(TirConstant, TirProgram, TirProgram),
     Error(String),
     Extern(String),
+    /// This is the first kind of flag computed in TIR.
+    /// It creates a typed binding to a foreign function in an `extern` file.
+    /// This variant has 5 values,
+    /// 1. The doc string
+    /// 2. The foreign function name to bind
+    /// 3. The name of the bound Oak function. This is the name that
+    ///    the function will be called with.
+    /// 4. The typed parameters of the function
+    /// 5. The return type of the function
+    ExternFunction(
+        Option<String>,
+        String,
+        String,
+        Vec<(Identifier, TirType)>,
+        TirType,
+    ),
+    /// This is the only other flag that is computed in TIR. This
+    /// copies and pastes another Oak file in place of this declaration.
     Include(String),
     Memory(i32),
     RequireStd,
@@ -95,7 +193,11 @@ pub enum TirDeclaration {
 }
 
 impl TirDeclaration {
-    fn to_hir_decl(&self, decls: &Vec<TirDeclaration>) -> Result<HirDeclaration, TirError> {
+    fn to_hir_decl(
+        &self,
+        cwd: &PathBuf,
+        decls: &Vec<TirDeclaration>,
+    ) -> Result<HirDeclaration, TirError> {
         Ok(match self {
             Self::DocumentHeader(header) => HirDeclaration::DocumentHeader(header.clone()),
             Self::Constant(doc, name, constant) => {
@@ -112,7 +214,49 @@ impl TirDeclaration {
 
             Self::Extern(file) => HirDeclaration::Extern(file.clone()),
 
-            Self::Include(file) => HirDeclaration::Include(file.clone()),
+            Self::ExternFunction(doc, foreign_name, name, params, return_type) => {
+                let mut hir_return_type = return_type.to_hir_type()?;
+                let mut hir_params = vec![];
+                let mut hir_args = vec![];
+                // Create a list of HIR parameters, and the arguments
+                // to supply to the foreign function.
+                for (param, t) in params {
+                    hir_params.push((param.clone(), t.to_hir_type()?));
+                    hir_args.push(HirExpression::Variable(param.clone()))
+                }
+
+                HirDeclaration::Function(HirFunction::new(
+                    doc.clone(),
+                    name.clone(),
+                    hir_params,
+                    hir_return_type.clone(),
+                    vec![
+                        // If the return type is not void, then return the result
+                        // of the foreign function
+                        if *return_type != TirType::Void {
+                            HirStatement::Return(vec![
+                                // Foreign functions, by default, return &void for casting purposes
+                                // To get the value we want, we cast it to the requested return type.
+                                HirExpression::TypeCast(
+                                    Box::new(HirExpression::ForeignCall(
+                                        foreign_name.clone(),
+                                        hir_args,
+                                    )),
+                                    hir_return_type,
+                                ),
+                            ])
+                        } else {
+                            HirStatement::Expression(HirExpression::ForeignCall(
+                                foreign_name.clone(),
+                                hir_args,
+                            ))
+                        },
+                    ],
+                ))
+            }
+
+            /// In HIR, do nothing in place of an include statement
+            Self::Include(file) => HirDeclaration::Pass,
 
             Self::Memory(n) => HirDeclaration::Memory(*n),
 
@@ -120,13 +264,13 @@ impl TirDeclaration {
             Self::NoStd => HirDeclaration::NoStd,
 
             Self::If(constant, program) => {
-                HirDeclaration::If(constant.to_hir_const(decls)?, program.compile()?)
+                HirDeclaration::If(constant.to_hir_const(decls)?, program.clone().compile(cwd)?)
             }
 
             Self::IfElse(constant, then_prog, else_prog) => HirDeclaration::IfElse(
                 constant.to_hir_const(decls)?,
-                then_prog.compile()?,
-                else_prog.compile()?,
+                then_prog.clone().compile(cwd)?,
+                else_prog.clone().compile(cwd)?,
             ),
         })
     }
@@ -622,7 +766,7 @@ pub enum TirConstant {
     /// What's the size of a type?
     SizeOf(TirType),
     /// A constant expression that is contingent on another constant expression
-    Conditional(Box<Self>, Box<Self>, Box<Self>)
+    Conditional(Box<Self>, Box<Self>, Box<Self>),
 }
 
 impl TirConstant {
