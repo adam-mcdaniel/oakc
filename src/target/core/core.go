@@ -249,7 +249,7 @@ func (vm *machine) sign() {
 	}
 }
 
-func __oak_memcpy(vm *machine) {
+func __oak_core__memcpy(vm *machine) {
 	dst := int(vm.pop())
 	src := int(vm.pop())
 	size := int(vm.pop())
@@ -259,7 +259,7 @@ func __oak_memcpy(vm *machine) {
 	}
 }
 
-func __oak_memset(vm *machine) {
+func __oak_core__memset(vm *machine) {
 	dst := int(vm.pop())
 	val := vm.pop()
 	size := int(vm.pop())
@@ -269,7 +269,7 @@ func __oak_memset(vm *machine) {
 	}
 }
 
-func __oak_strlen(vm *machine) {
+func __oak_core__strlen(vm *machine) {
 	src := int(vm.pop())
 	i := 0
 	for ; vm.memory[src+i] != 0; i += 1 {
@@ -277,17 +277,17 @@ func __oak_strlen(vm *machine) {
 	vm.push(float64(i))
 }
 
-func __oak_strcpy(vm *machine) {
+func __oak_core__strcpy(vm *machine) {
 	dst := int(vm.pop())
 	src := int(vm.pop())
 
 	vm.push(float64(src))
-	__oak_strlen(vm)
+	__oak_core__strlen(vm)
 	len := int(vm.pop())
 
 	vm.push(float64(len))
 	vm.push(float64(src))
 	vm.push(float64(dst))
-	__oak_memcpy(vm)
+	__oak_core__memcpy(vm)
 	vm.memory[dst+len] = 0.0
 }

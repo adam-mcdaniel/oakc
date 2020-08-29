@@ -1,9 +1,9 @@
 
 
-extern fn __oak_memcpy as memcpy(dst: &char, src: &char, size: num);
-extern fn __oak_memset as memset(dst: &char, val: num, size: num);
-extern fn __oak_strlen as strlen(src: &char) -> num;
-extern fn __oak_strcpy as strcpy(dst: &char, src: &char);
+extern fn __oak_core__memcpy as memcpy(dst: &char, src: &char, size: num);
+extern fn __oak_core__memset as memset(dst: &char, val: num, size: num);
+extern fn __oak_core__strlen as strlen(src: &char) -> num;
+extern fn __oak_core__strcpy as strcpy(dst: &char, src: &char);
 
 
 fn realloc(src: &char, old_size: num, new_size: num) -> &char {
