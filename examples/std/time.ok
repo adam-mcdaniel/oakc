@@ -1,0 +1,61 @@
+#[std]
+
+
+struct Date {
+    let m: num,
+        d: num,
+        y: num;
+
+    fn now() -> Date {
+        return [
+            get_month_now() + 1,
+            get_day_now(),
+            get_year_now(),
+        ];
+    }
+
+    fn puts(self: &Date) {
+        putnum(self->m);
+        putchar('\\');
+        putnum(self->d);
+        putchar('\\');
+        putnum(self->y);
+    }
+
+    fn putln(self: &Date) {
+        self.puts(); prend();
+    }
+}
+
+
+struct Time {
+    let h: num,
+        m: num,
+        s: num;
+
+    fn now() -> Time {
+        return [
+            get_hour_now(),
+            get_minute_now(),
+            get_second_now(),
+        ];
+    }
+
+    fn puts(self: &Time) {
+        putnum(self->h);
+        putchar(':');
+        putnum(self->m);
+        putchar(':');
+        putnum(self->s);
+    }
+
+    fn putln(self: &Time) {
+        self.puts(); prend();
+    }
+}
+
+
+fn main() {
+    putstr("Today is "); Date::now().putln();
+    putstr("And the time is "); Time::now().putln();
+}

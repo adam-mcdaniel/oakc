@@ -246,3 +246,45 @@ function machine_sign(vm: machine): void {
         machine_push(vm, -1);
     }
 }
+
+function __oak_core__memcpy(vm: machine) {
+	let dst = machine_pop(vm);
+	let src = machine_pop(vm);
+	let size = machine_pop(vm);
+
+	for (let i=0; i<size; i++) {
+		vm.memory[dst+i] = vm.memory[src+i]
+	}
+}
+
+function __oak_core__memset(vm: machine) {
+	let dst = machine_pop(vm);
+	let val = machine_pop(vm);
+	let size = machine_pop(vm);
+
+	for (let i=0; i<size; i++) {
+		vm.memory[dst+i] = val
+	}
+}
+
+function __oak_core__strlen(vm: machine) {
+	let src = machine_pop(vm);
+	let i=0;
+	for (; vm.memory[src+i] != 0; i++) {}
+	machine_push(vm, i);
+}
+
+function __oak_core__strcpy(vm: machine) {
+	let dst = machine_pop(vm);
+	let src = machine_pop(vm);
+	
+	machine_push(vm, src);
+	__oak_core__strlen(vm);
+	let len = machine_pop(vm);
+
+	machine_push(vm, len);
+	machine_push(vm, src);
+	machine_push(vm, dst);
+	__oak_core__memcpy(vm);
+	vm.memory[dst+len] = 0.0;
+}

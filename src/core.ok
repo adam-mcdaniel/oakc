@@ -1,0 +1,76 @@
+
+
+extern fn __oak_core__memcpy as memcpy(dst: &char, src: &char, size: num);
+extern fn __oak_core__memset as memset(dst: &char, val: num, size: num);
+extern fn __oak_core__strlen as strlen(src: &char) -> num;
+extern fn __oak_core__strcpy as strcpy(dst: &char, src: &char);
+
+
+fn realloc(src: &char, old_size: num, new_size: num) -> &char {
+    let dst = alloc(new_size) as &char;
+    let copy_size = 0;
+    if old_size < new_size { memcpy(dst, src, old_size) }
+    else { memcpy(dst, src, new_size) }
+
+    free src: old_size;
+    return dst;
+}
+
+struct String {
+    let contents: &char,
+        len: num;
+
+    ///
+    /// Constructors
+    /// 
+    fn new() -> String { return [alloc(1), 0] }
+    fn from(src: &char) -> String {
+        let len = strlen(src);
+        let contents = alloc(len + 1) as &char;
+        strcpy(contents, src);
+        return [contents, len]
+    }
+
+
+    ///
+    /// Getters
+    /// 
+    fn size(self: &String) -> num { return (self->len) + 1 }
+
+
+    /// 
+    /// Methods
+    /// 
+    fn grow(self: &String, d_size: num) {
+        let size = self.size();
+        self->contents = realloc(self->contents, size, size + d_size);
+        self->len += d_size;
+    }
+
+    fn push(self: &String, ch: char) {
+        self.grow(1);
+        (self->contents)[(self->len) - 1] = ch;
+    }
+
+    fn cat(self: &String, other: &char) {
+        let len = strlen(other);
+        let old_len = self->len;
+        self.grow(len);
+        strcpy(&(self->contents)[old_len], other);
+    }
+
+    fn cats(self: &String, other: String) { self.cat(other->contents); }
+
+    ///
+    /// Memory Management
+    /// 
+    fn copy(self: &String) -> String {
+        let copy_str = alloc(self.size()) as &char;
+        memcpy(copy_str, self->contents, self.size());
+        return [copy_str, self->len]
+    }
+
+    fn drop(self: &String) {
+        free self->contents: self.size();
+    }
+}

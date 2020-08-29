@@ -68,6 +68,22 @@ impl TirProgram {
         &mut self.0
     }
 
+    pub fn extend(&mut self, mut other: Self) {
+        self.get_declarations()
+            .extend(other.get_declarations().clone())
+    }
+
+    pub fn use_std(&self) -> bool {
+        for decl in &self.0 {
+            match decl {
+                TirDeclaration::NoStd => return false,
+                TirDeclaration::RequireStd => return true,
+                _ => {}
+            }
+        }
+        false
+    }
+
     /// Add a prefix to every include statement in this program.
     /// This is used to include files in other directories.
     pub fn set_include_dir(&mut self, include_dir: &PathBuf) -> &mut Self {

@@ -125,11 +125,11 @@ impl Target for Go {
         if let Ok(_) = write("main.go", code) {
             if let Ok(_) = Command::new("go").arg("build").arg("main.go").output() {
                 if let Ok(_) = remove_file("main.go") {
-                    return Result::Ok(());
+                    return Ok(());
                 }
             }
         }
-        Result::Err(Error::new(
+        Err(Error::new(
             ErrorKind::Other,
             "could not compile output golang code. is golang installed?",
         ))
