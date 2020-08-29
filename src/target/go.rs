@@ -77,6 +77,10 @@ impl Target for Go {
         String::from("vm.divide()\n")
     }
 
+    fn modulus(&self) -> String {
+        String::from("vm.modulus()\n")
+    }
+
     fn sign(&self) -> String {
         String::from("vm.sign()\n")
     }

@@ -238,6 +238,13 @@ function machine_divide(vm: machine): void {
 	machine_push(vm, a/b);
 }
 
+// Modulus the second topmost number on the stack by the topmost number on the stack
+function machine_modulus(vm: machine): void {
+	let b = Math.floor(machine_pop(vm));
+	let a = Math.floor(machine_pop(vm));
+	machine_push(vm, a%b);
+}
+
 function machine_sign(vm: machine): void {
     let x = machine_pop(vm);
     if (x >= 0) {

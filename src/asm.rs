@@ -387,6 +387,7 @@ pub enum AsmExpression {
     Alloc,
     Free,
 
+    Modulus,
     Divide,
     Multiply,
     Subtract,
@@ -489,6 +490,8 @@ impl AsmExpression {
             Self::Multiply => target.multiply(),
             // Divide two numbers on the stack
             Self::Divide => target.divide(),
+            // Modulus two numbers on the stack
+            Self::Modulus => target.modulus(),
         })
     }
 }

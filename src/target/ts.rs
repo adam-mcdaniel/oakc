@@ -78,6 +78,10 @@ impl Target for TS {
         String::from("machine_divide(vm);\n")
     }
 
+    fn modulus(&self) -> String {
+        String::from("machine_modulus(vm);\n")
+    }
+
     fn sign(&self) -> String {
         String::from("machine_sign(vm);\n")
     }
