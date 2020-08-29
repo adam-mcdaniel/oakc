@@ -1,0 +1,6 @@
+#[std]
+#[import("lib/all.ok")]
+
+fn main() {
+    putstrln(test());
+}

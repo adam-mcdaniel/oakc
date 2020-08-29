@@ -1,0 +1,6 @@
+// Include string library
+#[import("test.ok")]
+#[import("test.ok")]
+#[import("test.ok")]
+#[import("test.ok")]
+#[import("test.ok")]
