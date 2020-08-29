@@ -1,4 +1,12 @@
+/// 
+/// Time
+/// 
 
+
+
+///
+/// IO
+/// 
 extern fn prend();
 extern fn prs as putstr(s: &char);
 extern fn prn as putnum(n: num);

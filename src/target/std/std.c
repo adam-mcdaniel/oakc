@@ -29,3 +29,34 @@ void getch(machine *vm) {
     machine_push(vm, ch);
 }
 
+#include <time.h>
+
+void get_day_now(machine *vm) {
+    struct tm *t = localtime(time(NULL));
+    machine_push(vm, t->tm_mday);
+}
+
+void get_month_now(machine *vm) {
+    struct tm *t = localtime(time(NULL));
+    machine_push(vm, t->tm_mon);
+}
+
+void get_year_now(machine *vm) {
+    struct tm *t = localtime(time(NULL));
+    machine_push(vm, t->tm_year + 1900);
+}
+
+void get_hour_now(machine *vm) {
+    struct tm *t = localtime(time(NULL));
+    machine_push(vm, t->tm_hour);
+}
+
+void get_minute_now(machine *vm) {
+    struct tm *t = localtime(time(NULL));
+    machine_push(vm, t->tm_min);
+}
+
+void get_second_now(machine *vm) {
+    struct tm *t = localtime(time(NULL));
+    machine_push(vm, t->tm_sec);
+}

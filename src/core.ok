@@ -74,3 +74,37 @@ struct String {
         free self->contents: self.size();
     }
 }
+
+
+struct Date {
+    let m: num,
+        d: num,
+        y: num;
+
+    fn days_in_month(self: &Date) -> num {
+        // January - 31 days
+        // February - 28 days in a common year and 29 days in leap years
+        // March - 31 days
+        // April - 30 days
+        // May - 31 days
+        // June - 30 days
+        // July - 31 days
+        // August - 31 days
+        // September - 30 days
+        // October - 31 days
+        // November - 30 days
+        // December - 31 days
+        
+    }
+
+    fn tmrw(self: &Date) -> Date {
+        // if date.month == feb:
+        //     return 28 + int(date.is_leapyear)
+        // else:
+        //     return 31 - ord(date.month) %% 7 %% 2
+    }
+
+    fn add(self: &Date, other: Date) -> Date {
+
+    }
+}

@@ -4,7 +4,10 @@ import (
 	"bufio"
 	"fmt"
 	"os"
+	"time"
 )
+
+var _ = time.Now
 
 var READER = bufio.NewReader(os.Stdin)
 

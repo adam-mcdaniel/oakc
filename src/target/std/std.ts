@@ -49,3 +49,26 @@ async function getch(vm: machine): Promise<void> {
 }
 
 
+function get_day_now(vm: machine): void {
+	machine_push(vm, new Date().getDay())
+}
+
+function get_month_now(vm: machine): void {
+	machine_push(vm, new Date().getMonth())
+}
+
+function get_year_now(vm: machine): void {
+	machine_push(vm, new Date().getFullYear())
+}
+
+function get_hour_now(vm: machine): void {
+	machine_push(vm, new Date().getHours())
+}
+
+function get_minute_now(vm: machine): void {
+	machine_push(vm, new Date().getMinutes())
+}
+
+function get_second_now(vm: machine): void {
+	machine_push(vm, new Date().getSeconds())
+}
