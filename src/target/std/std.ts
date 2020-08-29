@@ -1,11 +1,11 @@
 //print a number
-function prn(vm: machine): void {
+function __oak_std__putnum(vm: machine): void {
 	let n = machine_pop(vm);
 	console.log(n);
 }
 
 //print a null-terminated string
-function prs(vm: machine): void {
+function __oak_std__putstr(vm: machine): void {
 	let addr = machine_pop(vm);
 	//console.log always inserts a newline, so build the string first and then print
 	let out = "";
@@ -16,18 +16,18 @@ function prs(vm: machine): void {
 }
 
 //print a char
-function prc(vm: machine): void {
+function __oak_std__putchar(vm: machine): void {
 	let n = machine_pop(vm);
 	console.log(String.fromCharCode(n));
 }
 
 //print a newline
-function prend(vm: machine): void {
+function __oak_std__prend(vm: machine): void {
 	//console.log always inserts a newline
 	console.log("");
 }
 
-async function getch(vm: machine): Promise<void> {
+async function __oak_std__get_char(vm: machine): Promise<void> {
 	//https://stackoverflow.com/questions/44746592/is-there-a-way-to-write-async-await-code-that-responds-to-onkeypress-events
 	async function readKey(): Promise<KeyboardEvent>{
 		return new Promise(resolve => {
@@ -41,7 +41,7 @@ async function getch(vm: machine): Promise<void> {
 		ch = "\n".charCodeAt(0);
 	} else if (key.length > 1){ //if the key is not a single character (arrow keys, etc.)
 		//find a way to make this non-recursive
-		getch(vm);
+		__oak_std__get_char(vm);
 	} else {
 		ch = key.charCodeAt(0);
 	}
@@ -49,26 +49,26 @@ async function getch(vm: machine): Promise<void> {
 }
 
 
-function get_day_now(vm: machine): void {
-	machine_push(vm, new Date().getDay())
+function __oak_std__get_day_now(vm: machine): void {
+	machine_push(vm, new Date().getUTCDate())
 }
 
-function get_month_now(vm: machine): void {
+function __oak_std__get_month_now(vm: machine): void {
 	machine_push(vm, new Date().getMonth())
 }
 
-function get_year_now(vm: machine): void {
+function __oak_std__get_year_now(vm: machine): void {
 	machine_push(vm, new Date().getFullYear())
 }
 
-function get_hour_now(vm: machine): void {
+function __oak_std__get_hour_now(vm: machine): void {
 	machine_push(vm, new Date().getHours())
 }
 
-function get_minute_now(vm: machine): void {
+function __oak_std__get_minute_now(vm: machine): void {
 	machine_push(vm, new Date().getMinutes())
 }
 
-function get_second_now(vm: machine): void {
+function __oak_std__get_second_now(vm: machine): void {
 	machine_push(vm, new Date().getSeconds())
 }

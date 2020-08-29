@@ -2,16 +2,25 @@
 /// Time
 /// 
 
+// Date
+extern fn __oak_std__get_month_now as get_month_now() -> num;
+extern fn __oak_std__get_day_now   as get_day_now()   -> num;
+extern fn __oak_std__get_year_now  as get_year_now()  -> num;
+
+// Time
+extern fn __oak_std__get_hour_now   as get_hour_now()   -> num;
+extern fn __oak_std__get_minute_now as get_minute_now() -> num;
+extern fn __oak_std__get_second_now as get_second_now() -> num;
 
 
 ///
 /// IO
 /// 
-extern fn prend();
-extern fn prs as putstr(s: &char);
-extern fn prn as putnum(n: num);
-extern fn prc as putchar(ch: char);
-extern fn getch as get_char() -> char;
+extern fn __oak_std__prend    as prend();
+extern fn __oak_std__putstr   as putstr(s: &char);
+extern fn __oak_std__putnum   as putnum(n: num);
+extern fn __oak_std__putchar  as putchar(ch: char);
+extern fn __oak_std__get_char as get_char() -> char;
 
 fn putstrln(s: &char) -> void { putstr(s); prend(); }
 
