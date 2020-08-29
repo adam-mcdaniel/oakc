@@ -736,6 +736,8 @@ pub enum TirConstant {
     Multiply(Box<Self>, Box<Self>),
     /// Divide two constants
     Divide(Box<Self>, Box<Self>),
+    /// Modulus two constants
+    Modulus(Box<Self>, Box<Self>),
 
     /// And two constants
     And(Box<Self>, Box<Self>),
@@ -783,6 +785,10 @@ impl TirConstant {
             Self::True => HirConstant::True,
             Self::False => HirConstant::False,
 
+            Self::Modulus(lhs, rhs) => HirConstant::Modulus(
+                Box::new(lhs.to_hir_const(decls)?),
+                Box::new(rhs.to_hir_const(decls)?),
+            ),
             Self::Add(lhs, rhs) => HirConstant::Add(
                 Box::new(lhs.to_hir_const(decls)?),
                 Box::new(rhs.to_hir_const(decls)?),
@@ -859,6 +865,8 @@ pub enum TirStatement {
     MultiplyAssignVariable(Identifier, TirExpression),
     /// Divide from a variable
     DivideAssignVariable(Identifier, TirExpression),
+    /// Modulus from a variable
+    ModulusAssignVariable(Identifier, TirExpression),
     /// An assignment to a dereferenced address
     AssignAddress(TirExpression, TirExpression),
     /// Add to the value a pointer points to
@@ -869,6 +877,8 @@ pub enum TirStatement {
     MultiplyAssignAddress(TirExpression, TirExpression),
     /// Divide the value a pointer points to
     DivideAssignAddress(TirExpression, TirExpression),
+    /// Modulus the value a pointer points to
+    ModulusAssignAddress(TirExpression, TirExpression),
 
     /// An HIR for loop `for (let i=0; i<10; i=i+1) {...}`
     For(Box<Self>, TirExpression, Box<Self>, Vec<Self>),
@@ -938,6 +948,13 @@ impl TirStatement {
                     Box::new(expr.to_hir_expr(decls)?),
                 ),
             ),
+            Self::ModulusAssignVariable(name, expr) => HirStatement::AssignVariable(
+                name.clone(),
+                HirExpression::Modulus(
+                    Box::new(HirExpression::Variable(name.clone())),
+                    Box::new(expr.to_hir_expr(decls)?),
+                ),
+            ),
             Self::AssignAddress(addr, expr) => {
                 HirStatement::AssignAddress(addr.to_hir_expr(decls)?, expr.to_hir_expr(decls)?)
             }
@@ -965,6 +982,13 @@ impl TirStatement {
             Self::DivideAssignAddress(addr, expr) => HirStatement::AssignAddress(
                 addr.to_hir_expr(decls)?,
                 HirExpression::Divide(
+                    Box::new(HirExpression::Deref(Box::new(addr.to_hir_expr(decls)?))),
+                    Box::new(expr.to_hir_expr(decls)?),
+                ),
+            ),
+            Self::ModulusAssignAddress(addr, expr) => HirStatement::AssignAddress(
+                addr.to_hir_expr(decls)?,
+                HirExpression::Modulus(
                     Box::new(HirExpression::Deref(Box::new(addr.to_hir_expr(decls)?))),
                     Box::new(expr.to_hir_expr(decls)?),
                 ),
@@ -1078,6 +1102,7 @@ pub enum TirExpression {
     Constant(TirConstant),
     Move(Box<Self>),
 
+    Modulus(Box<Self>, Box<Self>),
     Add(Box<Self>, Box<Self>),
     Subtract(Box<Self>, Box<Self>),
     Multiply(Box<Self>, Box<Self>),
@@ -1134,6 +1159,11 @@ impl TirExpression {
             Self::Move(expr) => HirExpression::Move(Box::new(expr.to_hir_expr(decls)?)),
             Self::SizeOf(t) => HirExpression::SizeOf(t.to_hir_type()?),
             Self::Constant(constant) => HirExpression::Constant(constant.to_hir_const(decls)?),
+
+            Self::Modulus(lhs, rhs) => HirExpression::Modulus(
+                Box::new(lhs.to_hir_expr(decls)?),
+                Box::new(rhs.to_hir_expr(decls)?),
+            ),
 
             Self::And(lhs, rhs) => HirExpression::And(
                 Box::new(lhs.to_hir_expr(decls)?),

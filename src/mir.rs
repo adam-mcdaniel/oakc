@@ -1281,6 +1281,8 @@ pub enum MirExpression {
     Multiply(Box<Self>, Box<Self>),
     /// Divide two expressions
     Divide(Box<Self>, Box<Self>),
+    /// Modulus two expressions
+    Modulus(Box<Self>, Box<Self>),
 
     /// Boolean not an expression
     Not(Box<Self>),
@@ -1480,6 +1482,7 @@ impl MirExpression {
             | Self::Subtract(lhs, rhs)
             | Self::Multiply(lhs, rhs)
             | Self::Divide(lhs, rhs)
+            | Self::Modulus(lhs, rhs)
             | Self::Greater(lhs, rhs)
             | Self::Less(lhs, rhs)
             | Self::GreaterEqual(lhs, rhs)
@@ -1776,6 +1779,14 @@ impl MirExpression {
                 result.push(AsmStatement::Expression(vec![AsmExpression::Add]));
                 result
             }
+            /// Subtract two values
+            Self::Subtract(l, r) => {
+                let mut result = Vec::new();
+                result.extend(l.assemble(vars, funcs, structs, instance_count)?);
+                result.extend(r.assemble(vars, funcs, structs, instance_count)?);
+                result.push(AsmStatement::Expression(vec![AsmExpression::Subtract]));
+                result
+            }
             /// Multiply two values
             Self::Multiply(l, r) => {
                 let mut result = Vec::new();
@@ -1792,12 +1803,12 @@ impl MirExpression {
                 result.push(AsmStatement::Expression(vec![AsmExpression::Divide]));
                 result
             }
-            /// Subtract two values
-            Self::Subtract(l, r) => {
+            /// Modulus two values
+            Self::Modulus(l, r) => {
                 let mut result = Vec::new();
                 result.extend(l.assemble(vars, funcs, structs, instance_count)?);
                 result.extend(r.assemble(vars, funcs, structs, instance_count)?);
-                result.push(AsmStatement::Expression(vec![AsmExpression::Subtract]));
+                result.push(AsmStatement::Expression(vec![AsmExpression::Modulus]));
                 result
             }
 
@@ -2029,7 +2040,7 @@ impl MirExpression {
             Self::TypeCast(_, t) => t.clone(),
 
             /// Arithmetic returns the type of the left hand side
-            Self::Add(l, _) | Self::Subtract(l, _) | Self::Multiply(l, _) | Self::Divide(l, _) => {
+            Self::Modulus(l, _) | Self::Add(l, _) | Self::Subtract(l, _) | Self::Multiply(l, _) | Self::Divide(l, _) => {
                 l.get_type(vars, funcs, structs)?
             }
             /// Greater than, less than, greater or equal,
@@ -2137,6 +2148,7 @@ impl Display for MirExpression {
             Self::Subtract(lhs, rhs) => write!(f, "{}-{}", lhs, rhs),
             Self::Multiply(lhs, rhs) => write!(f, "{}*{}", lhs, rhs),
             Self::Divide(lhs, rhs) => write!(f, "{}/{}", lhs, rhs),
+            Self::Modulus(lhs, rhs) => write!(f, "{}%{}", lhs, rhs),
 
             Self::Equal(lhs, rhs) => write!(f, "{}=={}", lhs, rhs),
             Self::NotEqual(lhs, rhs) => write!(f, "{}!={}", lhs, rhs),

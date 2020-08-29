@@ -179,18 +179,21 @@ SmallStatement: TirStatement = {
     <name:Ident> "/=" <expr:Expression> => TirStatement::DivideAssignVariable(name, expr),
 
     "*" <lhs:Expression> "=" <rhs:Expression> => TirStatement::AssignAddress(lhs, rhs),
+    "*" <lhs:Expression> "%=" <rhs:Expression> => TirStatement::ModulusAssignAddress(lhs, rhs),
     "*" <lhs:Expression> "+=" <rhs:Expression> => TirStatement::AddAssignAddress(lhs, rhs),
     "*" <lhs:Expression> "-=" <rhs:Expression> => TirStatement::SubtractAssignAddress(lhs, rhs),
     "*" <lhs:Expression> "*=" <rhs:Expression> => TirStatement::MultiplyAssignAddress(lhs, rhs),
     "*" <lhs:Expression> "/=" <rhs:Expression> => TirStatement::DivideAssignAddress(lhs, rhs),
 
     <ptr:ExpressionAtom> "[" <idx:Expression> "]" "=" <rhs:Expression> => TirStatement::AssignAddress(TirExpression::Index(Box::new(ptr), Box::new(idx)), rhs),
+    <ptr:ExpressionAtom> "[" <idx:Expression> "]" "%=" <rhs:Expression> => TirStatement::ModulusAssignAddress(TirExpression::Index(Box::new(ptr), Box::new(idx)), rhs),
     <ptr:ExpressionAtom> "[" <idx:Expression> "]" "+=" <rhs:Expression> => TirStatement::AddAssignAddress(TirExpression::Index(Box::new(ptr), Box::new(idx)), rhs),
     <ptr:ExpressionAtom> "[" <idx:Expression> "]" "-=" <rhs:Expression> => TirStatement::SubtractAssignAddress(TirExpression::Index(Box::new(ptr), Box::new(idx)), rhs),
     <ptr:ExpressionAtom> "[" <idx:Expression> "]" "*=" <rhs:Expression> => TirStatement::MultiplyAssignAddress(TirExpression::Index(Box::new(ptr), Box::new(idx)), rhs),
     <ptr:ExpressionAtom> "[" <idx:Expression> "]" "/=" <rhs:Expression> => TirStatement::DivideAssignAddress(TirExpression::Index(Box::new(ptr), Box::new(idx)), rhs),
 
     <instance:ExpressionAtom> "->" <name:Ident> "=" <rhs:Expression> => TirStatement::AssignAddress(TirExpression::Method(Box::new(instance), name, vec![]), rhs),
+    <instance:ExpressionAtom> "->" <name:Ident> "%=" <rhs:Expression> => TirStatement::ModulusAssignAddress(TirExpression::Method(Box::new(instance), name, vec![]), rhs),
     <instance:ExpressionAtom> "->" <name:Ident> "+=" <rhs:Expression> => TirStatement::AddAssignAddress(TirExpression::Method(Box::new(instance), name, vec![]), rhs),
     <instance:ExpressionAtom> "->" <name:Ident> "-=" <rhs:Expression> => TirStatement::SubtractAssignAddress(TirExpression::Method(Box::new(instance), name, vec![]), rhs),
     <instance:ExpressionAtom> "->" <name:Ident> "*=" <rhs:Expression> => TirStatement::MultiplyAssignAddress(TirExpression::Method(Box::new(instance), name, vec![]), rhs),
@@ -265,5 +268,6 @@ ExpressionHigh: TirExpression = {
     <instance:ExpressionAtom> "->" <name:Ident> => TirExpression::Deref(Box::new(TirExpression::Method(Box::new(instance), name, vec![]))),
     <l:ExpressionAtom> "*" <r:ExpressionAtom> => TirExpression::Multiply(Box::new(l), Box::new(r)),
     <l:ExpressionAtom> "/" <r:ExpressionAtom> => TirExpression::Divide(Box::new(l), Box::new(r)),
+    <l:ExpressionAtom> "%" <r:ExpressionAtom> => TirExpression::Modulus(Box::new(l), Box::new(r)),
     <ExpressionAtom> => <>
 }

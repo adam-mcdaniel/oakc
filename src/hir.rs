@@ -581,6 +581,8 @@ pub enum HirConstant {
     Multiply(Box<Self>, Box<Self>),
     /// Divide two constants
     Divide(Box<Self>, Box<Self>),
+    /// Modulus two constants
+    Modulus(Box<Self>, Box<Self>),
 
     /// Boolean And two constants
     And(Box<Self>, Box<Self>),
@@ -621,6 +623,7 @@ impl Display for HirConstant {
             Self::Subtract(l, r) => write!(f, "{}-{}", l, r),
             Self::Multiply(l, r) => write!(f, "{}*{}", l, r),
             Self::Divide(l, r) => write!(f, "{}/{}", l, r),
+            Self::Modulus(l, r) => write!(f, "{}%{}", l, r),
             Self::And(l, r) => write!(f, "{}&&{}", l, r),
             Self::Or(l, r) => write!(f, "{}||{}", l, r),
             Self::Greater(l, r) => write!(f, "{}>{}", l, r),
@@ -647,7 +650,8 @@ impl HirConstant {
             | Self::Add(a, _) 
             | Self::Subtract(a, _) 
             | Self::Multiply(a, _) 
-            | Self::Divide(a, _) => a.get_type(constants)?,
+            | Self::Divide(a, _)
+            | Self::Modulus(a, _) => a.get_type(constants)?,
 
             Self::True | Self::False
             | Self::And(_, _) | Self::Or(_, _) | Self::Not(_)
@@ -755,6 +759,7 @@ impl HirConstant {
             Self::Subtract(l, r) => l.to_value(decls, constants)? - r.to_value(decls, constants)?,
             Self::Multiply(l, r) => l.to_value(decls, constants)? * r.to_value(decls, constants)?,
             Self::Divide(l, r) => l.to_value(decls, constants)? / r.to_value(decls, constants)?,
+            Self::Modulus(l, r) => l.to_value(decls, constants)? % r.to_value(decls, constants)?,
 
             Self::Constant(name) => {
                 if let Some(value) = constants.get(name) {
@@ -924,6 +929,8 @@ pub enum HirExpression {
     Multiply(Box<Self>, Box<Self>),
     /// The division of two expressions
     Divide(Box<Self>, Box<Self>),
+    /// The modulus of two expressions
+    Modulus(Box<Self>, Box<Self>),
 
     /// Boolean not of an expression
     Not(Box<Self>),
@@ -1084,6 +1091,11 @@ impl HirExpression {
             ),
 
             Self::Divide(l, r) => MirExpression::Divide(
+                Box::new(l.to_mir_expr(decls, constants)?),
+                Box::new(r.to_mir_expr(decls, constants)?),
+            ),
+
+            Self::Modulus(l, r) => MirExpression::Modulus(
                 Box::new(l.to_mir_expr(decls, constants)?),
                 Box::new(r.to_mir_expr(decls, constants)?),
             ),

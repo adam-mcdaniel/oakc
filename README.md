@@ -16,7 +16,7 @@ I'm a freshly minted highschool graduate and freshman in college looking for wor
 
 ## Intermediate Representation
 
-The key to oak's insane portability is its incredibly compact backend implementation. _The code for Oak's backend can be expressed in under 100 lines of C._ Such a small implementation is only possible because of the tiny instruction set of the intermediate representation. Oak's IR is only composed of **_17 different instructions_**. That's on par with [brainfuck](https://esolangs.org/wiki/Brainfuck)!
+The key to oak's insane portability is its incredibly compact backend implementation. _The code for Oak's backend can be expressed in under 100 lines of C._ Such a small implementation is only possible because of the tiny instruction set of the intermediate representation. Oak's IR is only composed of **_18 different instructions_**. That's on par with [brainfuck](https://esolangs.org/wiki/Brainfuck)!
 
 The backend of oak functions very simply. Every instruction operates on a _memory tape_. This tape is essentially a static array of double-precision floats.
 

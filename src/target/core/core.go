@@ -237,6 +237,12 @@ func (vm *machine) divide() {
 	vm.push(a / b)
 }
 
+func (vm *machine) modulus() {
+	b := int(vm.pop())
+	a := int(vm.pop())
+	vm.push(float64(a % b))
+}
+
 func (vm *machine) sign() {
 	x := vm.pop()
 	if x >= 0 {

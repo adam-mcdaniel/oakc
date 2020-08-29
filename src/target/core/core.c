@@ -287,6 +287,13 @@ void machine_divide(machine *vm) {
     machine_push(vm, a/b);
 }
 
+// Modulus the second topmost number on the stack by the topmost number on the stack
+void machine_modulus(machine *vm) {
+    int b = machine_pop(vm);
+    int a = machine_pop(vm);
+    machine_push(vm, a%b);
+}
+
 void machine_sign(machine *vm) {
     double x = machine_pop(vm);
     if (x >= 0) {
