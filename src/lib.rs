@@ -32,24 +32,24 @@ pub fn get_predefined_constants(target: &impl Target) -> BTreeMap<String, HirCon
 
     constants.insert(
         String::from("ON_WINDOWS"),
-        HirConstant::boolean(OS == "windows")
+        HirConstant::boolean(OS == "windows"),
     );
     constants.insert(
         String::from("ON_MACOS"),
-        HirConstant::boolean(OS == "macos")
+        HirConstant::boolean(OS == "macos"),
     );
     constants.insert(
         String::from("ON_LINUX"),
-        HirConstant::boolean(OS == "linux")
+        HirConstant::boolean(OS == "linux"),
     );
 
     constants.insert(
         String::from("ON_NIX"),
-        HirConstant::boolean(FAMILY == "unix")
+        HirConstant::boolean(FAMILY == "unix"),
     );
     constants.insert(
         String::from("ON_NON_NIX"),
-        HirConstant::boolean(FAMILY != "unix")
+        HirConstant::boolean(FAMILY != "unix"),
     );
 
     constants.insert(
@@ -71,7 +71,7 @@ pub fn get_predefined_constants(target: &impl Target) -> BTreeMap<String, HirCon
     );
     constants.insert(
         String::from("IS_STANDARD"),
-        HirConstant::boolean(target.is_standard())
+        HirConstant::boolean(target.is_standard()),
     );
 
     constants
@@ -88,7 +88,7 @@ pub fn generate_docs(
     // The target to use for the documented code's TARGET const
     target: impl Target,
 ) -> String {
-    match parse(filename, input).compile(cwd) {
+    match parse(filename, input).compile(cwd, &mut get_predefined_constants(&target)) {
         Ok(output) => output,
         Err(e) => print_compile_error(e),
     }
@@ -119,14 +119,16 @@ pub fn compile(
     // Get the TIR code for the user's Oak code
     let mut tir = parse(filename, input);
     // Convert the TIR to HIR
-    let mut hir = match tir.compile(cwd) {
+    let mut hir = match tir.compile(cwd, &mut get_predefined_constants(&target)) {
         Ok(output) => output,
         Err(e) => print_compile_error(e),
     };
 
     // Add the core library code to the users code
     hir.extend_declarations(
-        match parse("core.ok", include_str!("core.ok")).compile(cwd) {
+        match parse("core.ok", include_str!("core.ok"))
+            .compile(cwd, &mut get_predefined_constants(&target))
+        {
             Ok(output) => output,
             Err(e) => print_compile_error(e),
         }
@@ -137,7 +139,9 @@ pub fn compile(
     if hir.use_std() {
         // Then add the standard library code to the users code
         hir.extend_declarations(
-            match parse("std.ok", include_str!("std.ok")).compile(cwd) {
+            match parse("std.ok", include_str!("std.ok"))
+                .compile(cwd, &mut get_predefined_constants(&target))
+            {
                 Ok(output) => output,
                 Err(e) => print_compile_error(e),
             }
