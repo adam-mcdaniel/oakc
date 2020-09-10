@@ -83,8 +83,7 @@ Constant: TirConstant = {
 
 ConstantAtom: TirConstant = {
     <offset:@L> "current_line" "(" ")" => TirConstant::Float(get_line(script, offset).0 as f64),
-    "is_movable" "(" <Type> ")" => TirConstant::IsMovable(<>),
-    "sizeof" "(" <Type> ")" => TirConstant::SizeOf(<>),
+    "sizeof" "(" <Type> ")" => TirConstant::SizeOf(<>.to_hir_type()),
     "is_defined" "(" <Str> ")" => TirConstant::IsDefined(<>),
     "true" => TirConstant::True,
     "false" => TirConstant::False,

@@ -96,58 +96,115 @@ impl TirProgram {
         self
     }
 
-    pub fn compile(&mut self, cwd: &PathBuf) -> Result<HirProgram, TirError> {
+    pub fn compile(
+        &mut self,
+        cwd: &PathBuf,
+        constants: &mut BTreeMap<Identifier, TirConstant>,
+    ) -> Result<HirProgram, TirError> {
         let mut hir_decls = vec![];
 
-        for (i, decl) in self.get_declarations().iter().enumerate() {
-            if let TirDeclaration::Include(filename) = decl {
-                let filename = filename.clone();
-                // This takes the path of the file in the `include` flag
-                // and appends it to the directory of the file which is
-                // including it.
-                //
-                // So, if `src/main.ok` includes "lib/all.ok",
-                // `file_path` will be equal to "src/lib/all.ok"
-                let file_path = cwd.join(filename.clone());
-                if let Ok(contents) = read_to_string(file_path.clone()) {
-                    // Get the directory of the included file.
+        // Iterate over the declarations and retreive the constants
+        for decl in self.get_declarations() {
+            if let TirDeclaration::Constant(doc, name, constant) = decl {
+                constants.insert(name.clone(), constant.clone());
+                hir_decls.push(HirDeclaration::Constant(
+                    doc.clone(),
+                    name.clone(),
+                    constant.clone(),
+                ))
+            }
+        }
 
-                    // If `src/main.ok` includes "lib/all.ok",
-                    // `include_path` will be equal to "src/lib/"
-                    let include_path = if let Some(dir) = file_path.parent() {
-                        PathBuf::from(dir)
+        for (i, decl) in self.get_declarations().clone().iter().enumerate() {
+            match decl {
+                TirDeclaration::Include(filename) => {
+                    let filename = filename.clone();
+                    // This takes the path of the file in the `include` flag
+                    // and appends it to the directory of the file which is
+                    // including it.
+                    //
+                    // So, if `src/main.ok` includes "lib/all.ok",
+                    // `file_path` will be equal to "src/lib/all.ok"
+                    let file_path = cwd.join(filename.clone());
+                    if let Ok(contents) = read_to_string(file_path.clone()) {
+                        // Get the directory of the included file.
+
+                        // If `src/main.ok` includes "lib/all.ok",
+                        // `include_path` will be equal to "src/lib/"
+                        let include_path = if let Some(dir) = file_path.parent() {
+                            PathBuf::from(dir)
+                        } else {
+                            PathBuf::from("./")
+                        };
+
+                        // Remove the include directive so it does not get computed again
+                        self.get_declarations().remove(i);
+
+                        // Add the contents of the included file to this file
+                        self.get_declarations().extend(
+                            parse(&filename, contents)
+                                // The included file might be in a different folder.
+                                // So, compile the included file with the file's folder
+                                // as the working directory.
+                                .set_include_dir(&match include_path.strip_prefix(cwd) {
+                                    Ok(path) => path.to_path_buf(),
+                                    Err(_) => include_path,
+                                })
+                                .get_declarations()
+                                .clone(),
+                        );
+
+                        // Use recursion to deal with new include directives
+                        return self.compile(cwd, constants);
                     } else {
-                        PathBuf::from("./")
-                    };
+                        eprintln!("error: could not include file '{:?}'", file_path);
+                        exit(1);
+                    }
+                }
 
+                TirDeclaration::If(cond, code) => {
                     // Remove the include directive so it does not get computed again
                     self.get_declarations().remove(i);
 
                     // Add the contents of the included file to this file
-                    self.get_declarations().extend(
-                        parse(&filename, contents)
-                            // The included file might be in a different folder.
-                            // So, compile the included file with the file's folder
-                            // as the working directory.
-                            .set_include_dir(&match include_path.strip_prefix(cwd) {
-                                Ok(path) => path.to_path_buf(),
-                                Err(_) => include_path,
-                            })
-                            .get_declarations()
-                            .clone(),
-                    );
+                    if let Ok(val) = cond.to_value(&hir_decls, constants) {
+                        if val != 0.0 {
+                            self.get_declarations()
+                                .extend(code.clone().get_declarations().clone());
+                        }
+                    }
 
                     // Use recursion to deal with new include directives
-                    return self.compile(cwd);
-                } else {
-                    eprintln!("error: could not include file '{:?}'", file_path);
-                    exit(1);
+                    return self.compile(cwd, constants);
                 }
+
+                TirDeclaration::IfElse(cond, then_code, else_code) => {
+                    // Remove the include directive so it does not get computed again
+                    self.get_declarations().remove(i);
+
+                    // Add the contents of the included file to this file
+                    if let Ok(val) = cond.to_value(&hir_decls, constants) {
+                        if val != 0.0 {
+                            self.get_declarations()
+                                .extend(then_code.clone().get_declarations().clone());
+                        } else {
+                            self.get_declarations()
+                                .extend(else_code.clone().get_declarations().clone());
+                        }
+                    }
+
+                    // Use recursion to deal with new include directives
+                    return self.compile(cwd, constants);
+                }
+                _ => {}
             }
         }
 
         for decl in &self.0 {
-            hir_decls.push(decl.to_hir_decl(cwd, &self.0)?);
+            match decl {
+                TirDeclaration::Constant(_, _, _) => {}
+                _ => hir_decls.push(decl.to_hir_decl(cwd, &self.0)?),
+            }
         }
 
         Ok(HirProgram::new(hir_decls, self.1))
@@ -164,7 +221,11 @@ pub enum TirDeclaration {
     Function(TirFunction),
     Structure(TirStructure),
     Assert(TirConstant),
+    /// Use the `if` compiler flag to use
+    /// conditional compilation.
     If(TirConstant, TirProgram),
+    /// Use the `if` compiler flag with an `else` branch
+    /// to use conditional compilation.
     IfElse(TirConstant, TirProgram, TirProgram),
     Error(String),
     Extern(String),
@@ -201,27 +262,27 @@ impl TirDeclaration {
         Ok(match self {
             Self::DocumentHeader(header) => HirDeclaration::DocumentHeader(header.clone()),
             Self::Constant(doc, name, constant) => {
-                HirDeclaration::Constant(doc.clone(), name.clone(), constant.to_hir_const(decls)?)
+                HirDeclaration::Constant(doc.clone(), name.clone(), constant.clone())
             }
             Self::Function(func) => HirDeclaration::Function(func.to_hir_fn(decls)?),
             Self::Structure(structure) => {
                 HirDeclaration::Structure(structure.clone().to_hir_struct(decls)?)
             }
 
-            Self::Assert(constant) => HirDeclaration::Assert(constant.to_hir_const(decls)?),
+            Self::Assert(constant) => HirDeclaration::Assert(constant.clone()),
 
             Self::Error(msg) => HirDeclaration::Error(msg.clone()),
 
             Self::Extern(file) => HirDeclaration::Extern(file.clone()),
 
             Self::ExternFunction(doc, foreign_name, name, params, return_type) => {
-                let mut hir_return_type = return_type.to_hir_type()?;
+                let mut hir_return_type = return_type.to_hir_type();
                 let mut hir_params = vec![];
                 let mut hir_args = vec![];
                 // Create a list of HIR parameters, and the arguments
                 // to supply to the foreign function.
                 for (param, t) in params {
-                    hir_params.push((param.clone(), t.to_hir_type()?));
+                    hir_params.push((param.clone(), t.to_hir_type()));
                     hir_args.push(HirExpression::Variable(param.clone()))
                 }
 
@@ -256,22 +317,12 @@ impl TirDeclaration {
             }
 
             /// In HIR, do nothing in place of an include statement
-            Self::Include(file) => HirDeclaration::Pass,
+            Self::IfElse(_, _, _) | Self::If(_, _) | Self::Include(_) => HirDeclaration::Pass,
 
             Self::Memory(n) => HirDeclaration::Memory(*n),
 
             Self::RequireStd => HirDeclaration::RequireStd,
             Self::NoStd => HirDeclaration::NoStd,
-
-            Self::If(constant, program) => {
-                HirDeclaration::If(constant.to_hir_const(decls)?, program.clone().compile(cwd)?)
-            }
-
-            Self::IfElse(constant, then_prog, else_prog) => HirDeclaration::IfElse(
-                constant.to_hir_const(decls)?,
-                then_prog.clone().compile(cwd)?,
-                else_prog.clone().compile(cwd)?,
-            ),
         })
     }
 }
@@ -325,15 +376,15 @@ impl TirType {
     }
 
     /// Convert this type to an HIR type
-    fn to_hir_type(&self) -> Result<HirType, TirError> {
-        Ok(match self {
-            Self::Pointer(inner) => HirType::Pointer(Box::new(inner.to_hir_type()?)),
+    pub fn to_hir_type(&self) -> HirType {
+        match self {
+            Self::Pointer(inner) => HirType::Pointer(Box::new(inner.to_hir_type())),
             Self::Void => HirType::Void,
             Self::Float => HirType::Float,
             Self::Boolean => HirType::Boolean,
             Self::Character => HirType::Character,
             Self::Structure(name) => HirType::Structure(name.clone()),
-        })
+        }
     }
 }
 
@@ -552,7 +603,7 @@ impl TirFunction {
         // Convert the parameter types to HIR types
         let mut args = vec![];
         for (arg, t) in &self.args {
-            args.push((arg.clone(), t.to_hir_type()?))
+            args.push((arg.clone(), t.to_hir_type()))
         }
 
         // Convert the function statements to HIR statements
@@ -565,7 +616,7 @@ impl TirFunction {
             self.doc.clone(),
             self.name.clone(),
             args,
-            self.return_type.to_hir_type()?,
+            self.return_type.to_hir_type(),
             body,
         ))
     }
@@ -661,7 +712,7 @@ impl TirStructure {
             // Add the size of the member to the size of the structure
             size = HirConstant::Add(
                 Box::new(size.clone()),
-                Box::new(HirConstant::SizeOf(t.to_hir_type()?)),
+                Box::new(HirConstant::SizeOf(t.to_hir_type())),
             );
             // Add this member's type to the list of
             // previous member's types.
@@ -716,132 +767,7 @@ impl TirStructure {
     }
 }
 
-/// The type that represents a constant TIR  expression.
-#[derive(Clone, Debug)]
-pub enum TirConstant {
-    /// A float constant
-    Float(f64),
-    /// A character constant
-    Character(char),
-    /// True constant
-    True,
-    /// False constant
-    False,
-
-    /// Add two constants
-    Add(Box<Self>, Box<Self>),
-    /// Subtract two constants
-    Subtract(Box<Self>, Box<Self>),
-    /// Multiply two constants
-    Multiply(Box<Self>, Box<Self>),
-    /// Divide two constants
-    Divide(Box<Self>, Box<Self>),
-
-    /// And two constants
-    And(Box<Self>, Box<Self>),
-    /// Or two constants
-    Or(Box<Self>, Box<Self>),
-    /// Not a constant
-    Not(Box<Self>),
-
-    /// Compare two constants with the `>` operator
-    Greater(Box<Self>, Box<Self>),
-    /// Compare two constants with the `<` operator
-    Less(Box<Self>, Box<Self>),
-    /// Compare two constants with the `>=` operator
-    GreaterEqual(Box<Self>, Box<Self>),
-    /// Compare two constants with the `<=` operator
-    LessEqual(Box<Self>, Box<Self>),
-    /// Compare two constants with the `==` operator
-    Equal(Box<Self>, Box<Self>),
-    /// Compare two constants with the `!=` operator
-    NotEqual(Box<Self>, Box<Self>),
-
-    /// Get a constant by its name
-    Constant(Identifier),
-    /// Is a constant defined?
-    IsDefined(String),
-    /// Is a type movable?
-    IsMovable(TirType),
-    /// What's the size of a type?
-    SizeOf(TirType),
-    /// A constant expression that is contingent on another constant expression
-    Conditional(Box<Self>, Box<Self>, Box<Self>),
-}
-
-impl TirConstant {
-    pub fn to_hir_const(&self, decls: &Vec<TirDeclaration>) -> Result<HirConstant, TirError> {
-        Ok(match self {
-            Self::Conditional(cond, then, otherwise) => HirConstant::Conditional(
-                Box::new(cond.to_hir_const(decls)?),
-                Box::new(then.to_hir_const(decls)?),
-                Box::new(otherwise.to_hir_const(decls)?),
-            ),
-
-            Self::Float(n) => HirConstant::Float(*n),
-            Self::Character(ch) => HirConstant::Character(*ch),
-            Self::True => HirConstant::True,
-            Self::False => HirConstant::False,
-
-            Self::Add(lhs, rhs) => HirConstant::Add(
-                Box::new(lhs.to_hir_const(decls)?),
-                Box::new(rhs.to_hir_const(decls)?),
-            ),
-            Self::Subtract(lhs, rhs) => HirConstant::Subtract(
-                Box::new(lhs.to_hir_const(decls)?),
-                Box::new(rhs.to_hir_const(decls)?),
-            ),
-            Self::Multiply(lhs, rhs) => HirConstant::Multiply(
-                Box::new(lhs.to_hir_const(decls)?),
-                Box::new(rhs.to_hir_const(decls)?),
-            ),
-            Self::Divide(lhs, rhs) => HirConstant::Divide(
-                Box::new(lhs.to_hir_const(decls)?),
-                Box::new(rhs.to_hir_const(decls)?),
-            ),
-
-            Self::Greater(lhs, rhs) => HirConstant::Greater(
-                Box::new(lhs.to_hir_const(decls)?),
-                Box::new(rhs.to_hir_const(decls)?),
-            ),
-            Self::Less(lhs, rhs) => HirConstant::Less(
-                Box::new(lhs.to_hir_const(decls)?),
-                Box::new(rhs.to_hir_const(decls)?),
-            ),
-            Self::GreaterEqual(lhs, rhs) => HirConstant::GreaterEqual(
-                Box::new(lhs.to_hir_const(decls)?),
-                Box::new(rhs.to_hir_const(decls)?),
-            ),
-            Self::LessEqual(lhs, rhs) => HirConstant::LessEqual(
-                Box::new(lhs.to_hir_const(decls)?),
-                Box::new(rhs.to_hir_const(decls)?),
-            ),
-            Self::Equal(lhs, rhs) => HirConstant::Equal(
-                Box::new(lhs.to_hir_const(decls)?),
-                Box::new(rhs.to_hir_const(decls)?),
-            ),
-            Self::NotEqual(lhs, rhs) => HirConstant::NotEqual(
-                Box::new(lhs.to_hir_const(decls)?),
-                Box::new(rhs.to_hir_const(decls)?),
-            ),
-
-            Self::Constant(name) => HirConstant::Constant(name.clone()),
-            Self::IsDefined(name) => HirConstant::IsDefined(name.clone()),
-            Self::IsMovable(t) => HirConstant::Float(t.is_movable(decls)? as i32 as f64),
-            Self::SizeOf(t) => HirConstant::SizeOf(t.to_hir_type()?),
-
-            Self::And(lhs, rhs) => HirConstant::And(
-                Box::new(lhs.to_hir_const(decls)?),
-                Box::new(rhs.to_hir_const(decls)?),
-            ),
-            Self::Or(lhs, rhs) => HirConstant::Or(
-                Box::new(lhs.to_hir_const(decls)?),
-                Box::new(rhs.to_hir_const(decls)?),
-            ),
-            Self::Not(expr) => HirConstant::Not(Box::new(expr.to_hir_const(decls)?)),
-        })
-    }
-}
+pub type TirConstant = HirConstant;
 
 #[derive(Clone, Debug)]
 pub enum TirStatement {
@@ -902,7 +828,7 @@ impl TirStatement {
     fn to_hir_stmt(&self, decls: &Vec<TirDeclaration>) -> Result<HirStatement, TirError> {
         Ok(match self {
             Self::Define(name, t, expr) => {
-                HirStatement::Define(name.clone(), t.to_hir_type()?, expr.to_hir_expr(decls)?)
+                HirStatement::Define(name.clone(), t.to_hir_type(), expr.to_hir_expr(decls)?)
             }
             Self::AutoDefine(name, expr) => {
                 HirStatement::AutoDefine(name.clone(), expr.to_hir_expr(decls)?)
@@ -1132,8 +1058,8 @@ impl TirExpression {
             Self::Variable(name) => HirExpression::Variable(name.clone()),
 
             Self::Move(expr) => HirExpression::Move(Box::new(expr.to_hir_expr(decls)?)),
-            Self::SizeOf(t) => HirExpression::SizeOf(t.to_hir_type()?),
-            Self::Constant(constant) => HirExpression::Constant(constant.to_hir_const(decls)?),
+            Self::SizeOf(t) => HirExpression::SizeOf(t.to_hir_type()),
+            Self::Constant(constant) => HirExpression::Constant(constant.clone()),
 
             Self::And(lhs, rhs) => HirExpression::And(
                 Box::new(lhs.to_hir_expr(decls)?),
@@ -1201,7 +1127,7 @@ impl TirExpression {
             Self::Deref(ptr) => HirExpression::Deref(Box::new(ptr.to_hir_expr(decls)?)),
 
             Self::TypeCast(expr, t) => {
-                HirExpression::TypeCast(Box::new(expr.to_hir_expr(decls)?), t.to_hir_type()?)
+                HirExpression::TypeCast(Box::new(expr.to_hir_expr(decls)?), t.to_hir_type())
             }
 
             Self::Alloc(expr) => HirExpression::Alloc(Box::new(expr.to_hir_expr(decls)?)),

@@ -78,24 +78,6 @@ impl HirProgram {
                         content += &s.trim();
                     }
                 }
-
-                HirDeclaration::If(cond, code) => {
-                    if let Ok(val) = cond.to_value(self.get_declarations(), constants) {
-                        if val != 0.0 {
-                            content += &code.generate_docs(filename.clone(), constants, true);
-                        }
-                    }
-                }
-
-                HirDeclaration::IfElse(cond, then_code, else_code) => {
-                    if let Ok(val) = cond.to_value(self.get_declarations(), constants) {
-                        if val != 0.0 {
-                            content += &then_code.generate_docs(filename.clone(), constants, true);
-                        } else {
-                            content += &else_code.generate_docs(filename.clone(), constants, true);
-                        }
-                    }
-                }
                 _ => continue,
             }
 
@@ -155,30 +137,6 @@ impl HirProgram {
                     mir_decls.push(MirDeclaration::Extern(file_path))
                 }
                 HirDeclaration::Error(err) => return Err(HirError::UserError(err.clone())),
-
-                HirDeclaration::If(cond, code) => {
-                    if cond.to_value(self.get_declarations(), constants)? != 0.0 {
-                        mir_decls.extend(code.clone().compile(cwd, constants)?.get_declarations());
-                    }
-                }
-
-                HirDeclaration::IfElse(cond, then_code, else_code) => {
-                    if cond.to_value(self.get_declarations(), constants)? != 0.0 {
-                        mir_decls.extend(
-                            then_code
-                                .clone()
-                                .compile(cwd, constants)?
-                                .get_declarations(),
-                        );
-                    } else {
-                        mir_decls.extend(
-                            else_code
-                                .clone()
-                                .compile(cwd, constants)?
-                                .get_declarations(),
-                        );
-                    }
-                }
 
                 HirDeclaration::Memory(size) => {
                     if *size >= Self::MINIMUM_MEMORY_SIZE {
@@ -347,12 +305,6 @@ pub enum HirDeclaration {
     Structure(HirStructure),
     /// Use the `assert` compiler flag
     Assert(HirConstant),
-    /// Use the `if` compiler flag to use
-    /// conditional compilation.
-    If(HirConstant, HirProgram),
-    /// Use the `if` compiler flag with an `else` branch
-    /// to use conditional compilation.
-    IfElse(HirConstant, HirProgram, HirProgram),
     /// Allow the user to throw their own custom errors
     Error(String),
     /// Include a foreign file using the `extern` flag.
@@ -638,29 +590,43 @@ impl Display for HirConstant {
 }
 
 impl HirConstant {
-    pub fn boolean(b: bool) -> Self { if b { Self::True } else { Self::False } }
+    pub fn boolean(b: bool) -> Self {
+        if b {
+            Self::True
+        } else {
+            Self::False
+        }
+    }
 
     /// Get the type of a constant value
     fn get_type(&self, constants: &BTreeMap<Identifier, Self>) -> Result<HirType, HirError> {
         Ok(match self {
-            Self::Conditional(_, a, _) 
-            | Self::Add(a, _) 
-            | Self::Subtract(a, _) 
-            | Self::Multiply(a, _) 
+            Self::Conditional(_, a, _)
+            | Self::Add(a, _)
+            | Self::Subtract(a, _)
+            | Self::Multiply(a, _)
             | Self::Divide(a, _) => a.get_type(constants)?,
 
-            Self::True | Self::False
-            | Self::And(_, _) | Self::Or(_, _) | Self::Not(_)
-            | Self::Greater(_, _) | Self::GreaterEqual(_, _)
-            | Self::Less(_, _) | Self::LessEqual(_, _)
-            | Self::Equal(_, _) | Self::NotEqual(_, _)
+            Self::True
+            | Self::False
+            | Self::And(_, _)
+            | Self::Or(_, _)
+            | Self::Not(_)
+            | Self::Greater(_, _)
+            | Self::GreaterEqual(_, _)
+            | Self::Less(_, _)
+            | Self::LessEqual(_, _)
+            | Self::Equal(_, _)
+            | Self::NotEqual(_, _)
             | Self::IsDefined(_) => HirType::Boolean,
 
-            Self::Constant(name) => if let Some(value) = constants.get(name) {
-                value.get_type(constants)?
-            } else {
-                return Err(HirError::ConstantNotDefined(name.clone()));
-            },
+            Self::Constant(name) => {
+                if let Some(value) = constants.get(name) {
+                    value.get_type(constants)?
+                } else {
+                    return Err(HirError::ConstantNotDefined(name.clone()));
+                }
+            }
 
             Self::Character(_) => HirType::Character,
 
@@ -669,7 +635,7 @@ impl HirConstant {
     }
 
     /// Find a constants floating point value.
-    fn to_value(
+    pub fn to_value(
         &self,
         decls: &Vec<HirDeclaration>,
         constants: &BTreeMap<Identifier, Self>,
@@ -1014,16 +980,18 @@ impl HirExpression {
             Self::Constant(constant) => {
                 let val = constant.to_value(decls, constants)?;
                 match constant.get_type(constants)? {
-                    HirType::Boolean => if val != 0.0 {
-                        MirExpression::True
-                    } else {
-                        MirExpression::False
-                    },
+                    HirType::Boolean => {
+                        if val != 0.0 {
+                            MirExpression::True
+                        } else {
+                            MirExpression::False
+                        }
+                    }
 
                     HirType::Character => MirExpression::Character(val as u8 as char),
                     _ => MirExpression::Float(val),
                 }
-            },
+            }
 
             Self::Add(l, r) => MirExpression::Add(
                 Box::new(l.to_mir_expr(decls, constants)?),
