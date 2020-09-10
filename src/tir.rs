@@ -166,8 +166,9 @@ impl TirProgram {
                     // Remove the include directive so it does not get computed again
                     self.get_declarations().remove(i);
 
-                    // Add the contents of the included file to this file
                     if let Ok(val) = cond.to_value(&hir_decls, constants) {
+                        // If the constant expression evaluates to true,
+                        // Then add the contents of the block to this program.
                         if val != 0.0 {
                             self.get_declarations()
                                 .extend(code.clone().get_declarations().clone());
@@ -184,10 +185,14 @@ impl TirProgram {
 
                     // Add the contents of the included file to this file
                     if let Ok(val) = cond.to_value(&hir_decls, constants) {
+                        // If the constant expression evaluates to true,
                         if val != 0.0 {
+                            // Then add the contents of the block to this program.
                             self.get_declarations()
                                 .extend(then_code.clone().get_declarations().clone());
                         } else {
+                            // Otherwise, add the contents of the `else` block
+                            // to this program.
                             self.get_declarations()
                                 .extend(else_code.clone().get_declarations().clone());
                         }
