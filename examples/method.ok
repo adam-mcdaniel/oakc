@@ -17,9 +17,11 @@ struct Date {
     }
 
     fn print(self: &Date) {
-        prn!(self->month); prc!('/');
-        prn!(self->day); prc!('/');
-        prn!(self->year);
+        putnum(self->month);
+        putchar('/');
+        putnum(self->day);
+        putchar('/');
+        putnum(self->year);
     }
 }
 
@@ -28,14 +30,14 @@ struct Test {
     fn new(n: num) -> Test { return n as Test; }
 
     fn print(self: &Test) {
-        prs!("test: "); prn!(self->n); prend!();
+        putstr("test: "); putnumln(self->n);
     }
 }
 
 fn test() {
     let bday: Date = Date::birthday();
-    bday.print(); prend!();
-    ((bday.tmrw()).tmrw()).print(); prend!();
+    bday.print(); putchar('\n');
+    ((bday.tmrw()).tmrw()).print(); putchar('\n');
     let t: Test = Test::new(5);
     t.print();
 }
@@ -43,6 +45,6 @@ fn test() {
 fn main() -> void {
     for (let i=0; i<10; i=i+1) {
         test();
-        prn!(i); prend!();
+        putnum(i); putchar('\n');
     }
 }

@@ -1,0 +1,41 @@
+#[std]
+
+#[if(DATE_MONTH == 7) {
+    #[error("this code doesn't compile in july")]
+}]
+
+#[if(ON_WINDOWS) {
+    fn platform() -> &char { return "windows" }
+} else {
+    #[if(ON_MACOS) {
+        fn platform() -> &char { return "macOS" }
+    } else {
+        #[if(ON_LINUX) {
+            fn platform() -> &char { return "linux" }
+        } else {
+            #[error("Unknown platform")]            
+        }]
+    }]
+}]
+
+#[if(true) {
+    fn test_current_line() {
+        putstr("current line: ");
+        putnumln(current_line());
+    }
+}]
+
+#[include("current_file.ok")]
+
+
+fn main() {
+    test_current_line();
+    test_current_file();
+
+    putstr("compiled on the date ");
+    putnum(DATE_MONTH); putchar('/');
+    putnum(DATE_DAY);   putchar('/');
+    putnum(DATE_YEAR);
+
+    putstr(" on the "); putstr(platform()); putstrln(" operating system.");
+}

@@ -9,6 +9,7 @@ pub use rb::Ruby;
 
 pub trait Target {
     fn get_name(&self) -> char;
+    fn is_standard(&self) -> bool;
 
     fn std(&self) -> String;
     fn core_prelude(&self) -> String;

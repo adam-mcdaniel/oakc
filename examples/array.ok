@@ -3,7 +3,7 @@
 
 struct Array {
     let len: num,
-        elem_size: &num,
+        elem_size: num,
         contents: &void;
 
     fn new(len: num, elem_size: num) -> Array {
@@ -15,11 +15,10 @@ struct Array {
     }
 
     fn print(self: &Array) -> void {
-        prn!(self->len); prc!(',');
-        prn!(self->elem_size); prc!(',');
-        prn!(self->contents);
-        prc!('.');
-        prend!();
+        putnum(self->len); putchar(',');
+        putnum(self->elem_size); putchar(',');
+        putnum((self->contents) as num);
+        putcharln('.');
     }
 
     fn copy(self: &Array) -> Array {
@@ -50,12 +49,11 @@ struct Date {
     fn birthday() -> Date { return Date::new(5, 14, 2002) }
 
     fn print(self: &Date) -> void {
-        prn!(self->month);
-        prc!('/');
-        prn!(self->day);
-        prc!('/');
-        prn!(self->year);
-        prend!();
+        putnum(self->month);
+        putchar('/');
+        putnum(self->day);
+        putchar('/');
+        putnumln(self->year);
     }
 
     fn yesterday(self: &Date) -> Date {

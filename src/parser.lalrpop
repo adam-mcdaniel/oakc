@@ -1,9 +1,11 @@
 
-use crate::{Identifier, tir::{TirProgram, TirDeclaration, TirStructure, TirFunction, TirExpression, TirConstant, TirStatement, TirType}};
+use crate::{get_line, Identifier, tir::{TirProgram, TirDeclaration, TirStructure, TirFunction, TirExpression, TirConstant, TirStatement, TirType}};
 
-grammar;
+grammar(filename: &str, script: &str);
 
 pub Program: TirProgram = <(Declaration)*> => TirProgram::new(<>, 512);
+
+Doc: String = "#" "[" "doc" "(" <Str> ")" "]" => <>;
 
 Declaration: TirDeclaration = {
     "#" "[" "header" "(" <Str> ")" "]" => TirDeclaration::DocumentHeader(<>),
@@ -11,14 +13,29 @@ Declaration: TirDeclaration = {
     "#" "[" "no_std" "]" => TirDeclaration::NoStd,
     "#" "[" "assert" "(" <Constant> ")" "]" => TirDeclaration::Assert(<>),
     "#" "[" "extern" "(" <Str> ")" "]" => TirDeclaration::Extern(<>),
+    "#" "[" "import" "(" <file:Str> ")" "]" => {
+        TirDeclaration::If(
+            TirConstant::Not(Box::new(TirConstant::IsDefined(file.clone()))),
+            TirProgram::new(vec![
+                TirDeclaration::Constant(None, file.clone(), TirConstant::Float(0.0)),
+                TirDeclaration::Include(file)
+            ], 512)
+        )
+    },
     "#" "[" "include" "(" <Str> ")" "]" => TirDeclaration::Include(<>),
     "#" "[" "memory" "(" <Num> ")" "]" => TirDeclaration::Memory(<> as i32),
     "#" "[" "error" "(" <Str> ")" "]" => TirDeclaration::Error(<>),
     "#" "[" "if" "(" <cond:Constant> ")" "{" <code:Program> "}" "]" => TirDeclaration::If(cond, code),
     "#" "[" "if" "(" <cond:Constant> ")" "{" <then_code:Program> "}" "else" "{" <else_code:Program> "}" "]" => TirDeclaration::IfElse(cond, then_code, else_code),
     "#" "[" "define" "(" <name:Str> "," <constant:Constant> ")" "]" => TirDeclaration::Constant(None, name, constant),
-    "#" "[" "doc" "(" <doc:Str> ")" "]" "const" <name:Ident> "=" <constant:Constant> ";" => TirDeclaration::Constant(Some(doc), name, constant),
-    "const" <name:Ident> "=" <constant:Constant> ";" => TirDeclaration::Constant(None, name, constant),
+    
+    <doc:Doc?> "const" <name:Ident> "=" <constant:Constant> ";" => TirDeclaration::Constant(doc, name, constant),
+    
+    <doc:Doc?> "extern" "fn" <name:Ident> <params:Params> ";" => TirDeclaration::ExternFunction(doc, name.clone(), name, params, TirType::Void), 
+    <doc:Doc?> "extern" "fn" <name:Ident> <params:Params> "->" <return_type:Type> ";" => TirDeclaration::ExternFunction(doc, name.clone(), name, params, return_type),
+    <doc:Doc?> "extern" "fn" <foreign_name:Ident> "as" <name:Ident> <params:Params> ";" => TirDeclaration::ExternFunction(<>, TirType::Void), 
+    <doc:Doc?> "extern" "fn" <foreign_name:Ident> "as" <name:Ident> <params:Params> "->" <return_type:Type> ";" => TirDeclaration::ExternFunction(<>),
+
     <Function> => TirDeclaration::Function(<>),
     <Structure> => TirDeclaration::Structure(<>),
 }
@@ -57,14 +74,16 @@ List<Begin, T, Sep, End>: Vec<T> = {
     }
 }
 
+Params: Vec<(Identifier, TirType)> = <args:List<"(", (Ident ":" Type), ",", ")">> => args.iter().map(|(a, _, t)| (a.clone(), t.clone())).collect();
+
 Constant: TirConstant = {
     <cond:ConstantMathBottom> "?" <then:Constant> ":" <otherwise:Constant> => TirConstant::Conditional(Box::new(cond), Box::new(then), Box::new(otherwise)),
     <ConstantMathBottom> => <>
 }
 
 ConstantAtom: TirConstant = {
-    "is_movable" "(" <Type> ")" => TirConstant::IsMovable(<>),
-    "sizeof" "(" <Type> ")" => TirConstant::SizeOf(<>),
+    <offset:@L> "current_line" "(" ")" => TirConstant::Float(get_line(script, offset).0 as f64),
+    "sizeof" "(" <Type> ")" => TirConstant::SizeOf(<>.to_hir_type()),
     "is_defined" "(" <Str> ")" => TirConstant::IsDefined(<>),
     "true" => TirConstant::True,
     "false" => TirConstant::False,
@@ -104,15 +123,12 @@ ConstantMathHigh: TirConstant = {
 }
 
 Function: TirFunction = {
-    "#" "[" "doc" "(" <doc:Str> ")" "]" "fn" <name:Ident> <args:List<"(", (Ident ":" Type), ",", ")">> <body:Body> => TirFunction::new(Some(doc), name, args.iter().map(|(a, _, t)| (a.clone(), t.clone())).collect(), TirType::Void, body),
-    "#" "[" "doc" "(" <doc:Str> ")" "]" "fn" <name:Ident> <args:List<"(", (Ident ":" Type), ",", ")">> "->" <return_type:Type> <body:Body> => TirFunction::new(Some(doc), name, args.iter().map(|(a, _, t)| (a.clone(), t.clone())).collect(), return_type, body),
-    "fn" <name:Ident> <args:List<"(", (Ident ":" Type), ",", ")">> <body:Body> => TirFunction::new(None, name, args.iter().map(|(a, _, t)| (a.clone(), t.clone())).collect(), TirType::Void, body),
-    "fn" <name:Ident> <args:List<"(", (Ident ":" Type), ",", ")">> "->" <return_type:Type> <body:Body> => TirFunction::new(None, name, args.iter().map(|(a, _, t)| (a.clone(), t.clone())).collect(), return_type, body),
+    <doc:Doc?> "fn" <name:Ident> <params:Params> <body:Body> => TirFunction::new(doc, name, params, TirType::Void, body),
+    <doc:Doc?> "fn" <name:Ident> <params:Params> "->" <return_type:Type> <body:Body> => TirFunction::new(doc, name, params, return_type, body),
 }
 
 Structure: TirStructure = {
-    "#" "[" "doc" "(" <doc:Str> ")" "]" "struct" <name:Ident> "{" <members: List<"let", (Ident ":" Type), ",", ";">> <methods:Function*> "}" => TirStructure::new(Some(doc), name, members.iter().map(|(a, _, t)| (a.clone(), t.clone())).collect(), methods),
-    "struct" <name:Ident> "{" <members: List<"let", (Ident ":" Type), ",", ";">> <methods:Function*> "}" => TirStructure::new(None, name, members.iter().map(|(a, _, t)| (a.clone(), t.clone())).collect(), methods),
+    <doc:Doc?> "struct" <name:Ident> "{" <members: List<"let", (Ident ":" Type), ",", ";">> <methods:Function*> "}" => TirStructure::new(doc, name, members.iter().map(|(a, _, t)| (a.clone(), t.clone())).collect(), methods),
 }
 
 Body: Vec<TirStatement> = "{" <head: Statement*> <tail: SmallStatement?> "}" => {
@@ -190,13 +206,14 @@ Expression: TirExpression = {
 }
 
 ExpressionAtom: TirExpression = {
+    <offset:@L> "current_line" "(" ")" => TirExpression::Constant(TirConstant::Float(get_line(script, offset).0 as f64)),
+    "current_file" "(" ")" => TirExpression::String(filename.to_string()),
     "is_movable" "(" <Type> ")" => TirExpression::IsMovable(<>),
     "is_defined" "(" <Str> ")" => TirExpression::Constant(TirConstant::IsDefined(<>)),
     "move" "(" <val:Expression> ")" => TirExpression::Move(Box::new(val)),
     "sizeof" "(" <Type> ")" => TirExpression::SizeOf(<>),
     "alloc" "(" <size:Expression> ")" => TirExpression::Alloc(Box::new(size)),
     <name:Ident> <args:List<"(", Expression, ",", ")">> => TirExpression::Call(name, args),
-    <name:Ident> "!" <args:List<"(", Expression, ",", ")">> => TirExpression::ForeignCall(name, args),
 
     "true" => TirExpression::True,
     "false" => TirExpression::False,

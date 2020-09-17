@@ -1,6 +1,6 @@
 [package]
 name = "oakc"
-version = "0.6.1"
+version = "0.6.4"
 authors = ["Adam McDaniel <adam.mcdaniel17@gmail.com>"]
 edition = "2018"
 license = "MIT"
@@ -26,4 +26,5 @@ regex = "1"
 comment = "0.1"
 clap = "2.33"
 asciicolor = "0.1"
+time = "^0.2"
 termimad = "0.8"

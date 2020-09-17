@@ -3,17 +3,7 @@
 
 fn fact(n: num) -> num {
     return n > 1?
-        fact(n-1) * n
-        : 1
-    // let result = 1;
-    // if n > 1 {
-    //     // This would not be possible with static variables
-    //     // because the value of `n` in the `* n` clause would
-    //     // be overwritten by the left hand side of the expression,
-    //     // `fact(n-1)`.
-    //     result = fact(n-1) * n
-    // }
-    // return result
+        fact(n-1) * n : 1
 }
 
 fn main() {

@@ -1,0 +1,4 @@
+fn test_current_file() {
+    putstr("This should print something like `current_file.ok` => ");
+    putstrln(current_file());
+}
