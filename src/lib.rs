@@ -18,7 +18,7 @@ use hir::{HirConstant, HirProgram};
 use tir::TirProgram;
 
 mod target;
-pub use target::{Go, Target, C, TS};
+pub use target::{Go, Target, C, TS, Ruby};
 
 use asciicolor::Colorize;
 use comment::cpp::strip;

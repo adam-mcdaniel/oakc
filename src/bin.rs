@@ -1,5 +1,5 @@
 use clap::{clap_app, crate_authors, crate_version, AppSettings::ArgRequiredElseHelp};
-use oakc::{compile, generate_docs, Go, C, TS};
+use oakc::{compile, generate_docs, Go, C, TS, Ruby};
 use std::{
     fs::{read_to_string, write},
     io::Result,
@@ -16,6 +16,7 @@ fn main() {
             (@arg cc: -c --cc "Compile with C backend")
             (@arg go: -g --go "Compile with Golang backend")
             (@arg ts: -t --ts "Compile with TypeScript backend")
+            (@arg rb: -r --rb "Compile with Ruby backend")
         )
         (@subcommand c =>
             (about: "Compile an Oak file")
@@ -49,7 +50,9 @@ fn main() {
                 } else if matches.is_present("go") {
                     compile(&cwd, &input_file, contents, Go)
                 } else if matches.is_present("ts") {
-                    compile(&cwd, &input_file, contents, TS)
+                    compile(&cwd, contents, TS)
+                } else if matches.is_present("rb") {
+                    compile(&cwd, contents, Ruby)
                 } else {
                     compile(&cwd, &input_file, contents, C)
                 };
