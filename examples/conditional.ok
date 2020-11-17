@@ -10,7 +10,6 @@ fn yes_or_no(prompt: &char) -> bool {
            input == 'Y';
 }
 
-
 const C = 1;
 const GO = 2;
 const TYPESCRIPT = 3;
