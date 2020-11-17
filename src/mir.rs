@@ -623,14 +623,14 @@ impl MirFunction {
         // Assemble each statement in the body
         let mut asm_body = Vec::new();
         for stmt in &self.body {
-            asm_body.extend(stmt.assemble(&mut vars, funcs, structs, &mut instance_count)?);
+            asm_body.extend(stmt.assemble(&mut vars, funcs, structs, &mut instance_count, &mut 0)?);
             stmt.type_check(&vars, funcs, structs)?
         }
 
         for var_name in vars.clone().keys() {
             let var_drop =
                 MirExpression::Variable(var_name.clone()).call_drop(&vars, funcs, structs)?;
-            asm_body.extend(var_drop.assemble(&mut vars, funcs, structs, &mut instance_count)?);
+            asm_body.extend(var_drop.assemble(&mut vars, funcs, structs, &mut instance_count, &mut 0)?);
         }
 
         // Check return type
@@ -1039,6 +1039,7 @@ impl MirStatement {
         // variable so that it may be dropped later. This counts the number of temporary
         // instances there currently are in the function.
         instance_count: &mut i32,
+        if_var_count: &mut i32,
     ) -> Result<Vec<AsmStatement>, MirError> {
         Ok(match self {
             /// Define a variable with a given type
@@ -1054,6 +1055,7 @@ impl MirStatement {
                     funcs,
                     structs,
                     instance_count,
+                    if_var_count,
                 )?);
                 // Allocate the variable on the stack, and store the
                 // expression at the variable's new address
@@ -1071,7 +1073,8 @@ impl MirStatement {
                 expr.get_type(vars, funcs, structs)?,
                 expr.call_copy(vars, funcs, structs)?,
             )
-            .assemble(vars, funcs, structs, instance_count)?,
+            .assemble(vars, funcs, structs, instance_count,
+                if_var_count,)?,
 
             /// Assign an expression to a defined variable
             Self::AssignVariable(var_name, expr) => {
@@ -1084,6 +1087,7 @@ impl MirStatement {
                         funcs,
                         structs,
                         instance_count,
+                        if_var_count,
                     )?);
                     // Store the expression at the address of the variable
                     result.extend(vec![
@@ -1106,9 +1110,10 @@ impl MirStatement {
                     funcs,
                     structs,
                     instance_count,
+                    if_var_count,
                 )?);
                 // Push the address to dereference onto the stack
-                result.extend(lhs.assemble(vars, funcs, structs, instance_count)?);
+                result.extend(lhs.assemble(vars, funcs, structs, instance_count, if_var_count)?);
                 result.push(AsmStatement::Assign(
                     rhs.get_type(vars, funcs, structs)?.to_asm_type(structs)?,
                 ));
@@ -1119,15 +1124,18 @@ impl MirStatement {
                 // Assemble the `pre` condition first so that
                 // if a variable is defined in this statement,
                 // it is defined for the rest of the loop.
-                let asm_pre = pre.assemble(vars, funcs, structs, instance_count)?;
+                let asm_pre = pre.assemble(vars, funcs, structs, instance_count,
+                    if_var_count,)?;
                 let mut asm_body = Vec::new();
                 for stmt in body {
-                    asm_body.extend(stmt.assemble(vars, funcs, structs, instance_count)?);
+                    asm_body.extend(stmt.assemble(vars, funcs, structs, instance_count,
+                        if_var_count,)?);
                 }
                 vec![AsmStatement::For(
                     asm_pre,
-                    cond.assemble(vars, funcs, structs, instance_count)?,
-                    post.assemble(vars, funcs, structs, instance_count)?,
+                    cond.assemble(vars, funcs, structs, instance_count, if_var_count)?,
+                    post.assemble(vars, funcs, structs, instance_count,
+                        if_var_count,)?,
                     asm_body,
                 )]
             }
@@ -1135,28 +1143,33 @@ impl MirStatement {
             Self::While(cond, body) => {
                 let mut asm_body = Vec::new();
                 for stmt in body {
-                    asm_body.extend(stmt.assemble(vars, funcs, structs, instance_count)?);
+                    asm_body.extend(stmt.assemble(vars, funcs, structs, instance_count,
+                        if_var_count)?);
                 }
                 // Create a for loop using only a condition.
                 vec![AsmStatement::For(
                     vec![],
-                    cond.assemble(vars, funcs, structs, instance_count)?,
+                    cond.assemble(vars, funcs, structs, instance_count, if_var_count)?,
                     vec![],
                     asm_body,
                 )]
             }
 
             Self::If(cond, body) => {
+                *if_var_count += 1;
+                let if_var = *if_var_count;
+                
                 let mut asm_body = Vec::new();
                 for stmt in body {
-                    asm_body.extend(stmt.assemble(vars, funcs, structs, instance_count)?);
+                    asm_body.extend(stmt.assemble(vars, funcs, structs, instance_count,
+                        if_var_count)?);
                 }
 
                 // Use a variable to store the condition of the if statement
                 let mut pre = Vec::new();
-                pre.extend(cond.assemble(vars, funcs, structs, instance_count)?);
+                pre.extend(cond.assemble(vars, funcs, structs, instance_count, if_var_count)?);
                 pre.extend(vec![
-                    AsmStatement::Define(Identifier::from("%IF_VAR%"), AsmType::float()),
+                    AsmStatement::Define(Identifier::from(format!("%IF_VAR_{}%", if_var)), AsmType::float()),
                     AsmStatement::Assign(AsmType::float()),
                 ]);
 
@@ -1166,14 +1179,15 @@ impl MirStatement {
                 post.extend(vec![
                     AsmStatement::Expression(vec![
                         AsmExpression::Float(0.0),
-                        AsmExpression::Refer(Identifier::from("%IF_VAR%")),
+                        AsmExpression::Refer(Identifier::from(format!("%IF_VAR_{}%", if_var))),
                     ]),
                     AsmStatement::Assign(AsmType::float()),
                 ]);
+
                 vec![AsmStatement::For(
                     pre,
                     vec![AsmStatement::Expression(vec![AsmExpression::Variable(
-                        Identifier::from("%IF_VAR%"),
+                        Identifier::from(format!("%IF_VAR_{}%", if_var)),
                     )])],
                     post,
                     asm_body,
@@ -1181,24 +1195,27 @@ impl MirStatement {
             }
 
             Self::IfElse(cond, then_body, else_body) => {
+                *if_var_count += 1;
+                let if_var = *if_var_count;
+
                 let mut asm_then_body = Vec::new();
                 for stmt in then_body {
-                    asm_then_body.extend(stmt.assemble(vars, funcs, structs, instance_count)?);
+                    asm_then_body.extend(stmt.assemble(vars, funcs, structs, instance_count, if_var_count)?);
                 }
 
                 let mut asm_else_body = Vec::new();
                 for stmt in else_body {
-                    asm_else_body.extend(stmt.assemble(vars, funcs, structs, instance_count)?);
+                    asm_else_body.extend(stmt.assemble(vars, funcs, structs, instance_count, if_var_count)?);
                 }
 
                 // Use a variable to store the condition of the if statement
                 let mut pre = Vec::new();
-                pre.extend(cond.assemble(vars, funcs, structs, instance_count)?);
+                pre.extend(cond.assemble(vars, funcs, structs, instance_count, if_var_count)?);
                 pre.extend(vec![
-                    AsmStatement::Define(Identifier::from("%IF_VAR%"), AsmType::float()),
+                    AsmStatement::Define(Identifier::from(format!("%IF_VAR_{}%", if_var)), AsmType::float()),
                     AsmStatement::Assign(AsmType::float()),
                     AsmStatement::Expression(vec![AsmExpression::Float(1.0)]),
-                    AsmStatement::Define(Identifier::from("%ELSE_VAR%"), AsmType::float()),
+                    AsmStatement::Define(Identifier::from(format!("%ELSE_VAR_{}%", if_var)), AsmType::float()),
                     AsmStatement::Assign(AsmType::float()),
                 ]);
 
@@ -1208,12 +1225,12 @@ impl MirStatement {
                 post.extend(vec![
                     AsmStatement::Expression(vec![
                         AsmExpression::Float(0.0),
-                        AsmExpression::Refer(Identifier::from("%IF_VAR%")),
+                        AsmExpression::Refer(Identifier::from(format!("%IF_VAR_{}%", if_var))),
                     ]),
                     AsmStatement::Assign(AsmType::float()),
                     AsmStatement::Expression(vec![
                         AsmExpression::Float(0.0),
-                        AsmExpression::Refer(Identifier::from("%ELSE_VAR%")),
+                        AsmExpression::Refer(Identifier::from(format!("%ELSE_VAR_{}%", if_var))),
                     ]),
                     AsmStatement::Assign(AsmType::float()),
                 ]);
@@ -1223,7 +1240,7 @@ impl MirStatement {
                     AsmStatement::For(
                         pre,
                         vec![AsmStatement::Expression(vec![AsmExpression::Variable(
-                            Identifier::from("%IF_VAR%"),
+                            Identifier::from(format!("%IF_VAR_{}%", if_var)),
                         )])],
                         post.clone(),
                         asm_then_body,
@@ -1231,7 +1248,7 @@ impl MirStatement {
                     AsmStatement::For(
                         vec![],
                         vec![AsmStatement::Expression(vec![AsmExpression::Variable(
-                            Identifier::from("%ELSE_VAR%"),
+                            Identifier::from(format!("%ELSE_VAR_{}%", if_var)),
                         )])],
                         post,
                         asm_else_body,
@@ -1247,6 +1264,7 @@ impl MirStatement {
                         funcs,
                         structs,
                         instance_count,
+                        if_var_count
                     )?)
                 }
                 result
@@ -1255,13 +1273,13 @@ impl MirStatement {
             /// Freeing an address does not return a value, so it is a statement.
             Self::Free(addr, size) => {
                 let mut result = Vec::new();
-                result.extend(size.assemble(vars, funcs, structs, instance_count)?);
-                result.extend(addr.assemble(vars, funcs, structs, instance_count)?);
+                result.extend(size.assemble(vars, funcs, structs, instance_count, if_var_count)?);
+                result.extend(addr.assemble(vars, funcs, structs, instance_count, if_var_count)?);
                 result.push(AsmStatement::Expression(vec![AsmExpression::Free]));
                 result
             }
 
-            Self::Expression(expr) => expr.assemble(vars, funcs, structs, instance_count)?,
+            Self::Expression(expr) => expr.assemble(vars, funcs, structs, instance_count, if_var_count)?,
         })
     }
 }
@@ -1595,7 +1613,6 @@ impl MirExpression {
                             if param_type != &arg_expr.get_type(vars, funcs, structs)? {
                                 return Err(MirError::ArgumentMismatchedType(self.clone()));
                             }
-                            
                             arg_expr.type_check(vars, funcs, structs)?
                         }
                     } else {
@@ -1632,6 +1649,7 @@ impl MirExpression {
         funcs: &BTreeMap<Identifier, MirFunction>,
         structs: &BTreeMap<Identifier, MirStructure>,
         instance_count: &mut i32,
+        if_var_count: &mut i32,
     ) -> Result<Vec<AsmStatement>, MirError> {
         Ok(match self {
             /// Turn the conditional expression into an if-else statement
@@ -1640,10 +1658,10 @@ impl MirExpression {
                 vec![MirStatement::Expression(*then.clone())],
                 vec![MirStatement::Expression(*otherwise.clone())],
             )
-            .assemble(vars, funcs, structs, instance_count)?,
+            .assemble(vars, funcs, structs, instance_count, if_var_count)?,
 
             /// A move does not change its inner value
-            Self::Move(expr) => expr.assemble(vars, funcs, structs, instance_count)?,
+            Self::Move(expr) => expr.assemble(vars, funcs, structs, instance_count, if_var_count)?,
 
             Self::True => vec![AsmStatement::Expression(vec![AsmExpression::Float(1.0)])],
             Self::False => vec![AsmStatement::Expression(vec![AsmExpression::Float(0.0)])],
@@ -1654,7 +1672,7 @@ impl MirExpression {
                 vec![MirStatement::Expression(MirExpression::Float(0.0))],
                 vec![MirStatement::Expression(MirExpression::Float(1.0))],
             )
-            .assemble(vars, funcs, structs, instance_count)?,
+            .assemble(vars, funcs, structs, instance_count, if_var_count)?,
 
             /// And two boolean values
             /// And is essentially boolean multiplication,
@@ -1665,7 +1683,7 @@ impl MirExpression {
                 vec![MirStatement::Expression(MirExpression::Float(1.0))],
                 vec![MirStatement::Expression(MirExpression::Float(0.0))],
             )
-            .assemble(vars, funcs, structs, instance_count)?,
+            .assemble(vars, funcs, structs, instance_count, if_var_count)?,
 
             /// Or two boolean values
             /// Or is essentially boolean addition,
@@ -1676,7 +1694,7 @@ impl MirExpression {
                 vec![MirStatement::Expression(MirExpression::Float(1.0))],
                 vec![MirStatement::Expression(MirExpression::Float(0.0))],
             )
-            .assemble(vars, funcs, structs, instance_count)?,
+            .assemble(vars, funcs, structs, instance_count, if_var_count)?,
 
             /// Are two numbers equal?
             /// I know this expression doesn't type check,
@@ -1686,7 +1704,7 @@ impl MirExpression {
                 vec![MirStatement::Expression(MirExpression::Float(0.0))],
                 vec![MirStatement::Expression(MirExpression::Float(1.0))],
             )
-            .assemble(vars, funcs, structs, instance_count)?,
+            .assemble(vars, funcs, structs, instance_count, if_var_count)?,
 
             /// Are two numbers not equal?
             /// I know this expression doesn't type check,
@@ -1696,18 +1714,18 @@ impl MirExpression {
                 vec![MirStatement::Expression(MirExpression::Float(1.0))],
                 vec![MirStatement::Expression(MirExpression::Float(0.0))],
             )
-            .assemble(vars, funcs, structs, instance_count)?,
+            .assemble(vars, funcs, structs, instance_count, if_var_count)?,
 
             /// A typecast is only a way to explicitly validate
             /// some kinds of typechecks. The typecast expression
             /// has no change on the output code.
-            Self::TypeCast(expr, _) => expr.assemble(vars, funcs, structs, instance_count)?,
+            Self::TypeCast(expr, _) => expr.assemble(vars, funcs, structs, instance_count, if_var_count)?,
 
             /// Is the LHS greater than or equal the RHS?
             Self::GreaterEqual(l, r) => {
                 let mut result = Vec::new();
-                result.extend(l.assemble(vars, funcs, structs, instance_count)?);
-                result.extend(r.assemble(vars, funcs, structs, instance_count)?);
+                result.extend(l.assemble(vars, funcs, structs, instance_count, if_var_count)?);
+                result.extend(r.assemble(vars, funcs, structs, instance_count, if_var_count)?);
                 result.push(AsmStatement::Expression(vec![
                     // Subtract RHS from the LHS and check the sign
                     AsmExpression::Subtract,
@@ -1723,8 +1741,8 @@ impl MirExpression {
             /// Is the LHS greater than the RHS?
             Self::Greater(l, r) => {
                 let mut result = Vec::new();
-                result.extend(r.assemble(vars, funcs, structs, instance_count)?);
-                result.extend(l.assemble(vars, funcs, structs, instance_count)?);
+                result.extend(r.assemble(vars, funcs, structs, instance_count, if_var_count)?);
+                result.extend(l.assemble(vars, funcs, structs, instance_count, if_var_count)?);
                 result.push(AsmStatement::Expression(vec![
                     // Subtract LHS from the RHS and check the sign
                     AsmExpression::Subtract,
@@ -1740,8 +1758,8 @@ impl MirExpression {
             /// Is the LHS less than or equal to the RHS?
             Self::LessEqual(l, r) => {
                 let mut result = Vec::new();
-                result.extend(r.assemble(vars, funcs, structs, instance_count)?);
-                result.extend(l.assemble(vars, funcs, structs, instance_count)?);
+                result.extend(r.assemble(vars, funcs, structs, instance_count, if_var_count)?);
+                result.extend(l.assemble(vars, funcs, structs, instance_count, if_var_count)?);
                 result.push(AsmStatement::Expression(vec![
                     // Subtract LHS from the RHS and check the sign
                     AsmExpression::Subtract,
@@ -1757,8 +1775,8 @@ impl MirExpression {
             /// Is the LHS less than the RHS?
             Self::Less(l, r) => {
                 let mut result = Vec::new();
-                result.extend(l.assemble(vars, funcs, structs, instance_count)?);
-                result.extend(r.assemble(vars, funcs, structs, instance_count)?);
+                result.extend(l.assemble(vars, funcs, structs, instance_count, if_var_count)?);
+                result.extend(r.assemble(vars, funcs, structs, instance_count, if_var_count)?);
                 result.push(AsmStatement::Expression(vec![
                     // Subtract RHS from the LHS and check the sign
                     AsmExpression::Subtract,
@@ -1775,32 +1793,32 @@ impl MirExpression {
             /// Add two values
             Self::Add(l, r) => {
                 let mut result = Vec::new();
-                result.extend(l.assemble(vars, funcs, structs, instance_count)?);
-                result.extend(r.assemble(vars, funcs, structs, instance_count)?);
+                result.extend(l.assemble(vars, funcs, structs, instance_count, if_var_count)?);
+                result.extend(r.assemble(vars, funcs, structs, instance_count, if_var_count)?);
                 result.push(AsmStatement::Expression(vec![AsmExpression::Add]));
                 result
             }
             /// Multiply two values
             Self::Multiply(l, r) => {
                 let mut result = Vec::new();
-                result.extend(l.assemble(vars, funcs, structs, instance_count)?);
-                result.extend(r.assemble(vars, funcs, structs, instance_count)?);
+                result.extend(l.assemble(vars, funcs, structs, instance_count, if_var_count)?);
+                result.extend(r.assemble(vars, funcs, structs, instance_count, if_var_count)?);
                 result.push(AsmStatement::Expression(vec![AsmExpression::Multiply]));
                 result
             }
             /// Divide two values
             Self::Divide(l, r) => {
                 let mut result = Vec::new();
-                result.extend(l.assemble(vars, funcs, structs, instance_count)?);
-                result.extend(r.assemble(vars, funcs, structs, instance_count)?);
+                result.extend(l.assemble(vars, funcs, structs, instance_count, if_var_count)?);
+                result.extend(r.assemble(vars, funcs, structs, instance_count, if_var_count)?);
                 result.push(AsmStatement::Expression(vec![AsmExpression::Divide]));
                 result
             }
             /// Subtract two values
             Self::Subtract(l, r) => {
                 let mut result = Vec::new();
-                result.extend(l.assemble(vars, funcs, structs, instance_count)?);
-                result.extend(r.assemble(vars, funcs, structs, instance_count)?);
+                result.extend(l.assemble(vars, funcs, structs, instance_count, if_var_count)?);
+                result.extend(r.assemble(vars, funcs, structs, instance_count, if_var_count)?);
                 result.push(AsmStatement::Expression(vec![AsmExpression::Subtract]));
                 result
             }
@@ -1830,7 +1848,7 @@ impl MirExpression {
             /// Dereference a pointer
             Self::Deref(expr) => {
                 let mut result = Vec::new();
-                result.extend(expr.assemble(vars, funcs, structs, instance_count)?);
+                result.extend(expr.assemble(vars, funcs, structs, instance_count, if_var_count)?);
                 // The `Deref` instruction requires the size of the item in memory
                 // to push onto the stack. A pointer to the object has size 1, but
                 // the size of the type itself can vary. To get the size of the
@@ -1854,6 +1872,7 @@ impl MirExpression {
                         funcs,
                         structs,
                         instance_count,
+                        if_var_count,
                     )?);
                 }
                 // Call the function
@@ -1867,7 +1886,7 @@ impl MirExpression {
             Self::ForeignCall(func_name, args) => {
                 let mut result = Vec::new();
                 for arg in args.iter().rev() {
-                    result.extend(arg.assemble(vars, funcs, structs, instance_count)?);
+                    result.extend(arg.assemble(vars, funcs, structs, instance_count, if_var_count)?);
                 }
                 result.push(AsmStatement::Expression(vec![AsmExpression::ForeignCall(
                     func_name.clone(),
@@ -1878,7 +1897,7 @@ impl MirExpression {
             /// Allocate data on the heap
             Self::Alloc(size_expr) => {
                 let mut result = Vec::new();
-                result.extend(size_expr.assemble(vars, funcs, structs, instance_count)?);
+                result.extend(size_expr.assemble(vars, funcs, structs, instance_count, if_var_count)?);
                 result.push(AsmStatement::Expression(vec![AsmExpression::Alloc]));
                 result
             }
@@ -1898,6 +1917,7 @@ impl MirExpression {
                         funcs,
                         structs,
                         instance_count,
+                        if_var_count,
                     );
                 // Here the instance object must be a non-pointer type
                 // and also a variable. In this case, reference the
@@ -1911,6 +1931,7 @@ impl MirExpression {
                         funcs,
                         structs,
                         instance_count,
+                        if_var_count,
                     )?
 
                 // If the method is being called on a concrete type that isnt a variable,
@@ -1928,7 +1949,7 @@ impl MirExpression {
 
                     let mut result = Vec::new();
                     // Push the instance object
-                    result.extend(expr.assemble(vars, funcs, structs, instance_count)?);
+                    result.extend(expr.assemble(vars, funcs, structs, instance_count, if_var_count)?);
 
                     let self_type = instance_type.to_asm_type(structs)?;
                     result.extend(vec![
@@ -1945,6 +1966,7 @@ impl MirExpression {
                         funcs,
                         structs,
                         instance_count,
+                        if_var_count,
                     )?);
 
                     result
@@ -1958,7 +1980,7 @@ impl MirExpression {
 
                         let mut result = Vec::new();
                         // Push the instance object
-                        result.extend(expr.assemble(vars, funcs, structs, instance_count)?);
+                        result.extend(expr.assemble(vars, funcs, structs, instance_count, if_var_count)?);
 
                         let self_type = instance_type.to_asm_type(structs)?;
                         result.extend(vec![
@@ -1975,6 +1997,7 @@ impl MirExpression {
                             funcs,
                             structs,
                             instance_count,
+                            if_var_count,
                         )?);
 
                         result
@@ -1990,9 +2013,9 @@ impl MirExpression {
             Self::Index(ptr, idx) => {
                 let mut result = Vec::new();
                 // Push the array pointer on the stack
-                result.extend(ptr.assemble(vars, funcs, structs, instance_count)?);
+                result.extend(ptr.assemble(vars, funcs, structs, instance_count, if_var_count)?);
                 // Push the index of the array onto the stack
-                result.extend(idx.assemble(vars, funcs, structs, instance_count)?);
+                result.extend(idx.assemble(vars, funcs, structs, instance_count, if_var_count)?);
                 // Get the size of the array's inner type
                 let type_size = ptr
                     .get_type(vars, funcs, structs)?
