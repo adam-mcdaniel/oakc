@@ -125,18 +125,13 @@ A Date object has three members:
 |`month: num` | The month component of the date |
 |`day: num`   | The day component of the date   |
 |`year: num`  | The year component of the date  |")]
-type Date(3) {
+struct Date {
+    let month: num, day: num, year: num;
+
     #[doc("The constructor used to create a date.")]
     fn new(month: num, day: num, year: num) -> Date {
         return [month, day, year];
     }
-
-    #[doc("Get the `month` member of the object")]
-    fn month(self: &Date) -> &num { return self as &num }
-    #[doc("Get the `day` member of the object")]
-    fn day(self: &Date)   -> &num { return (self+1) as &num }
-    #[doc("Get the `year` member of the object")]
-    fn year(self: &Date)  -> &num { return (self+2) as &num }
 
     #[doc("Print the date object to STDOUT")]
     fn print(self: &Date) {
