@@ -1551,6 +1551,8 @@ impl MirExpression {
                         if param_type != &arg_expr.get_type(vars, funcs, structs)? {
                             return Err(MirError::ArgumentMismatchedType(self.clone()));
                         }
+
+                        arg_expr.type_check(vars, funcs, structs)?
                     }
                 } else {
                     return Err(MirError::FunctionNotDefined(fn_name.clone()));
@@ -1587,12 +1589,14 @@ impl MirExpression {
                         }
 
                         // Iterate over the methods's parameters and the list of arguments
-                        for ((_, param_type), arg) in params.iter().zip(args) {
+                        for ((_, param_type), arg_expr) in params.iter().zip(args) {
                             // If the parameters don't match the argument types,
                             // then throw an error.
-                            if param_type != &arg.get_type(vars, funcs, structs)? {
+                            if param_type != &arg_expr.get_type(vars, funcs, structs)? {
                                 return Err(MirError::ArgumentMismatchedType(self.clone()));
                             }
+                            
+                            arg_expr.type_check(vars, funcs, structs)?
                         }
                     } else {
                         return Err(MirError::CalledFunctionAsMethod(fn_name.clone()));

@@ -976,6 +976,8 @@ impl TirStatement {
 
             Self::IfElifElse(cond, then_body, elifs, else_body) => {
                 let mut else_branch = else_body.clone();
+                let mut elifs = elifs.clone();
+                elifs.reverse();
                 for (elif_cond, elif_body) in elifs {
                     else_branch = vec![Self::IfElse(
                         elif_cond.clone(),
