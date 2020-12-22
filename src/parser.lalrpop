@@ -90,6 +90,7 @@ ConstantAtom: TirConstant = {
     <Ident> => TirConstant::Constant(<>),
     <Num> => TirConstant::Float(<>),
     <Char> => TirConstant::Character(<>),
+    "(" <Constant> ")" => <>,
     "-" <ConstantAtom> => TirConstant::Subtract(Box::new(TirConstant::Float(0.0)), Box::new(<>)),
     "!" <ConstantAtom> => TirConstant::Not(Box::new(<>))
 }
