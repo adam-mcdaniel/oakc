@@ -719,6 +719,7 @@ impl MirForeignFunction {
         funcs: &BTreeMap<Identifier, MirFunction>,
         structs: &BTreeMap<Identifier, MirStructure>,
     ) -> Result<AsmForeignFunction, MirError> {
+        let mut mir_args = Vec::new();
         let mut asm_args = Vec::new();
         let mut vars = BTreeMap::new();
         for (arg_name, arg_type) in &self.args {
@@ -727,9 +728,10 @@ impl MirForeignFunction {
             // at compile time, but are used to for resolving types.
             asm_args.push((arg_name.clone(), arg_type.to_asm_type(structs)?));
             vars.insert(arg_name.clone(), arg_type.clone());
+            mir_args.push(MirExpression::Variable(arg_name.clone()));
         }
 
-        let mir_args = self.args.iter().map(|(arg, _)| MirExpression::Variable(arg.clone())).collect();
+        // NOTE: would prefer to do this at the ASM level, this way the compiler can ask the Target impl to do it with this as fallback
         let statement = if self.return_type.get_size(structs)? != 0 {
             MirStatement::Return(vec![MirExpression::ForeignCall(self.foreign_name.clone(), mir_args)])
         } else {
@@ -743,6 +745,8 @@ impl MirForeignFunction {
         // Assemble each statement in the body
         let mut asm_body = Vec::new();
         asm_body.extend(statement.assemble(&mut vars, funcs, structs, &mut instance_count, &mut 0)?);
+        
+        // TODO: Technically foreign calls have the type void * and are casted without typechecks, maybe remove this line?
         statement.type_check(&vars, funcs, structs)?;
 
         for var_name in vars.clone().keys() {
