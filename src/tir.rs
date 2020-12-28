@@ -8,7 +8,7 @@ use std::{
 
 use crate::{
     hir::{
-        HirConstant, HirDeclaration, HirExpression, HirFunction, HirProgram, HirStatement,
+        HirConstant, HirDeclaration, HirExpression, HirFunction, HirForeignFunction, HirProgram, HirStatement,
         HirStructure, HirType,
     },
     parse, Identifier, StringLiteral, Target,
@@ -291,33 +291,12 @@ impl TirDeclaration {
                     hir_args.push(HirExpression::Variable(param.clone()))
                 }
 
-                HirDeclaration::Function(HirFunction::new(
+                HirDeclaration::ForeignFunction(HirForeignFunction::new(
                     doc.clone(),
                     name.clone(),
+                    foreign_name.clone(),
                     hir_params,
                     hir_return_type.clone(),
-                    vec![
-                        // If the return type is not void, then return the result
-                        // of the foreign function
-                        if *return_type != TirType::Void {
-                            HirStatement::Return(vec![
-                                // Foreign functions, by default, return &void for casting purposes
-                                // To get the value we want, we cast it to the requested return type.
-                                HirExpression::TypeCast(
-                                    Box::new(HirExpression::ForeignCall(
-                                        foreign_name.clone(),
-                                        hir_args,
-                                    )),
-                                    hir_return_type,
-                                ),
-                            ])
-                        } else {
-                            HirStatement::Expression(HirExpression::ForeignCall(
-                                foreign_name.clone(),
-                                hir_args,
-                            ))
-                        },
-                    ],
                 ))
             }
 

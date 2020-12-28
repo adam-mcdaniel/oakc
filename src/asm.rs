@@ -88,17 +88,17 @@ impl Debug for AsmType {
 #[derive(Clone, Debug)]
 pub struct AsmProgram {
     externs: Vec<PathBuf>,
-    funcs: Vec<AsmFunction>,
+    decls: Vec<AsmDeclaration>,
     memory_size: i32,
 }
 
 impl AsmProgram {
     const ENTRY_POINT: &'static str = "main";
 
-    pub fn new(externs: Vec<PathBuf>, funcs: Vec<AsmFunction>, memory_size: i32) -> Self {
+    pub fn new(externs: Vec<PathBuf>, decls: Vec<AsmDeclaration>, memory_size: i32) -> Self {
         Self {
             externs,
-            funcs,
+            decls,
             memory_size,
         }
     }
@@ -127,27 +127,43 @@ impl AsmProgram {
         let mut func_ids = BTreeMap::new();
         // The number of cells to preemptively allocate on the stack before the program starts
         let mut global_scope_size = 0;
-        for (id, func) in self.funcs.iter().enumerate() {
-            // Store the function's ID
-            func_ids.insert(func.name.clone(), id as i32);
-            // Add the function header to the output code
-            result += &target.fn_header(AsmFunction::get_assembled_name(id as i32));
+        for (id, decl) in self.decls.iter().enumerate() {
+            match decl {
+                AsmDeclaration::Function(func) => {
+                    // Store the function's ID
+                    func_ids.insert(func.name.clone(), id as i32);
+                    // Add the function header to the output code
+                    result += &target.fn_header(AsmFunction::get_assembled_name(id as i32));
+                },
+                AsmDeclaration::ForeignFunction(func) => {
+                    // Store the function's ID
+                    func_ids.insert(func.name.clone(), id as i32);
+                }
+            }
         }
 
         // It is very important that the entry point is assembled last.
         // This is because of the way things are allocated on the stack.
         let mut entry_point = None;
-        for func in &self.funcs {
-            // Compile the function
-            if !func.is_entry_point() {
-                result += &func.assemble(&func_ids, &mut global_scope_size, target)?;
-            } else {
-                // Store the entry point for use later
-                // This has the side effect of ignoring multiple definitions
-                // of the `main` function, and just using the last one defined.
-                entry_point = Some(func);
+        for decl in &self.decls {
+            match decl {
+                AsmDeclaration::Function(func) => {
+                    // Compile the function
+                    if !func.is_entry_point() {
+                        result += &func.assemble(&func_ids, &mut global_scope_size, target)?;
+                    } else {
+                        // Store the entry point for use later
+                        // This has the side effect of ignoring multiple definitions
+                        // of the `main` function, and just using the last one defined.
+                        entry_point = Some(func);
+                    }
+                },
+                AsmDeclaration::ForeignFunction(func) => {
+                    result += &func.assemble(&func_ids, &mut global_scope_size, target)?;
+                },
             }
         }
+        
 
         if let Some(func) = entry_point {
             if let Some(main_id) = func_ids.get(Self::ENTRY_POINT) {
@@ -167,6 +183,12 @@ impl AsmProgram {
             Err(AsmError::NoEntryPoint)
         }
     }
+}
+
+#[derive(Clone, Debug)]
+pub enum AsmDeclaration { 
+    Function(AsmFunction),
+    ForeignFunction(AsmForeignFunction),
 }
 
 #[derive(Clone, Debug)]
@@ -194,6 +216,100 @@ impl AsmFunction {
 
     fn is_entry_point(&self) -> bool {
         self.name == AsmProgram::ENTRY_POINT
+    }
+
+    /// Use the function's ID to get the output code's name of the function.
+    /// An ID is used to prevent invalid output code function names, or names
+    /// that clash with standard library names such as "printf" or "malloc".
+    fn get_assembled_name(id: i32) -> String {
+        format!("fn{}", id)
+    }
+
+    fn assemble(
+        &self,
+        func_ids: &BTreeMap<String, i32>,
+        global_scope_size: &mut i32,
+        target: &impl Target,
+    ) -> Result<String, AsmError> {
+        let mut result = String::new();
+        let mut arg_size = 0;
+
+        // The local scope size starts at one. This is VERY important.
+        // The reason the local scope size starts at one is to make room for
+        // the virtual machine's base pointer on the stack before the stack
+        // frame actually begins.
+        let mut local_scope_size = 1;
+
+        // Store the variables's addresses and types in the scope
+        let mut vars = BTreeMap::new();
+        for (arg_name, arg_type) in &self.args {
+            // Add together the total size of all the arguments supplied to the function
+            arg_size += arg_type.get_size();
+
+            // Define each argument of the function
+            result += &AsmStatement::Define(arg_name.clone(), *arg_type).assemble(
+                func_ids,
+                &mut vars,
+                global_scope_size,
+                &mut local_scope_size,
+                target,
+            )?;
+            result += &AsmStatement::Assign(*arg_type).assemble(
+                func_ids,
+                &mut vars,
+                global_scope_size,
+                &mut local_scope_size,
+                target,
+            )?;
+        }
+
+        for stmt in &self.body {
+            // Assemble each statement in the function body
+            result += &stmt.assemble(
+                func_ids,
+                &mut vars,
+                global_scope_size,
+                &mut local_scope_size,
+                target,
+            )?;
+        }
+
+        let start = target.establish_stack_frame(arg_size, local_scope_size);
+        result += &target.end_stack_frame(self.return_type.get_size(), local_scope_size);
+
+        // Write the function as output code
+        if let Some(id) = func_ids.get(&self.name) {
+            Ok(target.fn_definition(Self::get_assembled_name(*id), start + &result))
+        } else {
+            Err(AsmError::FunctionNotDefined(self.name.clone()))
+        }
+    }
+}
+
+#[derive(Clone, Debug)]
+pub struct AsmForeignFunction {
+    name: Identifier,
+    foreign_name: Identifier,
+    args: Vec<(Identifier, AsmType)>,
+    body: Vec<AsmStatement>,
+    return_type: AsmType,
+}
+
+impl AsmForeignFunction {
+    pub fn new(
+        name: Identifier,
+        foreign_name: Identifier,
+        args: Vec<(Identifier, AsmType)>,
+        body: Vec<AsmStatement>,
+        return_type: AsmType,
+    ) -> Self {
+        Self {
+            name,
+            foreign_name,
+            args,
+            body,
+            return_type,
+        }
     }
 
     /// Use the function's ID to get the output code's name of the function.

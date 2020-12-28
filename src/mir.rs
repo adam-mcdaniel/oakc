@@ -4,10 +4,7 @@ use std::{
     path::PathBuf,
 };
 
-use crate::{
-    asm::{AsmExpression, AsmFunction, AsmProgram, AsmStatement, AsmType},
-    Identifier, StringLiteral,
-};
+use crate::{Identifier, StringLiteral, asm::{AsmExpression, AsmForeignFunction, AsmFunction, AsmProgram, AsmDeclaration, AsmStatement, AsmType}};
 
 /// A value representing an error while assembling the MIR code
 #[derive(Clone, Debug, PartialEq, PartialOrd)]
@@ -416,9 +413,8 @@ impl MirProgram {
         for decl in &decls {
             match decl {
                 MirDeclaration::Function(func) => func.declare(&mut funcs)?,
-                MirDeclaration::Structure(structure) => {
-                    structure.declare(&mut funcs, &mut structs)?
-                }
+                MirDeclaration::ForeignFunction(func) => func.declare(&mut funcs)?,
+                MirDeclaration::Structure(structure) => structure.declare(&mut funcs, &mut structs)?,
                 MirDeclaration::Extern(filename) => externs.push(filename.clone()),
             }
         }
@@ -435,6 +431,7 @@ impl MirProgram {
 pub enum MirDeclaration {
     Structure(MirStructure),
     Function(MirFunction),
+    ForeignFunction(MirForeignFunction),
     Extern(PathBuf),
 }
 
@@ -443,10 +440,12 @@ impl MirDeclaration {
         &self,
         funcs: &mut BTreeMap<Identifier, MirFunction>,
         structs: &mut BTreeMap<Identifier, MirStructure>,
-    ) -> Result<Vec<AsmFunction>, MirError> {
+    ) -> Result<Vec<AsmDeclaration>, MirError> {
         Ok(match self {
-            Self::Structure(structure) => structure.assemble(funcs, structs)?,
-            Self::Function(func) => vec![func.assemble(funcs, structs)?],
+            // NOTE: not sure about the line below, style doesnt fit the project
+            Self::Structure(structure) => structure.assemble(funcs, structs)?.iter().map(|func| AsmDeclaration::Function(func.to_owned())).collect(),
+            Self::Function(func) => vec![AsmDeclaration::Function(func.assemble(funcs, structs)?)],
+            Self::ForeignFunction(func) => vec![AsmDeclaration::ForeignFunction(func.assemble(funcs, structs)?)],
             _ => vec![],
         })
     }
@@ -659,6 +658,105 @@ impl MirFunction {
             asm_args,
             self.return_type.to_asm_type(structs)?,
             asm_body,
+        ))
+    }
+
+    fn get_name(&self) -> Identifier {
+        self.name.clone()
+    }
+
+    fn get_parameters(&self) -> Vec<(Identifier, MirType)> {
+        self.args.clone()
+    }
+
+    fn get_return_type(&self) -> MirType {
+        self.return_type.clone()
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, PartialOrd)]
+pub struct MirForeignFunction {
+    name: Identifier,
+    foreign_name: Identifier,
+    args: Vec<(Identifier, MirType)>,
+    return_type: MirType,
+}
+
+impl MirForeignFunction {
+    pub fn new(
+        name: Identifier,
+        foreign_name: Identifier,
+        args: Vec<(Identifier, MirType)>,
+        return_type: MirType,
+    ) -> Self {
+        Self {
+            name,
+            foreign_name,
+            args,
+            return_type,
+        }
+    }
+
+    /// Declare this function to the compiler WITHOUT assembling it
+    fn declare(&self, funcs: &mut BTreeMap<Identifier, MirFunction>) -> Result<(), MirError> {
+        // Check if the function has already been declared
+        if funcs.contains_key(&self.name) {
+            Err(MirError::FunctionRedefined(self.get_name()))
+        } else {
+            // NOTE: because these declarations are only used for type checking and I dont want to rewrite them to much, we just define it as an oak function
+            funcs.insert(self.get_name(), MirFunction::new(
+                self.name.clone(),
+                self.args.clone(),
+                self.return_type.clone(),
+                vec![],
+            ));
+            Ok(())
+        }
+    }
+
+    fn assemble(
+        &self,
+        funcs: &BTreeMap<Identifier, MirFunction>,
+        structs: &BTreeMap<Identifier, MirStructure>,
+    ) -> Result<AsmForeignFunction, MirError> {
+        let mut asm_args = Vec::new();
+        let mut vars = BTreeMap::new();
+        for (arg_name, arg_type) in &self.args {
+            // Add the arguments to the function's arguments, and to the map of variables.
+            // The map of variables are not used to determine the function's stack size
+            // at compile time, but are used to for resolving types.
+            asm_args.push((arg_name.clone(), arg_type.to_asm_type(structs)?));
+            vars.insert(arg_name.clone(), arg_type.clone());
+        }
+
+        let mir_args = self.args.iter().map(|(arg, _)| MirExpression::Variable(arg.clone())).collect();
+        let statement = if self.return_type.get_size(structs)? != 0 {
+            MirStatement::Return(vec![MirExpression::ForeignCall(self.foreign_name.clone(), mir_args)])
+        } else {
+            MirStatement::Expression(MirExpression::ForeignCall(self.foreign_name.clone(), mir_args))
+        };
+
+        // Track the number of object instances TEMPORARILY
+        // stored on the stack for method calls.
+        let mut instance_count = 0;
+
+        // Assemble each statement in the body
+        let mut asm_body = Vec::new();
+        asm_body.extend(statement.assemble(&mut vars, funcs, structs, &mut instance_count, &mut 0)?);
+        statement.type_check(&vars, funcs, structs)?;
+
+        for var_name in vars.clone().keys() {
+            let var_drop =
+                MirExpression::Variable(var_name.clone()).call_drop(&vars, funcs, structs)?;
+            asm_body.extend(var_drop.assemble(&mut vars, funcs, structs, &mut instance_count, &mut 0)?);
+        }
+
+        Ok(AsmForeignFunction::new(
+            self.name.clone(),
+            self.foreign_name.clone(),
+            asm_args,
+            asm_body,
+            self.return_type.to_asm_type(structs)?,
         ))
     }
 

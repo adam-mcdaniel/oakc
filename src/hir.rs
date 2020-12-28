@@ -8,7 +8,7 @@ use std::{
 
 use crate::{
     mir::{
-        MirDeclaration, MirExpression, MirFunction, MirProgram, MirStatement, MirStructure, MirType,
+        MirDeclaration, MirExpression, MirFunction, MirForeignFunction, MirProgram, MirStatement, MirStructure, MirType,
     },
     parse, Identifier, StringLiteral,
 };
@@ -71,6 +71,7 @@ impl HirProgram {
                 }
                 HirDeclaration::Structure(structure) => content += &structure.generate_docs(),
                 HirDeclaration::Function(function) => content += &function.generate_docs(false),
+                HirDeclaration::ForeignFunction(function) => content += &function.generate_docs(),
                 HirDeclaration::Constant(doc, name, constant) => {
                     content += &format!("### *const* **{}** = {}\n---", name, constant);
                     if let Some(s) = doc {
@@ -109,6 +110,9 @@ impl HirProgram {
             match decl {
                 HirDeclaration::Function(func) => mir_decls.push(MirDeclaration::Function(
                     func.to_mir_fn(self.get_declarations(), &constants)?,
+                )),
+                HirDeclaration::ForeignFunction(func) => mir_decls.push(MirDeclaration::ForeignFunction(
+                    func.to_mir_foreign_fn()?,
                 )),
                 HirDeclaration::Structure(structure) => mir_decls.push(MirDeclaration::Structure(
                     structure.to_mir_struct(self.get_declarations(), &constants)?,
@@ -301,6 +305,8 @@ pub enum HirDeclaration {
     Constant(Option<String>, Identifier, HirConstant),
     /// Define a function
     Function(HirFunction),
+    /// Define a foreign function
+    ForeignFunction(HirForeignFunction),
     /// Define a structure
     Structure(HirStructure),
     /// Use the `assert` compiler flag
@@ -510,6 +516,92 @@ impl HirFunction {
             mir_args,
             self.return_type.to_mir_type(),
             mir_body,
+        ))
+    }
+}
+
+/// This type represents a foreign function in the target language
+#[derive(Clone, Debug, PartialEq)]
+pub struct HirForeignFunction {
+    /// The optional docstring for the function
+    doc: Option<String>,
+    /// The name of the function
+    name: Identifier,
+    /// The name of the function in the target language
+    foreign_name: Identifier,
+    /// The parameters of the function
+    args: Vec<(Identifier, HirType)>,
+    /// The functions return type
+    return_type: HirType,
+}
+
+impl HirForeignFunction {
+    pub fn new(
+        doc: Option<String>,
+        name: Identifier,
+        foreign_name: Identifier,
+        args: Vec<(Identifier, HirType)>,
+        return_type: HirType,
+    ) -> Self {
+        Self {
+            doc,
+            name,
+            foreign_name,
+            args,
+            return_type,
+        }
+    }
+
+    /// Generate the documentation for the function.
+    fn generate_docs(&self) -> String {
+        let mut result = String::from("### *extern* *fn* ");
+        if self.name != self.foreign_name {
+            result += format!("**{}** *as* ", self.foreign_name).as_str();
+        }
+        result += format!("**{}**(", self.name).as_str();
+
+        // For each argument, display its name and type
+        for (i, (arg_name, arg_type)) in self.args.iter().enumerate() {
+            result += &format!("*{}*: {}, ", arg_name, arg_type)
+        }
+        // Remove the last space and comma from the last argument
+        if !self.args.is_empty() {
+            result.pop();
+            result.pop();
+        }
+
+        // Add the close parantheses
+        result += ")";
+
+        if self.return_type != HirType::Void {
+            // If the function is a non-void function, add the return type
+            result += " *->* ";
+            result += &self.return_type.to_string();
+        }
+
+        result += "\n";
+
+        if let Some(doc) = &self.doc {
+            result += &(doc.trim().to_string() + "\n");
+        }
+        result
+    }
+
+    /// Convert the HIR function into its MIR equivalent
+    fn to_mir_foreign_fn(
+        &self,
+    ) -> Result<MirForeignFunction, HirError> {
+        // Convert each of the argument type to MIR types
+        let mut mir_args = Vec::new();
+        for (arg_name, arg_type) in self.args.clone() {
+            mir_args.push((arg_name.clone(), arg_type.to_mir_type()));
+        }
+
+        Ok(MirForeignFunction::new(
+            self.name.clone(),
+            self.foreign_name.clone(),
+            mir_args,
+            self.return_type.to_mir_type(),
         ))
     }
 }
