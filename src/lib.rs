@@ -116,10 +116,12 @@ pub fn compile(
     // The target to compile for
     target: impl Target,
 ) -> Result<()> {
+    let mut constants = get_predefined_constants(&target);
+
     // Get the TIR code for the user's Oak code
     let mut tir = parse(filename, input);
     // Convert the TIR to HIR
-    let mut hir = match tir.compile(cwd, &mut get_predefined_constants(&target)) {
+    let mut hir = match tir.compile(cwd, &mut constants) {
         Ok(output) => output,
         Err(e) => print_compile_error(e),
     };
@@ -127,7 +129,7 @@ pub fn compile(
     // Add the core library code to the users code
     hir.extend_declarations(
         match parse("core.ok", include_str!("core.ok"))
-            .compile(cwd, &mut get_predefined_constants(&target))
+            .compile(cwd, &mut constants)
         {
             Ok(output) => output,
             Err(e) => print_compile_error(e),
@@ -140,7 +142,7 @@ pub fn compile(
         // Then add the standard library code to the users code
         hir.extend_declarations(
             match parse("std.ok", include_str!("std.ok"))
-                .compile(cwd, &mut get_predefined_constants(&target))
+                .compile(cwd, &mut constants)
             {
                 Ok(output) => output,
                 Err(e) => print_compile_error(e),
@@ -149,7 +151,7 @@ pub fn compile(
         );
     }
 
-    match hir.compile(cwd, &mut get_predefined_constants(&target)) {
+    match hir.compile(cwd, &mut constants) {
         Ok(mir) => match mir.assemble() {
             Ok(asm) => match asm.assemble(&target) {
                 Ok(result) => target.compile(if hir.use_std() {
