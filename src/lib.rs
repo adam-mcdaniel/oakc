@@ -153,13 +153,16 @@ pub fn compile(
 
     match hir.compile(cwd, &mut constants) {
         Ok(mir) => match mir.assemble() {
-            Ok(asm) => match asm.assemble(&target) {
-                Ok(result) => target.compile(if hir.use_std() {
-                    target.core_prelude() + &target.std() + &result + &target.core_postlude()
-                } else {
-                    target.core_prelude() + &result + &target.core_postlude()
-                }),
-                Err(e) => print_compile_error(e),
+            Ok(asm) => {
+                let optimized = asm.optimize();
+                match optimized.assemble(&target) {
+                    Ok(result) => target.compile(if hir.use_std() {
+                        target.core_prelude() + &target.std() + &result + &target.core_postlude()
+                    } else {
+                        target.core_prelude() + &result + &target.core_postlude()
+                    }),
+                    Err(e) => print_compile_error(e),
+                }
             },
             Err(e) => print_compile_error(e),
         },
