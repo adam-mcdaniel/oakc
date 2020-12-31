@@ -17,34 +17,14 @@ typedef struct machine {
 const int STACK_HEAP_COLLISION = 1;
 const int NO_FREE_MEMORY       = 2;
 const int STACK_UNDERFLOW      = 3;
+const int MEMORY_LEAK          = 4;
 
-// Fatal error handler. Always exits program.
-void panic(int code) {
-    printf("panic: ");
-    switch (code) {
-        case 1: printf("stack and heap collision during push"); break;
-        case 2: printf("no free memory left"); break;
-        case 3: printf("stack underflow"); break;
-        default: printf("unknown error code");
-    }
-    printf("\n");
-    exit(code);
-}
-
-///////////////////////////////////////////////////////////////////////
-///////////////////////////// Debug Info //////////////////////////////
-///////////////////////////////////////////////////////////////////////
-// Print out the state of the virtual machine's stack and heap
 void machine_dump(machine *vm) {
     int i;
     printf("stack: [ ");
     for (i=0; i<vm->stack_ptr; i++)
         printf("%g ", vm->memory[i]);
-    for (i=vm->stack_ptr; i<vm->capacity; i++)
-        printf("  ");
     printf("]\nheap:  [ ");
-    for (i=0; i<vm->stack_ptr; i++)
-        printf("  ");
     for (i=vm->stack_ptr; i<vm->capacity; i++)
         printf("%g ", vm->memory[i]);
     printf("]\nalloc: [ ");
@@ -56,6 +36,20 @@ void machine_dump(machine *vm) {
         total += vm->allocated[i];
     printf("STACK SIZE    %d\n", vm->stack_ptr);
     printf("TOTAL ALLOC'D %d\n", total);
+}
+
+// Fatal error handler. Always exits program.
+void panic(int code) {
+    printf("panic: ");
+    switch (code) {
+        case 1: printf("stack and heap collision during push"); break;
+        case 2: printf("no free memory left"); break;
+        case 3: printf("stack underflow"); break;
+        case 4: printf("leaked heap memory"); break;
+        default: printf("unknown error code");
+    }
+    printf("\n");
+    exit(code);
 }
 
 
@@ -120,6 +114,12 @@ machine *machine_new(int global_scope_size, int capacity) {
 
 // Free the virtual machine's memory. This is called at the end of the program.
 void machine_drop(machine *vm) {
+    for (int i=vm->capacity-1; i>=vm->stack_ptr; i--) {
+        if (vm->allocated[i]) {
+            machine_dump(vm);
+            panic(MEMORY_LEAK);
+        }
+    }
     // machine_dump(vm);
     free(vm->memory);
     free(vm->allocated);
@@ -142,8 +142,9 @@ void machine_establish_stack_frame(machine *vm, int arg_size, int local_scope_si
     double *args = malloc(arg_size * sizeof(double));
     int i;
     // Pop the arguments' values off of the stack
-    for (i=arg_size-1; i>=0; i--)
+    for (i=arg_size-1; i>=0; i--) {
         args[i] = machine_pop(vm);
+    }
 
     // Push the current base pointer onto the stack so that
     // when this function returns, it will be able to resume

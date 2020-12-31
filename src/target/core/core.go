@@ -11,6 +11,7 @@ var READER = bufio.NewReader(os.Stdin)
 const STACK_HEAP_COLLISION = 1
 const NO_FREE_MEMORY = 2
 const STACK_UNDERFLOW = 3
+const MEMORY_LEAK = 4
 
 func panic(code int) {
 	fmt.Print("panic: ")
@@ -23,6 +24,9 @@ func panic(code int) {
 		break
 	case 3:
 		fmt.Println("stack underflow")
+		break
+	case 4:
+		fmt.Println("leaked heap memory")
 		break
 	default:
 		fmt.Println("unknown error code")
@@ -52,40 +56,43 @@ func machine_new(global_scope_size, capacity int) *machine {
 	return result
 }
 
+func (vm *machine) dump() {
+	fmt.Print("stack: [ ")
+	for i := 0; i < vm.stack_ptr; i += 1 {
+		fmt.Printf("%g ", vm.memory[i])
+	}
+	fmt.Println("]")
+	fmt.Print("heap:  [ ")
+	for i := vm.stack_ptr; i < vm.capacity; i += 1 {
+		fmt.Printf("%g ", vm.memory[i])
+	}
+	fmt.Println("]")
+	fmt.Print("alloc: [ ")
+	for i := 0; i < vm.capacity; i += 1 {
+		if vm.allocated[i] {
+			fmt.Printf("1 ")
+		} else {
+			fmt.Printf("0 ")
+		}
+	}
+	fmt.Println("]")
+	total := 0
+	for i := 0; i < vm.capacity; i += 1 {
+		if vm.allocated[i] {
+			total += 1
+		}
+	}
+	fmt.Printf("STACK SIZE    %d\n", vm.stack_ptr)
+	fmt.Printf("TOTAL ALLOC'D %d\n", total)
+}
+
 func (vm *machine) drop() {
-	// fmt.Print("stack: [ ")
-	// for i:=0; i<vm.stack_ptr; i+=1 {
-	// 	fmt.Printf("%g ", vm.memory[i])
-	// }
-	// for i:=vm.stack_ptr; i<vm.capacity; i+=1 {
-	//     fmt.Print("  ")
-	// }
-	// fmt.Println("]")
-	// fmt.Print("heap:  [ ")
-	// for i:=0; i<vm.stack_ptr; i+=1 {
-	// 	fmt.Print("  ")
-	// }
-	// for i:=vm.stack_ptr; i<vm.capacity; i+=1 {
-	// 	fmt.Printf("%g ", vm.memory[i])
-	// }
-	// fmt.Println("]")
-	// fmt.Print("alloc: [ ")
-	// for i:=0; i<vm.capacity; i+=1 {
-	// 	if vm.allocated[i] {
-	// 		fmt.Printf("1 ")
-	// 	} else {
-	// 		fmt.Printf("0 ")
-	// 	}
-	// }
-	// fmt.Println("]")
-	// total := 0;
-	// for i:=0; i<vm.capacity; i+=1 {
-	//     if vm.allocated[i] {
-	// 		total += 1
-	// 	}
-	// }
-	// fmt.Println("STACK SIZE    %d\n", vm.stack_ptr);
-	// fmt.Println("TOTAL ALLOC'D %d\n", total);
+	for i := vm.capacity - 1; i >= vm.stack_ptr; i -= 1 {
+		if vm.allocated[i] {
+			vm.dump()
+			panic(MEMORY_LEAK)
+		}
+	}
 }
 
 func (vm *machine) load_base_ptr() {
