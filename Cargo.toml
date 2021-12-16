@@ -10,7 +10,8 @@ documentation = "https://docs.rs/oakc"
 homepage = "https://github.com/adam-mcdaniel/oakc"
 repository = "https://github.com/adam-mcdaniel/oakc"
 
-
+[lib]
+doctest = false
 
 [[bin]]
 name = "oak"
