@@ -1,0 +1,6 @@
+#[memory(128)]
+
+
+fn main() {
+    let x = alloc(8) as &char;
+}
