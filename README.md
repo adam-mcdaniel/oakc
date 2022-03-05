@@ -18,7 +18,7 @@ I'm a freshly minted highschool graduate and freshman in college looking for wor
 
 The key to oak's insane portability is its incredibly compact backend implementation. _The code for Oak's backend can be expressed in under 100 lines of C._ Such a small implementation is only possible because of the tiny instruction set of the intermediate representation. Oak's IR is only composed of **_17 different instructions_**. That's on par with [brainfuck](https://esolangs.org/wiki/Brainfuck)!
 
-The backend of oak functions very simply. Every instruction operates on a _memory tape_. This tape is essentially a static array of double-precision floats.
+The backend of oak functions very simple. Every instruction operates on a _memory tape_. This tape is essentially a static array of double-precision floats.
 
 ```js
       let x: num = 5.25;    ...     let p: &num = &x;  `beginning of heap`
@@ -70,7 +70,7 @@ Similar to Rust's outer attributes, Oak introduces many compile time flags. Some
 
 ## Compilation Process
 
-So how exactly does the oak compiler work?
+So, how exactly does the oak compiler work?
 
 1. Flatten structures into their functions
     - Structures in oak work differently than in other languages. The objects themselves are only arrays of memory cells: they don't have _**any**_ members or attributes. Structures _exclusively_ retrieve their data by using **_methods_** to return the addresses of their _"members"_. These methods are then flattened into simple functions. So, _`putnumln(*bday.day)`_ becomes _`putnumln(*Date::day(&bday))`_. This is a pretty simple process.
